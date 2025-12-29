@@ -33,11 +33,10 @@ function RotatingPrism() {
   // Calculate word for each of the 4 faces based on the current rotation
   // Face 0: Front, Face 1: Bottom, Face 2: Back, Face 3: Top
   const getWordForFace = (faceIndex: number) => {
-    // A face i is seen at rotation R if R % 4 == i.
-    // The word index k that should be on face i is the next k >= rotation where k % 4 == i.
-    let k = rotation;
-    while (k % 4 !== faceIndex) k++;
-    return WORDS[k % WORDS.length];
+    // Ensure word index k satisfies k % 4 == faceIndex and remains stable until face is hidden.
+    // This formula ensures k only increments when the face is at the back/bottom position.
+    const k = Math.floor((rotation - faceIndex + 2) / 4) * 4 + faceIndex;
+    return WORDS[((k % WORDS.length) + WORDS.length) % WORDS.length];
   };
 
   return (
