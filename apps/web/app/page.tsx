@@ -21,39 +21,49 @@ const WORDS = [
 ];
 
 function RotatingPrism() {
-  const [index, setIndex] = useState(0);
-  const [isRotating, setIsRotating] = useState(false);
+  const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsRotating(true);
-      setTimeout(() => {
-        setIndex((prev) => (prev + 1) % WORDS.length);
-        setIsRotating(false);
-      }, 600); // Matches CSS transition duration
+      setRotation((prev) => prev + 1);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  const currentWord = WORDS[index];
-  const nextWord = WORDS[(index + 1) % WORDS.length];
+  // Calculate word for each of the 4 faces based on the current rotation
+  // Face 0: Front, Face 1: Bottom, Face 2: Back, Face 3: Top
+  const getWordForFace = (faceIndex: number) => {
+    // A face i is seen at rotation R if R % 4 == i.
+    // The word index k that should be on face i is the next k >= rotation where k % 4 == i.
+    let k = rotation;
+    while (k % 4 !== faceIndex) k++;
+    return WORDS[k % WORDS.length];
+  };
 
   return (
     <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
       <span
         className="prism-box"
-        style={{ transform: isRotating ? 'rotateX(90deg)' : 'rotateX(0deg)' }}
+        style={{ transform: `rotateX(${rotation * 90}deg)` }}
       >
-        <span className="prism-face prism-front bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
-          {currentWord}
+        <span className="prism-face prism-front">
+          <span>{getWordForFace(0)}</span>
         </span>
-        <span className="prism-face prism-bottom bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
-          {nextWord}
+        <span className="prism-face prism-bottom">
+          <span>{getWordForFace(1)}</span>
+        </span>
+        <span className="prism-face prism-back">
+          <span>{getWordForFace(2)}</span>
+        </span>
+        <span className="prism-face prism-top">
+          <span>{getWordForFace(3)}</span>
         </span>
       </span>
+
     </span>
   );
 }
+
 
 
 export default function Home() {
