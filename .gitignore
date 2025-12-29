@@ -36,3 +36,4 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+infra/stream/certs/
