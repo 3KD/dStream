@@ -22,54 +22,28 @@ const WORDS = [
 
 function RotatingPrism() {
   const [rotation, setRotation] = useState(0);
-  const [phase, setPhase] = useState<'idle' | 'raising' | 'hesitating' | 'rotating' | 'descending'>('idle');
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Phase 1: Raise out of slot
-      setPhase('raising');
-
-      // Phase 2: Hesitate at peak
-      setTimeout(() => {
-        setPhase('hesitating');
-      }, 600);
-
-      // Phase 3: Rotate while raised
-      setTimeout(() => {
-        setPhase('rotating');
-        setRotation((prev) => prev + 1);
-      }, 1100);
-
-      // Phase 4: Descend back into slot
-      setTimeout(() => {
-        setPhase('descending');
-      }, 2100);
-
-      // Phase 5: Idle
-      setTimeout(() => {
-        setPhase('idle');
-      }, 2700);
-
-    }, 5000);
+      setRotation((prev) => prev + 1);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
   // Calculate word for each of the 4 faces based on the current rotation
   const getWordForFace = (faceIndex: number) => {
+    // Ensure word index k satisfies k % 4 == faceIndex and remains stable until face is hidden.
+    // This formula ensures k only increments when the face is at the back/bottom position.
     const k = Math.floor((rotation - faceIndex + 2) / 4) * 4 + faceIndex;
     return WORDS[((k % WORDS.length) + WORDS.length) % WORDS.length];
   };
-
-  // Determine Z-translation based on phase (Reduced to avoid distortion)
-  const zTranslation = (phase !== 'idle' && phase !== 'descending') ? '30px' : '0px';
 
   return (
     <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
       <span
         className="prism-box"
         style={{
-          transform: `translateZ(${zTranslation}) rotateX(${rotation * 90}deg)`,
-          transition: 'transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
+          transform: `rotateX(${rotation * 90}deg)`
         }}
       >
         {[0, 1, 2, 3].map((i) => {
