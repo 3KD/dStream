@@ -22,30 +22,35 @@ const WORDS = [
 
 function RotatingPrism() {
   const [rotation, setRotation] = useState(0);
-  const [phase, setPhase] = useState<'idle' | 'raising' | 'rotating' | 'descending'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'raising' | 'hesitating' | 'rotating' | 'descending'>('idle');
 
   useEffect(() => {
     const interval = setInterval(() => {
       // Phase 1: Raise out of slot
       setPhase('raising');
 
-      // Phase 2: Rotate while raised
+      // Phase 2: Hesitate at peak
+      setTimeout(() => {
+        setPhase('hesitating');
+      }, 600);
+
+      // Phase 3: Rotate while raised
       setTimeout(() => {
         setPhase('rotating');
         setRotation((prev) => prev + 1);
-      }, 500);
+      }, 1100);
 
-      // Phase 3: Descend back into slot
+      // Phase 4: Descend back into slot
       setTimeout(() => {
         setPhase('descending');
-      }, 1300); // Wait for rotation to finish (800ms)
+      }, 2100);
 
-      // Phase 4: Idle/Reset
+      // Phase 5: Idle
       setTimeout(() => {
         setPhase('idle');
-      }, 1800);
+      }, 2700);
 
-    }, 4000); // 4 seconds total cycle
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -55,8 +60,8 @@ function RotatingPrism() {
     return WORDS[((k % WORDS.length) + WORDS.length) % WORDS.length];
   };
 
-  // Determine Z-translation based on phase
-  const zTranslation = (phase === 'raising' || phase === 'rotating') ? '40px' : '0px';
+  // Determine Z-translation based on phase (3x more: 120px)
+  const zTranslation = (phase !== 'idle' && phase !== 'descending') ? '120px' : '0px';
 
   return (
     <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
@@ -66,7 +71,7 @@ function RotatingPrism() {
           transform: `translateZ(${zTranslation}) rotateX(${rotation * 90}deg)`,
           transition: phase === 'rotating'
             ? 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
-            : 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            : 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
         }}
       >
         <span className="prism-face prism-front">
