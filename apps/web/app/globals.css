@@ -28,18 +28,31 @@ body {
 /* 3D Prism Animation */
 .prism-container {
   display: inline-block;
-  perspective: 1200px;
+  perspective: 1500px;
   vertical-align: bottom;
+  background: #050505;
+  /* The 'hole' color */
+  border-radius: 4px;
+  position: relative;
+  /* Slot effect: inset shadow makes it look like a hole */
+  box-shadow:
+    inset 0 4px 10px rgba(0, 0, 0, 0.8),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: visible;
+  /* Allow box to raise out */
 }
 
 .prism-box {
   position: relative;
   display: block;
   transform-style: preserve-3d;
-  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Faster for sequential phases */
   width: 100%;
   height: 1.5em;
 }
+
 
 .prism-face {
   position: absolute;
