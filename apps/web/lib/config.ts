@@ -56,7 +56,7 @@ export const P2P_CONFIG = {
 // Stream key generation from identity
 export function generateStreamKey(publicKey: string): string {
     // Use first 12 chars of pubkey for readable stream key
-    return `exo-${publicKey.substring(0, 12)}`;
+    return `dstream-${publicKey.substring(0, 12)}`;
 }
 
 // Verify stream key matches pubkey (for 3rd party interop)

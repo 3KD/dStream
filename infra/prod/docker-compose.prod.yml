@@ -4,7 +4,7 @@ services:
   # Caddy Reverse Proxy (SSL Termination)
   caddy:
     image: caddy:alpine
-    container_name: exo_caddy
+    container_name: dStream_caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -20,7 +20,7 @@ services:
   # MediaMTX (Streaming Server)
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: exo_stream_prod
+    container_name: dStream_stream_prod
     restart: unless-stopped
     ports:
       - "1935:1935" # RTMP (Internal/Ingest) 
@@ -34,7 +34,7 @@ services:
   # Next.js Web App
   web:
     build: ../../apps/web
-    container_name: exo_web_prod
+    container_name: dStream_web_prod
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_STREAM_URL=https://${DOMAIN:-example.com}/stream
@@ -45,7 +45,7 @@ services:
   # Manifest Signing (Security)
   manifest:
     build: ../../services/manifest
-    container_name: exo_manifest_prod
+    container_name: dStream_manifest_prod
     restart: unless-stopped
     environment:
       - HLS_DIR=/hls

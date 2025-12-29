@@ -544,7 +544,7 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                         ['d', currentStreamId || streamKey], // Use the active ID if live
                         ['title', `${streamKey} - Stream Ended`],
                         ['status', 'ended'],
-                        ['t', 'exo-station'],
+                        ['t', 'dstream'],
                     ],
                     content: '',
                 };

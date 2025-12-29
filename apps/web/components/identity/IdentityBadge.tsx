@@ -57,7 +57,7 @@ export function IdentityBadge() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `exo-identity-${identity.publicKey.substring(0, 8)}.json`;
+            a.download = `dstream-identity-${identity.publicKey.substring(0, 8)}.json`;
             a.click();
             URL.revokeObjectURL(url);
         }

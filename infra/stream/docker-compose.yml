@@ -1,10 +1,10 @@
-# Exo Station Streaming Infrastructure
+# dStream Streaming Infrastructure
 # Supports both x86 and ARM (M-series Mac)
 
 services:
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: exo_stream_ingest
+    container_name: dStream_ingest
     ports:
       - "1940:1935" # RTMP Ingest
       - "1941:1936" # RTMPS Ingest (Secure)
@@ -13,7 +13,7 @@ services:
       - "8181:8181/udp" # ICE/UDP (WebRTC)
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
-      - /tmp/exo_hls:/hls
+      - /tmp/dStream_hls:/hls
       - ./certs:/certs
     environment:
       - MTX_logLevel=info
@@ -27,7 +27,7 @@ services:
   # Next.js Web Application
   web:
     build: ../../apps/web
-    container_name: exo_web
+    container_name: dStream_web
     ports:
       - "5656:5656"
     volumes:
@@ -41,12 +41,12 @@ services:
   # Manifest Signing Service - generates signed segment hashes
   manifest:
     build: ../../services/manifest
-    container_name: exo_manifest
+    container_name: dStream_manifest
     environment:
       - HLS_DIR=/hls
       - MANIFEST_PRIVATE_KEY=${MANIFEST_PRIVATE_KEY:-}
     volumes:
-      - /tmp/exo_hls:/hls
+      - /tmp/dStream_hls:/hls
     depends_on:
       mediamtx:
         condition: service_started
@@ -56,14 +56,14 @@ services:
   # Uncomment if you need legacy registry:
   # registry:
   #   build: ../../services/registry
-  #   container_name: exo_registry
+  #   container_name: dStream_registry
   #   ports:
   #     - "3002:3002"
 
   # Local Nostr Relay for Dev/Testing
   relay:
     image: scsibug/nostr-rs-relay:latest
-    container_name: exo_relay
+    container_name: dStream_relay
     ports:
       - "8081:8080"
     volumes:
@@ -73,7 +73,7 @@ services:
   # Test stream generator (optional)
   ffsim:
     image: linuxserver/ffmpeg:latest
-    container_name: exo_ffsim
+    container_name: dStream_ffsim
     depends_on:
       mediamtx:
         condition: service_healthy

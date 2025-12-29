@@ -26,7 +26,7 @@ export interface Identity {
     createdAt: number;
 }
 
-const STORAGE_KEY = 'exo_identity';
+const STORAGE_KEY = 'dstream_identity';
 
 /**
  * Generate a new Identity (Dual Key: Ed25519 + Nostr)

@@ -3,7 +3,7 @@
 // IndexedDB Chat Storage
 // Each viewer stores their own received messages locally
 
-const DB_NAME = 'exo_chat';
+const DB_NAME = 'dstream_chat';
 const DB_VERSION = 1;
 const STORE_NAME = 'messages';
 
