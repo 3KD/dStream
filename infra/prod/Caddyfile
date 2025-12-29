@@ -1,0 +1,14 @@
+{
+    email admin@${DOMAIN}
+}
+
+${DOMAIN} {
+    # Reverse proxy to Next.js Web App
+    reverse_proxy exo_web_prod:5656
+
+    # Serve HLS and API from MediaMTX
+    # Assuming MediaMTX serves HLS on 8880
+    handle_path /stream/* {
+        reverse_proxy exo_stream_prod:8880
+    }
+}

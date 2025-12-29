@@ -1,0 +1,13 @@
+paths:
+  all:
+    runOnDemand: "yes" # Enable if needed
+    
+    # HLS Configuration
+    hlsVariant: lowLatency
+    hlsDirectory: /hls
+    hlsSegmentDuration: 2s
+    hlsPartDuration: 500ms
+    
+    # Auth
+    publishUser: user
+    publishPass: ${PUBLISH_PASSWORD}

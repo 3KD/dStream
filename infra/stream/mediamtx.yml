@@ -1,0 +1,53 @@
+# MediaMTX Configuration for Exo Station
+
+# Log level
+logLevel: info
+
+# API for debugging (optional)
+api: yes
+apiAddress: :9990
+
+# Authentication (Webhook to Next.js API)
+# Uses internal docker network to reach the web container
+# Configured for port 5656
+externalAuthenticationURL: http://web:5656/api/auth/publish
+
+# Encryption (RTMPS / HLS / WebRTC)
+rtmpEncryption: optional
+rtmpServerKey: /certs/server.key
+rtmpServerCert: /certs/server.crt
+
+hlsEncryption: yes
+hlsServerKey: /certs/server.key
+hlsServerCert: /certs/server.crt
+
+webrtcEncryption: yes
+webrtcServerKey: /certs/server.key
+webrtcServerCert: /certs/server.crt
+
+# HLS settings
+hls: yes
+hlsAddress: :8880
+hlsDirectory: /hls
+hlsSegmentDuration: 4s
+hlsPartDuration: 1s
+hlsSegmentCount: 7
+hlsAlwaysRemux: yes
+
+# WebRTC/WHIP settings
+webrtc: yes
+webrtcAddress: :8881
+webrtcICEUDPMuxAddress: :8181
+# webrtcAllowOrigin: "*"   # DEVELOPMENT ONLY - uncomment for local testing
+webrtcAllowOrigin: "http://localhost:5656"  # PRODUCTION: Restrict to your domain
+webrtcAdditionalHosts: [ "127.0.0.1" ]
+webrtcICEServers2: []
+
+# Paths - accept all publishers
+paths:
+  # Unauthenticated test path for ffsim generator (bypass handled in auth route)
+  test:
+    source: publisher
+  # All other paths require authentication
+  all:
+    source: publisher

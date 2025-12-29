@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Caddy Reverse Proxy (SSL Termination)
+  caddy:
+    image: caddy:alpine
+    container_name: exo_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - mediamtx
+
+  # MediaMTX (Streaming Server)
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: exo_stream_prod
+    restart: unless-stopped
+    ports:
+      - "1935:1935" # RTMP (Internal/Ingest) 
+      # RTMPS (1936) is handled by Caddy/Nginx via TCP stream or just use HTTP HLS
+    environment:
+      - MTX_logLevel=info
+    volumes:
+      - ./mediamtx.prod.yml:/mediamtx.yml
+      - hls_data:/hls
+
+  # Next.js Web App
+  web:
+    build: ../../apps/web
+    container_name: exo_web_prod
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_STREAM_URL=https://${DOMAIN:-example.com}/stream
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-example.com}/api
+    volumes:
+      - hls_data:/app/public/hls-data # Shared volume if serving HLS via Web? No, via MediaMTX.
+
+  # Manifest Signing (Security)
+  manifest:
+    build: ../../services/manifest
+    container_name: exo_manifest_prod
+    restart: unless-stopped
+    environment:
+      - HLS_DIR=/hls
+      - MANIFEST_PRIVATE_KEY=${MANIFEST_PRIVATE_KEY}
+    volumes:
+      - hls_data:/hls
+
+volumes:
+  caddy_data:
+  caddy_config:
+  hls_data:
