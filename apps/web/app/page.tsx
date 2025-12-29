@@ -10,6 +10,52 @@ import { KeyringManager } from "@/components/settings/KeyringManager";
 import { useTrustedPeers } from "@/context/TrustedPeersContext";
 import { useNostrStreams } from "@/hooks/useNostrStreams";
 
+const WORDS = [
+  "Decentralized",
+  "Unstoppable",
+  "Permissionless",
+  "Ownerless",
+  "Private",
+  "Global",
+  "Resilient"
+];
+
+function RotatingPrism() {
+  const [index, setIndex] = useState(0);
+  const [isRotating, setIsRotating] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsRotating(true);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % WORDS.length);
+        setIsRotating(false);
+      }, 600); // Matches CSS transition duration
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentWord = WORDS[index];
+  const nextWord = WORDS[(index + 1) % WORDS.length];
+
+  return (
+    <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
+      <span
+        className="prism-box"
+        style={{ transform: isRotating ? 'rotateX(90deg)' : 'rotateX(0deg)' }}
+      >
+        <span className="prism-face prism-front bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
+          {currentWord}
+        </span>
+        <span className="prism-face prism-bottom bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
+          {nextWord}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+
 export default function Home() {
   const { streams, loading } = useNostrStreams(); // Decentralized Discovery
   const { trustedKeys, isTrusted } = useTrustedPeers();
@@ -60,9 +106,13 @@ export default function Home() {
         {/* Hero Section */}
         {/* Hero Section */}
         <section className="py-20 text-center space-y-6">
-          <h2 className="text-5xl md:text-7xl font-black tracking-tighter bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
-            Unstoppable Streaming.
+          <h2 className="text-5xl md:text-7xl font-black tracking-tighter flex flex-wrap justify-center items-center gap-x-4">
+            <RotatingPrism />
+            <span className="bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
+              Streaming.
+            </span>
           </h2>
+
           <p className="text-xl text-neutral-400 max-w-2xl mx-auto">
             The world's first <span className="text-white font-semibold">DeFi-Native</span> broadcasting protocol.
             <br />

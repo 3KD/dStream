@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Video, Mic, MicOff, VideoOff, Radio, Settings, Eye, Wifi, WifiOff, Square } from "lucide-react";
+import { Video, Mic, MicOff, VideoOff, Radio, Settings, Eye, Wifi, WifiOff, Square, RefreshCw } from "lucide-react";
 import { IdentityBadge } from "@/components/identity/IdentityBadge";
 import { useIdentity } from "@/context/IdentityContext";
 import { WHIPClient } from "@/lib/whipClient";
@@ -257,28 +257,31 @@ export default function BroadcastPage() {
 
                 // Fallback Strategy
                 try {
-                    console.log("Attempting fallback 1: Any video/audio device");
+                    console.log("[dStream] Attempting fallback 1: Any video/audio device");
                     const fallbackStream1 = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                     setStream(fallbackStream1);
                     if (videoRef.current) videoRef.current.srcObject = fallbackStream1;
                     return;
                 } catch (e1) {
-                    console.warn("Fallback 1 failed:", e1);
+                    console.warn("[dStream] Fallback 1 failed:", e1);
                 }
 
                 try {
-                    console.log("Attempting fallback 2: Video only (no audio)");
+                    console.log("[dStream] Attempting fallback 2: Video only (no audio)");
                     const fallbackStream2 = await navigator.mediaDevices.getUserMedia({ video: true });
                     setStream(fallbackStream2);
                     if (videoRef.current) videoRef.current.srcObject = fallbackStream2;
                     return;
                 } catch (e2) {
-                    console.error("Fallback 2 failed:", e2);
+                    console.error("[dStream] Fallback 2 failed:", e2);
 
-                    if (err.name === 'NotFoundError' || err.message.includes('not found')) {
-                        setError("Camera not found. Mac users: Check System Settings -> Privacy & Security -> Camera.");
+                    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                    if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
+                        setError(`Camera not found. ${isMac ? 'Mac users: Check System Settings -> Privacy & Security -> Camera.' : 'Please ensure your camera is plugged in.'}`);
+                    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                        setError("Camera is in use by another application (Zoom, OBS, etc).");
                     } else {
-                        setError(`Unable to access camera: ${err.message || err.name}`);
+                        setError(`Camera Error: ${err.message || err.name}`);
                     }
                 }
             }
@@ -635,13 +638,29 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                                     <p className="text-xs text-neutral-600">
                                         Cameras: {cameras.length} | Mics: {mics.length} | Permission: {hasPermission ? "✓" : "✗"}
                                     </p>
-                                    {!hasPermission && (
+                                    <div className="flex gap-3 mt-4">
+                                        {!hasPermission && (
+                                            <button
+                                                onClick={() => navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(() => window.location.reload())}
+                                                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm transition font-medium"
+                                            >
+                                                Grant Permissions
+                                            </button>
+                                        )}
                                         <button
-                                            onClick={() => navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(() => window.location.reload())}
-                                            className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm"
+                                            onClick={() => window.location.reload()}
+                                            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm transition font-medium flex items-center gap-2"
                                         >
-                                            Grant Camera Access
+                                            <RefreshCw className="w-4 h-4" />
+                                            Retry Initialization
                                         </button>
+                                    </div>
+                                    {error && (
+                                        <div className="mt-4 p-3 bg-red-900/30 border border-red-800/50 rounded-lg max-w-sm">
+                                            <p className="text-red-400 text-xs leading-relaxed">
+                                                {error}
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
                             )}
