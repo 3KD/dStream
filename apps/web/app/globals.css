@@ -28,47 +28,46 @@ body {
 /* 3D Prism Animation */
 .prism-container {
   display: inline-block;
-  perspective: 1500px;
+  perspective: 1000px;
   vertical-align: bottom;
   background: #050505;
-  /* The 'hole' color */
   border-radius: 4px;
   position: relative;
-  /* Slot effect: inset shadow makes it look like a hole */
-  box-shadow:
-    inset 0 4px 10px rgba(0, 0, 0, 0.8),
-    inset 0 -1px 2px rgba(255, 255, 255, 0.05),
-    0 1px 0 rgba(255, 255, 255, 0.1);
-  overflow: visible;
-  /* Allow box to raise out */
+  /* Shadow for slot effect */
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+  padding: 0;
+  margin: 0;
 }
 
 .prism-box {
   position: relative;
-  display: block;
-  transform-style: preserve-3d;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  /* Faster for sequential phases */
   width: 100%;
   height: 1.5em;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-
 
 .prism-face {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   backface-visibility: hidden;
-  white-space: nowrap;
+  /* Fixes mirroring */
   background: #111;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.9);
+  /* Opaque to hide back */
   padding: 0 1rem;
+  box-sizing: border-box;
+  /* Clean gradient border */
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-/* 4-sided prism mapping */
+/* 4-sided prism mapping with simple solid colors to start */
 .prism-front {
   transform: rotateX(0deg) translateZ(0.75em);
   background: #151515;
@@ -89,13 +88,12 @@ body {
   background: #0a0a0a;
 }
 
-/* Premium Text Gradient */
+/* Text Styling */
 .prism-face span {
   font-weight: 900;
-  background: linear-gradient(to bottom, #ffffff 0%, #a3a3a3 100%);
+  background: linear-gradient(180deg, #fff 0%, #aaa 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   display: inline-block;
-  letter-spacing: -0.02em;
 }

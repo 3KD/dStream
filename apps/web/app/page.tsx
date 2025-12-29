@@ -11,13 +11,13 @@ import { useTrustedPeers } from "@/context/TrustedPeersContext";
 import { useNostrStreams } from "@/hooks/useNostrStreams";
 
 const WORDS = [
-  "Decentralized",
-  "Unstoppable",
-  "Permissionless",
-  "Ownerless",
-  "Private",
-  "Global",
-  "Resilient"
+  "decentralized",
+  "unstoppable",
+  "permissionless",
+  "ownerless",
+  "private",
+  "global",
+  "resilient"
 ];
 
 function RotatingPrism() {
@@ -60,8 +60,8 @@ function RotatingPrism() {
     return WORDS[((k % WORDS.length) + WORDS.length) % WORDS.length];
   };
 
-  // Determine Z-translation based on phase (3x more: 120px)
-  const zTranslation = (phase !== 'idle' && phase !== 'descending') ? '120px' : '0px';
+  // Determine Z-translation based on phase (Reduced to avoid distortion)
+  const zTranslation = (phase !== 'idle' && phase !== 'descending') ? '30px' : '0px';
 
   return (
     <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
@@ -69,23 +69,19 @@ function RotatingPrism() {
         className="prism-box"
         style={{
           transform: `translateZ(${zTranslation}) rotateX(${rotation * 90}deg)`,
-          transition: phase === 'rotating'
-            ? 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
-            : 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          transition: 'transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
         }}
       >
-        <span className="prism-face prism-front">
-          <span>{getWordForFace(0)}</span>
-        </span>
-        <span className="prism-face prism-bottom">
-          <span>{getWordForFace(1)}</span>
-        </span>
-        <span className="prism-face prism-back">
-          <span>{getWordForFace(2)}</span>
-        </span>
-        <span className="prism-face prism-top">
-          <span>{getWordForFace(3)}</span>
-        </span>
+        {[0, 1, 2, 3].map((i) => {
+          const w = getWordForFace(i);
+          const long = w === "permissionless";
+          const faceClass = ["prism-front", "prism-bottom", "prism-back", "prism-top"][i];
+          return (
+            <span key={i} className={`prism-face ${faceClass}`}>
+              <span style={{ transform: long ? 'scale(0.85)' : 'none' }}>{w}</span>
+            </span>
+          );
+        })}
       </span>
     </span>
   );
