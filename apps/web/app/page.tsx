@@ -39,20 +39,35 @@ function RotatingPrism() {
   };
 
   return (
-    <span className="prism-container inline-block w-[320px] md:w-[500px] text-right">
+    <span className="prism-container inline-block w-[320px] md:w-[500px] flex-none relative h-[1.5em]">
       <span
-        className="prism-box"
+        className="prism-box block w-full h-full relative"
         style={{
           transform: `rotateX(${rotation * 90}deg)`
         }}
       >
         {[0, 1, 2, 3].map((i) => {
           const w = getWordForFace(i);
-          const long = w === "permissionless";
+          let scale = 1;
+          if (w === "permissionless") scale = 0.65;
+          else if (w === "decentralized") scale = 0.7;
+          else if (w === "unstoppable") scale = 0.75;
+          else if (w === "ownerless") scale = 0.85;
+
           const faceClass = ["prism-front", "prism-bottom", "prism-back", "prism-top"][i];
           return (
-            <span key={i} className={`prism-face ${faceClass}`}>
-              <span style={{ transform: long ? 'scale(0.85)' : 'none' }}>{w}</span>
+            <span
+              key={i}
+              className={`prism-face ${faceClass} flex justify-end items-center w-full h-full absolute inset-0 px-4`}
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              <span style={{
+                transform: `scale(${scale})`,
+                transformOrigin: 'right center',
+                display: 'inline-block'
+              }}>
+                {w}
+              </span>
             </span>
           );
         })}
@@ -113,9 +128,9 @@ export default function Home() {
         {/* Hero Section */}
         {/* Hero Section */}
         <section className="py-20 text-center space-y-6">
-          <h2 className="text-5xl md:text-7xl font-black tracking-tighter flex flex-wrap justify-center items-center gap-x-4">
+          <h2 className="text-5xl md:text-7xl font-black tracking-tighter flex flex-wrap justify-center items-center">
             <RotatingPrism />
-            <span className="bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent pl-3">
               Streaming.
             </span>
           </h2>
