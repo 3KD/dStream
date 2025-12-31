@@ -1,9 +1,9 @@
 import { useRef, useState, useEffect } from "react";
-import { Send, User, Shield, ShieldCheck, ShieldAlert, Archive, Trash2, Lock, LockOpen } from "lucide-react";
+import { Send, User, Shield, ShieldCheck, ShieldAlert, Archive, Trash2, Lock, LockOpen, X } from "lucide-react";
 import { useIdentity } from "@/context/IdentityContext";
 import { useTrustedPeers } from "@/context/TrustedPeersContext";
 import { shortPubKey } from "@/lib/identity";
-import { clearChannel } from "@/lib/chatStorage";
+import { clearChannel, deleteMessage } from "@/lib/chatStorage";
 import { pool, RELAYS, KIND_CHAT_MESSAGE, publishEvent, getTag } from "@/lib/nostr";
 import { finalizeEvent, nip04 } from "nostr-tools";
 import { hexToBytes } from "viem";
@@ -155,6 +155,12 @@ export function ChatBox({ channel, pubkey, broadcasterPubkey }: { channel: strin
         setInput("");
     };
 
+    const handleDelete = async (msgId: string) => {
+        if (!confirm("Delete this message?")) return;
+        await deleteMessage(msgId);
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+    };
+
     // Filter messages from banned users
     const visibleMessages = messages.filter(m => !isBanned(m.user_pubkey));
 
@@ -177,18 +183,32 @@ export function ChatBox({ channel, pubkey, broadcasterPubkey }: { channel: strin
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {visibleMessages.map((msg, i) => (
-                    <div key={`${msg.timestamp}-${i}`} className={`flex flex-col gap-1 text-sm ${msg.isEncrypted ? 'pl-2 border-l-2 border-purple-500' : ''} group relative`}>
-                        {/* Ban Button (Only if I am Broadcaster and msg is not from me) */}
-                        {identity && identity.nostrPublicKey === broadcasterPubkey && msg.user_pubkey !== identity.nostrPublicKey && (
-                            <button
-                                onClick={() => {
-                                    if (confirm("Ban this user? They will be muted and reported.")) banKey(msg.user_pubkey);
-                                }}
-                                className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 p-1 bg-red-900/80 text-white text-xs rounded hover:bg-red-700 transition-opacity"
-                                title="Ban User (Slash)"
-                            >
-                                <Trash2 className="w-3 h-3" />
-                            </button>
+                    <div key={`${msg.id}-${i}`} className={`flex flex-col gap-1 text-sm ${msg.isEncrypted ? 'pl-2 border-l-2 border-purple-500' : ''} group relative pr-6`}>
+                        {/* Admin Controls: Ban & Delete (Only if I am Broadcaster and msg is not from me) */}
+                        {/* Note: Broadcaster can also delete their own messages, but 'msg.user_pubkey !== identity.nostrPublicKey' prevents Banning self. */}
+                        {/* Let's split logic: Ban requires OTHER user. Delete works for ANY message if I am Broadcaster. */}
+
+                        {identity && identity.nostrPublicKey === broadcasterPubkey && (
+                            <div className="absolute right-0 top-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {msg.user_pubkey !== identity.nostrPublicKey && (
+                                    <button
+                                        onClick={() => {
+                                            if (confirm("Ban this user? They will be muted and reported.")) banKey(msg.user_pubkey);
+                                        }}
+                                        className="p-1 bg-red-900/80 text-white text-xs rounded hover:bg-red-700"
+                                        title="Ban User"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => handleDelete(msg.id)}
+                                    className="p-1 bg-neutral-700 text-white text-xs rounded hover:bg-neutral-600"
+                                    title="Delete Message"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
                         )}
 
                         <div className="flex items-center gap-2 text-neutral-500 text-xs">

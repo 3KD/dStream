@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # MediaMTX - Streaming Engine
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: dStream_ingest
+    ports:
+      - "1935:1935" # Standard RTMP
+      - "8880:8880" # HLS
+      - "8881:8881" # WebRTC
+      - "8181:8181/udp" # UDP
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+      # Production should use a volume, not /tmp
+      - hls_data:/hls
+    environment:
+      - MTX_logLevel=warn
+    restart: always
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:9990/v3/paths/list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Web App - Production Build
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    container_name: dStream_web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - mediamtx
+    restart: always
+
+  # Manifest Signer
+  manifest:
+    build: ../../services/manifest
+    container_name: dStream_manifest
+    environment:
+      - HLS_DIR=/hls
+      # Inject real key in CI/CD or .env
+      - MANIFEST_PRIVATE_KEY=${MANIFEST_PRIVATE_KEY}
+    volumes:
+      - hls_data:/hls
+    depends_on:
+      - mediamtx
+    restart: always
+
+volumes:
+  hls_data:

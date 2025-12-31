@@ -769,6 +769,33 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                             </div>
                         </div>
 
+                        {/* OBS Connection Info */}
+                        <div className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
+                            <h3 className="font-bold mb-4 flex items-center gap-2">
+                                <Radio className="w-4 h-4 text-red-500" />
+                                Connect via OBS / Streamlabs
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm text-neutral-400 mb-1">RTMP Server URL</label>
+                                    <div className="flex gap-2">
+                                        <input readOnly value="rtmp://dstream.stream/live" className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-sm font-mono text-neutral-400" />
+                                        <button onClick={() => navigator.clipboard.writeText("rtmp://dstream.stream/live")} className="bg-neutral-800 hover:bg-neutral-700 px-3 rounded text-xs text-white">Copy</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-neutral-400 mb-1">Stream Key</label>
+                                    <div className="flex gap-2">
+                                        <input readOnly type="password" value={streamKey} className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-sm font-mono text-neutral-400" />
+                                        <button onClick={() => navigator.clipboard.writeText(streamKey)} className="bg-neutral-800 hover:bg-neutral-700 px-3 rounded text-xs text-white">Copy</button>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-neutral-500">
+                                    Paste these into OBS Settings &gt; Stream &gt; Custom...
+                                </p>
+                            </div>
+                        </div>
+
                         {/* Go Live Controls with Escrow Input */}
                         {!isLive ? (
                             <div className="space-y-4">

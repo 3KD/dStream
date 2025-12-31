@@ -9,8 +9,8 @@ apiAddress: :9990
 
 # Authentication (Webhook to Next.js API)
 # Uses internal docker network to reach the web container
-# Configured for port 5656
-externalAuthenticationURL: http://web:5656/api/auth/publish
+# Configured for port 3000 in Production
+externalAuthenticationURL: http://dStream_web:3000/api/auth/publish
 
 # Encryption (RTMPS / HLS / WebRTC)
 rtmpEncryption: optional
@@ -39,8 +39,8 @@ webrtc: yes
 webrtcAddress: :8881
 webrtcICEUDPMuxAddress: :8181
 # webrtcAllowOrigin: "*"   # DEVELOPMENT ONLY - uncomment for local testing
-webrtcAllowOrigin: "http://localhost:5656"  # PRODUCTION: Restrict to your domain
-webrtcAdditionalHosts: [ "127.0.0.1" ]
+webrtcAllowOrigin: "*"  # PRODUCTION: Allowing all for initial launch stability. Restrict to https://dstream.stream later.
+webrtcAdditionalHosts: [ "dstream.stream" ]
 webrtcICEServers2: []
 
 # Paths - accept all publishers

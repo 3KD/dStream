@@ -1,37 +1,47 @@
 #!/bin/bash
-# dStream Production Deploy Script
+# dStream Push-to-Deploy Script
+# Usage: ./deploy.sh [user@ip]
+# Example: ./deploy.sh root@123.456.78.90
 
-DOM=$1
-EMAIL=$2
-PASS=$3
+TARGET=$1
 
-if [ -z "$DOM" ] || [ -z "$EMAIL" ] || [ -z "$PASS" ]; then
-    echo "Usage: ./deploy.sh <DOMAIN> <ADMIN_EMAIL> <PUBLISH_PASSWORD>"
-    echo "Example: ./deploy.sh dstream.example.com admin@example.com supersecret"
+if [ -z "$TARGET" ]; then
+    echo "Usage: ./deploy.sh [user@ip]"
     exit 1
 fi
 
-echo "Deploying dStream to $DOM..."
+echo "🚀 Deploying dStream to $TARGET..."
 
-# Set Env Vars
-export DOMAIN=$DOM
-export ACME_EMAIL=$EMAIL
-export PUBLISH_PASSWORD=$PASS
+# 1. Create directory
+echo "🔹 Creating remote directory..."
+ssh $TARGET "mkdir -p /opt/dstream"
 
-# Generate Manifest Private Key (if not already set)
-# This key signs the HLS manifests to prevent modification.
-if [ -z "$MANIFEST_PRIVATE_KEY" ]; then
-    echo "🔑 Generating ephemeral Manifest Signing Key..."
-    export MANIFEST_PRIVATE_KEY=$(openssl rand -hex 32)
-fi
+# 2. Sync Files (Strict Whitelist)
+echo "🔹 Syncing ONLY project files..."
+cd "$(dirname "$0")/../.."  # Go to project root
 
-# Create docker network if missing
-docker network create web_net 2>/dev/null || true
+rsync -avz --progress --relative \
+    apps \
+    infra \
+    docs \
+    services \
+    package.json \
+    package-lock.json \
+    tsconfig.json \
+    next.config.ts \
+    postcss.config.mjs \
+    tailwind.config.ts \
+    $TARGET:/opt/dstream/
 
-# Pull latest images
-docker-compose -f docker-compose.prod.yml pull
+# Restore working directory just in case
+cd - > /dev/null
 
-# Start Stack
-docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+# 3. Remote Build & Launch
+echo "🔹 Building and Launching on Remote..."
+ssh $TARGET "cd /opt/dstream && \
+    docker compose -f infra/stream/docker-compose.prod.yml build && \
+    docker compose -f infra/stream/docker-compose.prod.yml up -d --remove-orphans && \
+    docker system prune -f"
 
-echo "Deployment Complete. Access at https://$DOM"
+echo "✅ Deployment Complete!"
+echo "👉 Check status: ssh $TARGET 'docker compose -f /opt/dstream/infra/stream/docker-compose.prod.yml ps'"

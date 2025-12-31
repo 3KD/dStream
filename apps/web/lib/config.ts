@@ -54,6 +54,12 @@ export const P2P_CONFIG = {
 };
 
 // Stream key generation from identity
+export const APP_CONFIG = {
+    url: "https://dstream.stream",
+    domain: "dstream.stream",
+    name: "dStream"
+};
+
 export function generateStreamKey(publicKey: string): string {
     // Use first 12 chars of pubkey for readable stream key
     return `dstream-${publicKey.substring(0, 12)}`;

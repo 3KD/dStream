@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Play, Radio, Zap, Shield, ShieldCheck, Fingerprint, Network } from "lucide-react";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
 import { IdentityBadge } from "@/components/identity/IdentityBadge";
@@ -12,62 +12,122 @@ import { useNostrStreams } from "@/hooks/useNostrStreams";
 
 const WORDS = [
   "decentralized",
-  "unstoppable",
-  "permissionless",
-  "ownerless",
-  "private",
-  "global",
-  "resilient"
+  "Unstoppable",
+  "Permissionless",
+  "Ownerless",
+  "Private",
+  "Global",
+  "Resilient",
+  "Independent",
+  "De-Fi",
+  "Journalist",
+  "Musician",
+  "Influencer"
 ];
+
+// Rotation logic: 0 (Front) -> 1 (Top) -> 2 (Back) -> 3 (Bottom) -> ...
+// But CSS is: Front (0deg) -> Bottom (-90deg) -> Back (-180deg) -> Top (-270deg)
+// Wait, rotating positive X moves top to front. 
+// Let's stick to standard counter-clockwise rotation (scrolling UP).
+// Rotation 0: Front visible.
+// Rotation 1: Bottom visible (rotateX -90deg? No, we want to scroll up, so text moves up).
+// To scroll up: Front moves up/back. Bottom moves up/front.
+// So we rotate X by POSITIVE 90deg? 
+// If we rotate X +90deg: Front goes UP/BACK. Bottom comes from BOTTOM/FRONT.
+// Let's rely on standard index mapping.
+
+// Machined Cube Logic
+// 1. Idle: Flush (Z=0)
+// 2. Lift: Move Z+40px, borders fade in.
+// 3. Rotate: Turn 90deg.
+// 4. Descend: Move Z=0, borders fade out.
 
 function RotatingPrism() {
   const [rotation, setRotation] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const [wordIndex, setWordIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setRotation((prev) => prev + 1);
-    }, 3000);
+      // 1. Lift
+      setIsActive(true);
+
+      // 2. Rotate (after lift completes)
+      setTimeout(() => {
+        setRotation((prev) => prev - 1); // Scroll UP means rotate NEGATIVE
+        setWordIndex((prev) => prev + 1);
+      }, 600); // 0.6s lift duration
+
+      // 3. Descend (Immediately after rotate completes)
+      // Rotate starts at 600ms + takes 600ms = 1200ms.
+      // We drop at 1300ms to ensure it looks flush right after reading.
+      setTimeout(() => {
+        setIsActive(false);
+      }, 1300);
+
+    }, 3500); // 3.5s cycle
+
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate word for each of the 4 faces based on the current rotation
+  // Calculate which face is currently "Front" based on rotation.
+  // Rotation is negative (scrolling up).
+  // 0 -> Face 0 (Front)
+  // -1 -> Face 3 (Top)  [Because -90deg brings Top to Front]
+  // -2 -> Face 2 (Back)
+  // -3 -> Face 1 (Bottom)
+  const visibleFaceIndex = (4 - (Math.abs(rotation) % 4)) % 4;
+
   const getWordForFace = (faceIndex: number) => {
-    // Ensure word index k satisfies k % 4 == faceIndex and remains stable until face is hidden.
-    // This formula ensures k only increments when the face is at the back/bottom position.
-    const k = Math.floor((rotation - faceIndex + 2) / 4) * 4 + faceIndex;
-    return WORDS[((k % WORDS.length) + WORDS.length) % WORDS.length];
+    // Physical Invariant Logic:
+    // We want the content on a face to REMAIN CONSTANT as it rotates from Next -> Current -> Prev.
+    // Face sequence order: 0 -> 3 -> 2 -> 1.
+    // Map face index to sequence position (0..3).
+    const getSeqPos = (f: number) => (4 - f) % 4;
+
+    const visSeq = getSeqPos(visibleFaceIndex);
+    const targetSeq = getSeqPos(faceIndex);
+
+    // Calculate distance in the sequence
+    const offset = targetSeq - visSeq;
+    const rawIndex = wordIndex + offset;
+
+    return WORDS[((rawIndex % WORDS.length) + WORDS.length) % WORDS.length];
   };
 
+  // Lift 3x higher as requested (was 0.5em)
+  const liftTransform = isActive ? "translateZ(1.5em)" : "translateZ(0)";
+  const currentWord = getWordForFace(visibleFaceIndex);
+
   return (
-    <span className="prism-container inline-block w-[320px] md:w-[500px] flex-none relative h-[1.5em]">
+    <span className={`machined-scene ${isActive ? "active" : ""}`}>
+      {/* Ghost Element: Dynamic word to force container width to match content */}
       <span
-        className="prism-box block w-full h-full relative"
+        className={`machined-text opacity-0 invisible pointer-events-none select-none ${currentWord.toLowerCase() === "decentralized" ? "brand-gradient" : ""}`}
+        aria-hidden="true"
+      >
+        {currentWord}
+      </span>
+
+      <span
+        className="machined-cube"
         style={{
-          transform: `rotateX(${rotation * 90}deg)`
+          transform: `${liftTransform} rotateX(${rotation * 90}deg)`
         }}
       >
         {[0, 1, 2, 3].map((i) => {
           const w = getWordForFace(i);
-          let scale = 1;
-          if (w === "permissionless") scale = 0.65;
-          else if (w === "decentralized") scale = 0.7;
-          else if (w === "unstoppable") scale = 0.75;
-          else if (w === "ownerless") scale = 0.85;
+          const faceClass = [
+            "machined-face-front",
+            "machined-face-bottom",
+            "machined-face-back",
+            "machined-face-top"
+          ][i];
+          const isBrand = w.toLowerCase() === "decentralized";
 
-          const faceClass = ["prism-front", "prism-bottom", "prism-back", "prism-top"][i];
           return (
-            <span
-              key={i}
-              className={`prism-face ${faceClass} flex justify-end items-center w-full h-full absolute inset-0 px-4`}
-              style={{ backfaceVisibility: 'hidden' }}
-            >
-              <span style={{
-                transform: `scale(${scale})`,
-                transformOrigin: 'right center',
-                display: 'inline-block'
-              }}>
-                {w}
-              </span>
+            <span key={i} className={`machined-face ${faceClass}`}>
+              <span className={`machined-text ${isBrand ? "bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent brand-gradient" : ""}`}>{w}</span>
             </span>
           );
         })}
@@ -115,7 +175,7 @@ export default function Home() {
               <Shield className="w-5 h-5" />
             </button>
             <IdentityBadge />
-            <Link href="/broadcast" className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium flex items-center gap-2 transition">
+            <Link href="/broadcast" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-full font-medium flex items-center gap-2 transition">
               <Radio className="w-4 h-4" />
               Start Streaming
             </Link>
@@ -128,10 +188,13 @@ export default function Home() {
         {/* Hero Section */}
         {/* Hero Section */}
         <section className="py-20 text-center space-y-6">
-          <h2 className="text-5xl md:text-7xl font-black tracking-tighter flex flex-wrap justify-center items-center">
+          {/* VERTICAL LAYOUT: Cube centered above text for easy alignment */}
+          <h2 className="text-3xl md:text-6xl font-black tracking-tighter flex flex-col items-center justify-center gap-4">
             <RotatingPrism />
-            <span className="bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent pl-3">
-              Streaming.
+            {/* Added pb-[0.1em] to fix 'g' clipping */}
+            <span className="pb-[0.2em]">
+              <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">d</span>
+              <span className="bg-gradient-to-br from-white to-neutral-500 bg-clip-text text-transparent">Streaming</span>
             </span>
           </h2>
 
@@ -144,8 +207,8 @@ export default function Home() {
             <Link href="/broadcast" className="px-8 py-4 bg-white text-black font-bold rounded-full hover:bg-neutral-200 transition">
               Start Broadcasting
             </Link>
-            <Link href="/docs" className="px-8 py-4 bg-neutral-900 border border-neutral-800 text-white font-bold rounded-full hover:bg-neutral-800 transition">
-              Documentation
+            <Link href="/use-cases" className="px-8 py-4 bg-neutral-900 border border-neutral-800 text-white font-bold rounded-full hover:bg-neutral-800 hover:text-blue-400 hover:border-blue-500/50 transition">
+              Who needs this?
             </Link>
           </div>
         </section>

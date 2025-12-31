@@ -121,3 +121,18 @@ export async function getMessageCount(channel: string): Promise<number> {
     const messages = await getMessages(channel, 10000);
     return messages.length;
 }
+
+/**
+ * Delete a specific message by ID
+ */
+export async function deleteMessage(id: string): Promise<void> {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.delete(id);
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve();
+    });
+}

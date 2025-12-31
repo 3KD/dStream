@@ -12,21 +12,20 @@ async function deriveStreamPath(pubkey: string, name: string): Promise<string> {
     return hashHex.substring(0, 16);
 }
 
-async function main() {
-    // Generate random identity
-    const privKey = ed.utils.randomPrivateKey();
-    const pubKey = await ed.getPublicKeyAsync(privKey);
-    const pubKeyHex = ed.etc.bytesToHex(pubKey);
+// Generate random identity
+const privKey = ed.utils.randomBytes(32);
+const pubKey = await ed.getPublicKeyAsync(privKey);
+const pubKeyHex = ed.etc.bytesToHex(pubKey);
 
-    const streamName = "test";
-    const streamPath = await deriveStreamPath(pubKeyHex, streamName);
+const streamName = "test";
+const streamPath = await deriveStreamPath(pubKeyHex, streamName);
 
-    // Sign the streamPath
-    const msg = new TextEncoder().encode(streamPath);
-    const sig = await ed.signAsync(msg, privKey);
-    const sigHex = ed.etc.bytesToHex(sig);
+// Sign the streamPath
+const msg = new TextEncoder().encode(streamPath);
+const sig = await ed.signAsync(msg, privKey);
+const sigHex = ed.etc.bytesToHex(sig);
 
-    console.log(`rtmp://mediamtx:1940/${streamPath}?pubkey=${pubKeyHex}&sig=${sigHex}&name=${streamName}`);
+console.log(`rtmp://mediamtx:1940/${streamPath}?pubkey=${pubKeyHex}&sig=${sigHex}&name=${streamName}`);
 }
 
 main();

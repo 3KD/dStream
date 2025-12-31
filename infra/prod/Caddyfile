@@ -1,14 +1,13 @@
 {
-    email admin@${DOMAIN}
+    email admin@dstream.stream
 }
 
-${DOMAIN} {
-    # Reverse proxy to Next.js Web App
-    reverse_proxy dStream_web_prod:5656
+dstream.stream, www.dstream.stream {
+    # Next.js Web App
+    reverse_proxy dStream_web:3000
 
-    # Serve HLS and API from MediaMTX
-    # Assuming MediaMTX serves HLS on 8880
+    # HLS Streaming (MediaMTX)
     handle_path /stream/* {
-        reverse_proxy dStream_stream_prod:8880
+        reverse_proxy dStream_ingest:8880
     }
 }
