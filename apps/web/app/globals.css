@@ -51,12 +51,13 @@ body {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Transition Speed - Slowed down to 1.2s per user request */
+  transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-origin: center center;
   will-change: transform;
 }
 
-.machined-face {
+.machined-cube-face {
   box-sizing: border-box;
   position: absolute;
   top: 0;
@@ -69,20 +70,20 @@ body {
   justify-content: center;
   border-radius: 4px;
 
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  -webkit-backface-visibility: visible;
+  backface-visibility: visible;
 
-  /* FLUSH FIX: Style the FACE. Default Transparent. */
-  background: transparent !important;
-  /* Shadow Transition Fix: Use transparent RGBA */
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0), 0 10px 30px rgba(0, 0, 0, 0) !important;
+  /* FLUSH FIX: Allow background color for solid faces */
+
+  /* Shadow: controlled by component or specific state */
+  box-shadow: none;
   border: none !important;
 
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Active State: Textured, Light "Reverse Shadowing" */
-.machined-scene.active .machined-face {
+.machined-scene.active .machined-cube-face {
   /* Texture: Metallic Gray (Lighter to show volume) */
   background: linear-gradient(145deg, #2a2a2a 0%, #050505 100%) !important;
 
@@ -98,35 +99,35 @@ body {
 }
 
 /* Standard Cube Geometry (Em-based) */
-.machined-face-front {
-  transform: rotateX(0deg) translateZ(calc(0.5em));
+.machined-cube-face-front {
+  transform: rotateX(0deg) translateZ(calc(0.8em));
 }
 
-.machined-face-bottom {
-  transform: rotateX(-90deg) translateZ(calc(0.5em));
+.machined-cube-face-bottom {
+  transform: rotateX(-90deg) translateZ(calc(0.8em));
 }
 
-.machined-face-back {
-  transform: rotateX(-180deg) translateZ(calc(0.5em));
+.machined-cube-face-back {
+  transform: rotateX(180deg) translateZ(calc(0.8em));
 }
 
-.machined-face-top {
-  transform: rotateX(-270deg) translateZ(calc(0.5em));
+.machined-cube-face-top {
+  transform: rotateX(90deg) translateZ(calc(0.8em));
 }
 
 .machined-text {
-  background: linear-gradient(180deg, #fff 0%, #aaa 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* REMOVED: conflicting gradient/clip properties. Controlled by React now. */
   font-weight: 900;
-  display: inline-block;
+  display: inline-flex;
+  /* Changed from inline-block to match flex usage */
   line-height: 1 !important;
   white-space: nowrap;
 
   /* BOX SIZING: Keep padding to size the Scene/Face */
   /* Added significant bottom padding to prevent 'g' cutoff */
-  padding: 0 0.25em 0.3em 0.25em;
+  /* Added significant bottom padding to prevent 'g' cutoff */
+  /* Top padding increased to 0.3em to match bottom (User Request) */
+  padding: 0.3em 0.25em 0.3em 0.25em;
 
   /* Text Position */
   position: relative;
@@ -159,4 +160,88 @@ body {
   background-image: linear-gradient(to right, #3b82f6, #9333ea) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
+}
+
+/* Initial Load Animation: "Stream" turns Blue, then Fades to White */
+@keyframes stream-pulse {
+
+  0%,
+  40% {
+    color: #3b82f6;
+    /* Hold Blue */
+  }
+
+  100% {
+    color: #a3a3a3;
+    /* Fade to White/Neutral (Wait, "Streaming" was gradient, now it should be neutral-400 or white?) */
+    /* User said "regular color". dStream brand usually has "Stream" in white/light-gray. */
+  }
+}
+
+.animate-stream-pulse {
+  animation: stream-pulse 2.5s ease-out forwards;
+}
+
+/* ==========================================
+   ACCESSIBILITY ENHANCEMENTS
+   ========================================== */
+
+/* Skip to main content link (for keyboard users) */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: #3b82f6;
+  color: white;
+  padding: 0.5rem 1rem;
+  z-index: 1000;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 0 0 0.5rem 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Global focus indicators */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Remove default focus for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .machined-cube {
+    transition: none !important;
+  }
+
+  .machined-scene.active .machined-cube {
+    /* Skip lift animation, just show rotation */
+    transform: translateZ(0) !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+
+  button,
+  a {
+    border: 2px solid currentColor;
+  }
 }

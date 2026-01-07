@@ -22,16 +22,54 @@ export interface Identity {
     nostrPublicKey?: string;  // Secp256k1 hex (Discovery/Chat)
     nostrPrivateKey?: string; // Secp256k1 hex
     moneroAddress?: string;   // XMR Public Address (Primary or Subaddress)
+    moneroViewKey?: string;   // Private View Key (for incoming tx scanning)
+    moneroSpendKey?: string;  // Public Spend Key (for restoring/verifying keys)
     displayName: string;
+    picture?: string;         // Profile picture URL
+    nip05?: string;
+    nip05Verified?: boolean;
     createdAt: number;
 }
 
 const STORAGE_KEY = 'dstream_identity';
+const COOKIE_NAME = 'dstream_identity';
+
+function setCookie(name: string, value: string, days: number) {
+    if (typeof document === 'undefined') return;
+    let expires = "";
+    if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = "; expires=" + date.toUTCString();
+    }
+    document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Strict";
+}
+
+function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
 
 /**
  * Generate a new Identity (Dual Key: Ed25519 + Nostr)
  */
 export async function generateIdentity(displayName?: string): Promise<Identity> {
+    // Check for secure context - crypto.subtle requires HTTPS or localhost
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+        throw new Error("Identity generation requires HTTPS. Access via localhost or set up HTTPS for LAN access.");
+    }
+
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+        throw new Error("WebCrypto API not available. This browser or context doesn't support cryptographic operations.");
+    }
+
     // 1. Generate Protocol Key (Ed25519)
     const privateKey = ed.utils.randomSecretKey();
     const publicKey = await ed.getPublicKeyAsync(privateKey);
@@ -40,11 +78,15 @@ export async function generateIdentity(displayName?: string): Promise<Identity> 
     const nostrSecret = generateSecretKey();
     const nostrPublic = getPublicKey(nostrSecret);
 
+    // Default test Monero address (mainnet format, for development convenience)
+    const defaultMoneroAddress = '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H';
+
     const identity: Identity = {
         publicKey: bytesToHex(publicKey),
         privateKey: bytesToHex(privateKey),
         nostrPublicKey: nostrPublic,
         nostrPrivateKey: bytesToHex(nostrSecret),
+        moneroAddress: defaultMoneroAddress,  // Pre-populate with test address
         displayName: displayName || `anon_${bytesToHex(publicKey).substring(0, 8)}`,
         createdAt: Date.now()
     };
@@ -80,37 +122,41 @@ export async function verifySignature(
     }
 }
 
-/**
- * Store identity in localStorage
- */
-export function saveIdentity(identity: Identity): void {
-    if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
-    }
-}
+export const saveIdentity = (identity: Identity) => {
+    if (typeof window === 'undefined') return;
+    const json = JSON.stringify(identity);
+    localStorage.setItem(STORAGE_KEY, json);
+    setCookie(COOKIE_NAME, json, 365); // Persist for 1 year
+};
 
-/**
- * Load identity from localStorage
- */
-export function loadIdentity(): Identity | null {
+export const loadIdentity = (): Identity | null => {
     if (typeof window === 'undefined') return null;
-    const stored = localStorage.getItem(STORAGE_KEY);
+
+    // 1. Try LocalStorage
+    let stored = localStorage.getItem(STORAGE_KEY);
+
+    // 2. Fallback to Cookie
+    if (!stored) {
+        stored = getCookie(COOKIE_NAME);
+        if (stored) {
+            // Restore to localStorage to keep them in sync
+            localStorage.setItem(STORAGE_KEY, stored);
+        }
+    }
+
     if (!stored) return null;
     try {
         return JSON.parse(stored);
-    } catch {
+    } catch (e) {
         return null;
     }
-}
+};
 
-/**
- * Clear identity from localStorage
- */
-export function clearIdentity(): void {
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem(STORAGE_KEY);
-    }
-}
+export const clearIdentity = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.cookie = COOKIE_NAME + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+};
 
 /**
  * Export identity as JSON string

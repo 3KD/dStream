@@ -72,7 +72,8 @@ export function TipButton({ broadcasterXmrAddress, broadcasterEthAddress }: TipB
     }, [isConfirmed, hash, amount, ethAddress, address]);
 
     // Generate Monero URI with Payment ID
-    const moneroUri = `monero:${xmrAddress}?tx_amount=${amount}&tx_payment_id=${paymentId}`;
+    // tx_amount is deprecated/specific, 'amount' is standard (XMR)
+    const moneroUri = `monero:${xmrAddress}?amount=${amount}&tx_payment_id=${paymentId}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(moneroUri)}`;
 
     const copyToClipboard = (text: string) => {
@@ -209,6 +210,37 @@ export function TipButton({ broadcasterXmrAddress, broadcasterEthAddress }: TipB
 
                                 <div className="bg-white p-4 rounded-xl mb-4 flex justify-center">
                                     <img src={qrCodeUrl} alt="Monero Payment QR" className="w-40 h-40" />
+                                </div>
+
+                                {/* External Wallet Buttons */}
+                                <div className="grid grid-cols-3 gap-2 mb-4">
+                                    <a
+                                        href={moneroUri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex flex-col items-center justify-center p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs transition-colors group"
+                                    >
+                                        <span className="text-orange-500 font-bold mb-1 group-hover:scale-110 transition-transform">🍰</span>
+                                        <span>Cake</span>
+                                    </a>
+                                    <a
+                                        href={moneroUri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex flex-col items-center justify-center p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs transition-colors group"
+                                    >
+                                        <span className="text-blue-400 font-bold mb-1 group-hover:scale-110 transition-transform">📚</span>
+                                        <span>Stack</span>
+                                    </a>
+                                    <a
+                                        href={moneroUri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex flex-col items-center justify-center p-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-xs transition-colors group"
+                                    >
+                                        <span className="text-purple-400 font-bold mb-1 group-hover:scale-110 transition-transform">🪶</span>
+                                        <span>Feather</span>
+                                    </a>
                                 </div>
 
                                 <div className="mb-4 space-y-2">

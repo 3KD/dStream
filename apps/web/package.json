@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 5656",
+    "dev": "next dev -p 5655 --hostname 0.0.0.0",
+    "dev:proxy": "node scripts/proxy.js",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start -p 5655",
     "lint": "eslint"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
+    "http-proxy": "^1.18.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

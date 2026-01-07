@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther } from "viem";
 import { X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
@@ -17,6 +17,16 @@ export function TipModal({ isOpen, onClose, broadcasterAddress }: TipModalProps)
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
         hash
     });
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && isOpen) {
+                onClose();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 

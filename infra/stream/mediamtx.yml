@@ -8,22 +8,24 @@ api: yes
 apiAddress: :9990
 
 # Authentication (Webhook to Next.js API)
-# Uses internal docker network to reach the web container
-# Configured for port 3000 in Production
-externalAuthenticationURL: http://dStream_web:3000/api/auth/publish
+# Uses host.docker.internal to reach the web app running on the host (outside docker)
+authMethod: http
+authHTTPAddress: http://host.docker.internal:5655/api/auth/publish
 
 # Encryption (RTMPS / HLS / WebRTC)
-rtmpEncryption: optional
-rtmpServerKey: /certs/server.key
-rtmpServerCert: /certs/server.crt
+# Encryption (Offloaded to Caddy/Reverse Proxy)
+# Encryption (Offloaded to Caddy/Reverse Proxy)
+rtmpEncryption: "no"
+# rtmpServerKey: /certs/server.key
+# rtmpServerCert: /certs/server.crt
 
-hlsEncryption: yes
-hlsServerKey: /certs/server.key
-hlsServerCert: /certs/server.crt
+hlsEncryption: no
+# hlsServerKey: /certs/server.key
+# hlsServerCert: /certs/server.crt
 
-webrtcEncryption: yes
-webrtcServerKey: /certs/server.key
-webrtcServerCert: /certs/server.crt
+webrtcEncryption: no
+# webrtcServerKey: /certs/server.key
+# webrtcServerCert: /certs/server.crt
 
 # HLS settings
 hls: yes
@@ -33,6 +35,7 @@ hlsSegmentDuration: 4s
 hlsPartDuration: 1s
 hlsSegmentCount: 7
 hlsAlwaysRemux: yes
+hlsAllowOrigin: "*"
 
 # WebRTC/WHIP settings
 webrtc: yes
@@ -41,6 +44,7 @@ webrtcICEUDPMuxAddress: :8181
 # webrtcAllowOrigin: "*"   # DEVELOPMENT ONLY - uncomment for local testing
 webrtcAllowOrigin: "*"  # PRODUCTION: Allowing all for initial launch stability. Restrict to https://dstream.stream later.
 webrtcAdditionalHosts: [ "dstream.stream" ]
+webrtcICEHostNAT1To1IPs: [ "127.0.0.1" ]
 webrtcICEServers2: []
 
 # Paths - accept all publishers
@@ -51,3 +55,5 @@ paths:
   # All other paths require authentication
   all:
     source: publisher
+    readUser: ""
+    readPass: ""

@@ -4,10 +4,10 @@
 
 dstream.stream, www.dstream.stream {
     # Next.js Web App
-    reverse_proxy dStream_web:3000
+    reverse_proxy web:3000
 
     # HLS Streaming (MediaMTX)
     handle_path /stream/* {
-        reverse_proxy dStream_ingest:8880
+        reverse_proxy mediamtx:8888
     }
 }

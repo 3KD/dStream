@@ -15,6 +15,16 @@ export function StakingModal({ onClose, requiredAmount = 0.01, broadcasterAddres
         setPaymentId(generatePaymentId());
     }, []);
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && onClose) {
+                onClose();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
     const handleVerify = async () => {
         if (!broadcasterAddress) return;
         setVerifying(true);
@@ -112,8 +122,29 @@ export function StakingModal({ onClose, requiredAmount = 0.01, broadcasterAddres
                                 <><Coins className="w-5 h-5" /> I Sent It</>
                             )}
                         </button>
+
                     </>
                 )}
+
+                <div className="relative mt-6">
+                    <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-neutral-800" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-neutral-900 px-2 text-neutral-500">Test / Local Mode</span>
+                    </div>
+                </div>
+
+                <button
+                    onClick={() => {
+                        deposit(requiredAmount);
+                        if (onClose) onClose();
+                    }}
+                    className="w-full mt-4 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold rounded-xl flex items-center justify-center gap-2 transition-all border border-neutral-700 border-dashed"
+                >
+                    <Coins className="w-4 h-4" />
+                    Simulate Payment (Fake XMR)
+                </button>
             </div>
         </div>
     );

@@ -15,16 +15,40 @@ export const pool = new SimplePool();
 export const KIND_STREAM_ANNOUNCE = 30311; // NIP-53 Live Activity
 export const KIND_CHAT_MESSAGE = 1;
 
-// Helper to publish
-export const publishEvent = async (event: any) => {
-    try {
-        await Promise.any(pool.publish(RELAYS, event));
-        console.log(`[Nostr] Published event ${event.id} to relays`);
-        return true;
-    } catch (e) {
-        console.error(`[Nostr] Failed to publish event`, e);
-        return false;
+// Helper to publish with timeout
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Publish timeout')), ms)
+        )
+    ]);
+};
+
+export const publishEvent = async (event: any, retries = 2) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            // First try local relay (fastest)
+            const localPublish = pool.publish(['ws://localhost:8081'], event);
+            await withTimeout(Promise.any(localPublish), 3000);
+            console.log(`[Nostr] Published event ${event.id} to local relay`);
+
+            // Then fire-and-forget to public relays (don't block)
+            const publicRelays = RELAYS.filter(r => !r.includes('localhost'));
+            pool.publish(publicRelays, event); // No await - fire and forget
+
+            return true;
+        } catch (e) {
+            if (attempt < retries) {
+                console.warn(`[Nostr] Publish attempt ${attempt + 1} failed, retrying...`);
+                await new Promise(r => setTimeout(r, 500)); // Brief delay
+            } else {
+                console.error(`[Nostr] Failed to publish event after ${retries + 1} attempts`, e);
+                return false;
+            }
+        }
     }
+    return false;
 };
 
 // Helper: Get 'd' tag (identifier)

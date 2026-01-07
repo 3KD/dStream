@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "turbo run dev",
+    "dev:all": "./start-dev.sh",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },

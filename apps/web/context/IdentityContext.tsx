@@ -10,6 +10,7 @@ import {
     signMessage,
     verifySignature
 } from '@/lib/identity';
+import { verifyNip05 as checkNip05 } from '@/lib/nip05';
 
 // NIP-07 Interface
 declare global {
@@ -29,13 +30,15 @@ declare global {
 interface IdentityContextType {
     identity: Identity | null;
     isLoading: boolean;
-    createIdentity: (displayName?: string) => Promise<void>;
+    createIdentity: (displayName?: string) => Promise<Identity>;
     loginWithExtension: () => Promise<void>;
     updateIdentity: (updates: Partial<Identity>) => void;
     deleteIdentity: () => void;
     sign: (message: string) => Promise<string | null>;
     verify: (message: string, signature: string, pubkey: string) => Promise<boolean>;
     signNostrEvent: (event: any) => Promise<any>;
+    verifyNip05: (address?: string) => Promise<boolean>;
+    // Monero keys are accessed via identity object
 }
 
 const IdentityContext = createContext<IdentityContextType | null>(null);
@@ -48,6 +51,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         const load = async () => {
             let stored = loadIdentity();
             if (stored) {
+                let needsSave = false;
+
                 // Backfill Nostr keys if missing (Upgrade legacy identity)
                 // If using extension (private key missing but pubkey present), don't backfill
                 const isExtension = stored.nostrPublicKey && !stored.nostrPrivateKey;
@@ -59,6 +64,18 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
                         nostrPublicKey: temp.nostrPublicKey,
                         nostrPrivateKey: temp.nostrPrivateKey
                     };
+                    needsSave = true;
+                }
+
+                // Backfill Monero address if missing (for easier dev testing)
+                if (!stored.moneroAddress) {
+                    stored.moneroAddress = '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H';
+                    needsSave = true;
+                }
+
+                // Note: moneroViewKey and moneroSpendKey are optional and won't be auto-filled
+
+                if (needsSave) {
                     saveIdentity(stored);
                 }
                 setIdentity(stored);
@@ -68,10 +85,11 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         load();
     }, []);
 
-    const createIdentity = async (displayName?: string) => {
+    const createIdentity = async (displayName?: string): Promise<Identity> => {
         const newIdentity = await generateIdentity(displayName);
         saveIdentity(newIdentity);
         setIdentity(newIdentity);
+        return newIdentity;
     };
 
     const loginWithExtension = async () => {
@@ -147,6 +165,23 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         return verifySignature(message, signature, pubkey);
     };
 
+    const verifyNip05 = async (address?: string): Promise<boolean> => {
+        const addr = address || identity?.nip05;
+        const pubkey = identity?.nostrPublicKey;
+
+        if (!addr || !pubkey) return false;
+
+        const result = await checkNip05(addr, pubkey);
+
+        // Update local state if valid
+        updateIdentity({
+            nip05: addr,
+            nip05Verified: result.valid
+        });
+
+        return result.valid;
+    };
+
     return (
         <IdentityContext.Provider value={{
             identity,
@@ -157,7 +192,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
             deleteIdentity,
             sign,
             verify,
-            signNostrEvent
+            signNostrEvent,
+            verifyNip05
         }}>
             {children}
         </IdentityContext.Provider>

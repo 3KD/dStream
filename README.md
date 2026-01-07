@@ -54,8 +54,8 @@ docker-compose up -d
 ```
 
 ### 3. Access
-- **Web UI**: [http://localhost:5656](http://localhost:5656)
-- **Broadcaster**: [http://localhost:5656/broadcast](http://localhost:5656/broadcast)
+- **Web UI**: [https://localhost:5656](https://localhost:5656)
+- **Broadcaster**: [https://localhost:5656/broadcast](https://localhost:5656/broadcast)
 
 ---
 

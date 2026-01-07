@@ -3,21 +3,29 @@
 import { useEffect, useState } from "react";
 import { VideoPlayer } from "@/components/player/VideoPlayer";
 import { TipButton } from "@/components/tipping/TipButton";
+import { PaymentButtons } from "@/components/tipping/PaymentButtons";
 import { ChatBox } from "@/components/chat/ChatBox";
 import Link from "next/link";
 import { IdentityBadge } from "@/components/identity/IdentityBadge";
 import { KeyringActions } from "@/components/identity/KeyringActions";
 import { WalletBadge } from "@/components/identity/WalletBadge";
+import { Header } from "@/components/layout/Header";
+import { P2PStats } from "@/components/P2PStats";
 import { Users } from "lucide-react";
 import { useTrustedPeers } from "@/context/TrustedPeersContext";
 import { useEscrow } from "@/context/EscrowContext";
 import { StakingModal } from "@/components/staking/StakingModal";
 import { useSearchParams } from "next/navigation";
 import { useNostrStreams } from "@/hooks/useNostrStreams"; // Import hook
-import { Clock, Tag as TagIcon, Globe, AlertTriangle, Lock, Ticket } from "lucide-react"; // Import icons
+import { Clock, Tag as TagIcon, Globe, AlertTriangle, Lock, Ticket, Mail, Heart } from "lucide-react"; // Import icons
+import { useFavorites } from "@/context/FavoritesContext";
+import { Nip05Badge } from "@/components/identity/Nip05Badge";
+import { GuildBadges } from "@/components/identity/GuildBadges";
+import { useStream } from "@/context/StreamContext";
+import { usePresence } from "@/hooks/usePresence";
 
-// For MVP, we point to localhost:8880 (MediaMTX HLS output)
-const STREAM_BASE_URL = "http://localhost:8880";
+// For MVP, we point to /hls which is proxied to localhost:8880
+const STREAM_BASE_URL = "/hls";
 const REGISTRY_URL = "http://localhost:3002";
 
 interface WatchPageProps {
@@ -26,13 +34,15 @@ interface WatchPageProps {
 
 export default function WatchPage({ params }: WatchPageProps) {
     const [channel, setChannel] = useState<string | null>(null);
-    const [viewerCount, setViewerCount] = useState(0);
+    const { viewerCount } = usePresence(channel || undefined);
     const [requiredStake, setRequiredStake] = useState(0.01);
     const [broadcasterAddress, setBroadcasterAddress] = useState<string | null>(null);
     const { isTrusted } = useTrustedPeers();
     const searchParams = useSearchParams();
     const pubkey = searchParams.get("pubkey");
     const { isStaked, isSlashed, slash } = useEscrow();
+    const { isFavorite, toggleFavorite } = useFavorites();
+    const isFavorited = channel ? isFavorite(channel) : false;
 
     useEffect(() => {
         params.then(p => setChannel(p.channel));
@@ -52,76 +62,123 @@ export default function WatchPage({ params }: WatchPageProps) {
     const price = activeStream?.metadata.price;
     const term = activeStream?.metadata.term;
 
+    // Get escrow settings from Nostr metadata (fallback to defaults)
+    const nostrEscrowAmount = activeStream?.metadata.escrow_amount;
+    const nostrMoneroAddress = activeStream?.metadata.monero_address;
+
+    // Sync with Global Stream Context
+    const { playStream } = useStream();
+
+    useEffect(() => {
+        if (activeStream && channel) {
+            playStream(
+                `${STREAM_BASE_URL}/${channel}/index.m3u8`,
+                {
+                    title: activeStream.metadata.title || "Untitled Stream",
+                    pubkey: activeStream.pubkey,
+                    channel: channel,
+                    summary: activeStream.metadata.summary
+                }
+            );
+        }
+    }, [activeStream, channel]); // Only re-sync if the primary stream changes
+
+    // Update broadcaster address from Nostr when available
+    useEffect(() => {
+        if (nostrMoneroAddress) {
+            setBroadcasterAddress(nostrMoneroAddress);
+        }
+        if (nostrEscrowAmount) {
+            setRequiredStake(nostrEscrowAmount);
+        }
+    }, [nostrMoneroAddress, nostrEscrowAmount]);
+
     // Ticketing Logic
     const [hasTicket, setHasTicket] = useState(false);
+    const [isReconnecting, setIsReconnecting] = useState(false);
 
     useEffect(() => {
         if (!channel) return;
-        // Check local storage for valid ticket
-        const ticketKey = `ticket_${channel}`;
-        const storedTicket = localStorage.getItem(ticketKey);
-        if (storedTicket) {
-            const ticket = JSON.parse(storedTicket);
-            // Check expiry
-            if (ticket.expiry > Date.now()) {
+
+        const checkTicket = () => {
+            // 1. Check for Channel-specific ticket
+            const channelTicketKey = `ticket_${channel}`;
+            const storedChannelTicket = localStorage.getItem(channelTicketKey);
+
+            // 2. Check for Identity-specific ticket (Failsafe for reconnects)
+            const pubkeyTicketKey = pubkey ? `ticket_pub_${pubkey}` : null;
+            const storedPubkeyTicket = pubkeyTicketKey ? localStorage.getItem(pubkeyTicketKey) : null;
+
+            const validTicket = (storedData: string | null) => {
+                if (!storedData) return false;
+                const ticket = JSON.parse(storedData);
+                return ticket.expiry > Date.now();
+            };
+
+            if (validTicket(storedChannelTicket) || validTicket(storedPubkeyTicket)) {
                 setHasTicket(true);
             } else {
-                localStorage.removeItem(ticketKey);
-            }
-        }
-    }, [channel]);
-
-    const handlePurchase = () => {
-        // Mock Purchase Flow for MVP
-        // In real version: Send Kind 4 DM -> Wait for Reply
-        if (confirm(`Confirm payment of ${price?.amount} ${price?.currency} for ${term?.value} ${term?.unit} access?`)) {
-            const expiry = Date.now() + (term?.value || 24) * 60 * 60 * 1000;
-            const ticket = {
-                channel,
-                expiry,
-                purchasedAt: Date.now()
-            };
-            localStorage.setItem(`ticket_${channel}`, JSON.stringify(ticket));
-            setHasTicket(true);
-            alert("Payment Sent! Ticket Received. Enjoy the stream.");
-        }
-    };
-
-    // Fetch stream metadata
-    useEffect(() => {
-        if (!channel) return;
-
-        const fetchDetails = async () => {
-            try {
-                // Fetch viewers
-                const viewersRes = await fetch(`${REGISTRY_URL}/viewers/${channel}`);
-                const viewersData = await viewersRes.json();
-                setViewerCount(viewersData.viewers || 0);
-
-                // Fetch Metadata (Escrow Amount)
-                const streamRes = await fetch(`${REGISTRY_URL}/stream/${channel}`);
-                if (streamRes.ok) {
-                    const streamData = await streamRes.json();
-                    // Update the StakingModal default via prop or context?
-                    // For now, let's store it locally and pass to StakingModal if we refactor,
-                    // But StakingModal pulls from EscrowContext. 
-                    // WE need to update StakingModal to accept an "amount" prop.
-                    if (streamData.metadata?.escrow_amount) {
-                        setRequiredStake(streamData.metadata.escrow_amount);
-                    }
-                    if (streamData.metadata?.monero_address) {
-                        setBroadcasterAddress(streamData.metadata.monero_address);
-                    }
-                }
-            } catch (e) {
-                // Silently fail
+                setHasTicket(false);
             }
         };
 
-        fetchDetails();
-        const interval = setInterval(fetchDetails, 5000);
+        checkTicket();
+        const interval = setInterval(checkTicket, 10000); // Check every 10s
         return () => clearInterval(interval);
-    }, [channel]);
+    }, [channel, pubkey]);
+
+    // Reconnection Grace Period Logic
+    useEffect(() => {
+        if (price && !activeStream && hasTicket) {
+            // Stream was active but disappeared - start grace period
+            setIsReconnecting(true);
+            const timer = setTimeout(() => {
+                setIsReconnecting(false);
+            }, 10000); // 10s grace period
+            return () => clearTimeout(timer);
+        } else if (activeStream) {
+            setIsReconnecting(false);
+        }
+    }, [activeStream, price, hasTicket]);
+
+    const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
+    const [purchaseComplete, setPurchaseComplete] = useState(false);
+
+    const handlePurchase = () => {
+        // Show confirmation step
+        setShowPurchaseConfirm(true);
+    };
+
+    const confirmPurchase = () => {
+        // Mock Purchase Flow for MVP
+        const expiry = Date.now() + (term?.value || 24) * 60 * 60 * 1000;
+        const ticket = {
+            channel,
+            pubkey,
+            expiry,
+            purchasedAt: Date.now()
+        };
+
+        // Save by Channel ID
+        localStorage.setItem(`ticket_${channel}`, JSON.stringify(ticket));
+
+        // Save by Pubkey (Identity Failsafe)
+        if (pubkey) {
+            localStorage.setItem(`ticket_pub_${pubkey}`, JSON.stringify(ticket));
+        }
+
+        setPurchaseComplete(true);
+        setTimeout(() => {
+            setHasTicket(true);
+            setShowPurchaseConfirm(false);
+            setPurchaseComplete(false);
+        }, 1500);
+    };
+
+    // Registry fetch removed (using Nostr metadata only)
+    useEffect(() => {
+        // No-op for now, or real-time viewer count from Nostr/Relay in future
+    }, []);
 
     // Gating Logic
     const requiresEscrow = pubkey && !isTrusted(pubkey);
@@ -144,31 +201,23 @@ export default function WatchPage({ params }: WatchPageProps) {
         <div className="min-h-screen bg-neutral-950 text-white p-6 relative">
             {(showModal || isSlashed) && <StakingModal requiredAmount={requiredStake} broadcasterAddress={broadcasterAddress} />}
 
-            <header className="mb-6 flex items-center justify-between">
-                <Link href="/" className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-                    dStream
-                </Link>
+            <Header>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 text-neutral-400 text-sm">
                         <Users className="w-4 h-4" />
                         <span>{viewerCount} watching</span>
                     </div>
-                    {isStaked && (
-                        <div className="text-xs text-green-500 border border-green-900 bg-green-950 px-2 py-1 rounded">
-                            Stake Active: {requiredStake} XMR
-                        </div>
-                    )}
+
                     <KeyringActions />
                     <WalletBadge />
-                    <IdentityBadge />
                 </div>
-            </header>
+            </Header>
 
             <main className={`max-w-7xl mx-auto transition-all ${((showModal || isSlashed) ? 'blur-sm opacity-50 pointer-events-none' : '')}`}>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 space-y-4">
                         <div className="w-full relative">
-                            {price && !hasTicket ? (
+                            {price && !hasTicket && !isReconnecting ? (
                                 <div className="aspect-video bg-neutral-900 flex flex-col items-center justify-center text-center p-8 border border-neutral-800 rounded-lg">
                                     <Lock className="w-16 h-16 text-neutral-600 mb-4" />
                                     <h2 className="text-2xl font-bold mb-2">Ticket Required</h2>
@@ -176,13 +225,40 @@ export default function WatchPage({ params }: WatchPageProps) {
                                         This stream requires an admission fee to watch.
                                         Purchase a ticket to unlock access for <strong>{term?.value} {term?.unit}</strong>.
                                     </p>
-                                    <button
-                                        onClick={handlePurchase}
-                                        className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-colors"
-                                    >
-                                        <Ticket className="w-5 h-5" />
-                                        Buy Ticket ({price.amount} {price.currency})
-                                    </button>
+
+                                    {purchaseComplete ? (
+                                        <div className="bg-green-900/30 border border-green-600 text-green-400 px-8 py-3 rounded-full font-bold flex items-center gap-2">
+                                            ✓ Payment Received! Unlocking...
+                                        </div>
+                                    ) : showPurchaseConfirm ? (
+                                        <div className="space-y-4 w-full max-w-xs">
+                                            <div className="bg-yellow-900/20 border border-yellow-600/50 text-yellow-400 p-4 rounded-lg text-sm">
+                                                Confirm payment of <strong>{price.amount} {price.currency}</strong> for {term?.value} {term?.unit} access?
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setShowPurchaseConfirm(false)}
+                                                    className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-white px-4 py-3 rounded-full font-bold transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={confirmPurchase}
+                                                    className="flex-1 bg-green-600 hover:bg-green-500 text-white px-4 py-3 rounded-full font-bold transition-colors"
+                                                >
+                                                    Confirm
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={handlePurchase}
+                                            className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-colors"
+                                        >
+                                            <Ticket className="w-5 h-5" />
+                                            Buy Ticket ({price.amount} {price.currency})
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 <VideoPlayer src={streamUrl} autoPlay={true} />
@@ -214,11 +290,36 @@ export default function WatchPage({ params }: WatchPageProps) {
                             </div>
 
                             <div className="flex gap-4 p-4 border border-white/10 rounded-lg bg-neutral-900">
-                                <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center font-bold text-xl">
-                                    {channel ? channel[0].toUpperCase() : '?'}
+                                {activeStream?.metadata.image ? (
+                                    <img
+                                        src={activeStream.metadata.image}
+                                        alt={activeStream.metadata.broadcaster_name || "Broadcaster"}
+                                        className="w-12 h-12 rounded-full object-cover"
+                                        onError={(e) => {
+                                            // Hide broken image and show fallback
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                    />
+                                ) : null}
+                                <div className={`w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center font-bold text-xl ${activeStream?.metadata.image ? 'hidden' : ''}`}>
+                                    {(activeStream?.metadata.broadcaster_name?.[0] || channel?.[0] || '?').toUpperCase()}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="font-semibold text-lg">Broadcaster</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold text-lg">{activeStream?.metadata.broadcaster_name || channel || "Broadcaster"}</h3>
+                                        {activeStream?.pubkey && (
+                                            <Nip05Badge
+                                                pubkey={activeStream.pubkey}
+                                                nip05={activeStream.metadata.nip05}
+                                                showAddress={true}
+                                            />
+                                        )}
+                                    </div>
+                                    {/* Guild Badges */}
+                                    {activeStream?.pubkey && (
+                                        <GuildBadges pubkey={activeStream.pubkey} className="mt-1" />
+                                    )}
 
                                     {/* Description */}
                                     {streamBio && (
@@ -241,13 +342,31 @@ export default function WatchPage({ params }: WatchPageProps) {
                                         ))}
                                     </div>
                                 </div>
-                                <TipButton />
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    {channel && (
+                                        <button
+                                            onClick={() => toggleFavorite(channel)}
+                                            className={`p-2.5 rounded-full transition-all border flex items-center gap-2 ${isFavorited ? 'text-red-500 border-red-500/50 bg-red-500/10' : 'text-neutral-400 border-neutral-700 bg-neutral-800 hover:text-red-400 hover:border-red-500/30'}`}
+                                            title={isFavorited ? "Unfavorite this channel" : "Favorite this channel"}
+                                        >
+                                            <Heart className={`w-4 h-4 ${isFavorited ? 'fill-current' : ''}`} />
+                                        </button>
+                                    )}
+                                    {isStaked && (
+                                        <div className="text-xs text-green-500 border border-green-900 bg-green-950 px-3 py-2 rounded-full flex items-center font-medium">
+                                            Active Stake: {requiredStake} XMR
+                                        </div>
+                                    )}
+                                    <TipButton />
+                                    {activeStream && <PaymentButtons stream={activeStream} />}
+                                </div>
                             </div>
 
                             <div className="text-sm text-neutral-500 bg-neutral-900/50 p-3 rounded-lg flex flex-col gap-1">
                                 <p><strong>Stream URL:</strong> <span className="font-mono text-xs">{streamUrl}</span></p>
                                 <p><strong>Viewers:</strong> {viewerCount} connected</p>
                                 <p><strong>Chat:</strong> Messages stored locally on your device</p>
+                                <P2PStats className="mt-2 pt-2 border-t border-neutral-800" />
                                 {isStaked && (
                                     <button onClick={handleSimulateLeech} className="mt-2 text-red-500 text-xs hover:underline text-left">
                                         [DEV] Simulate Leech / Slash Stake
@@ -262,7 +381,7 @@ export default function WatchPage({ params }: WatchPageProps) {
                     </div>
                 </div>
             </main>
-        </div>
+        </div >
     );
 }
 

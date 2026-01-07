@@ -73,7 +73,9 @@ export class WHIPClient {
             });
 
             if (!response.ok) {
-                throw new Error(`WHIP request failed: ${response.status} ${response.statusText}`);
+                const errText = await response.text();
+                console.error(`[WHIP] Error response body: ${errText}`);
+                throw new Error(`WHIP request failed: ${response.status} ${response.statusText} - ${errText}`);
             }
 
             const answerSdp = await response.text();

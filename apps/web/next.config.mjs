@@ -27,6 +27,14 @@ const nextConfig = {
     turbopack: {},
     // Disable the annoying dev indicator in bottom-right
     devIndicators: false,
+    async rewrites() {
+        return [
+            {
+                source: '/hls/:path*',
+                destination: 'http://127.0.0.1:8880/:path*'
+            }
+        ];
+    },
     async headers() {
         return [
             {

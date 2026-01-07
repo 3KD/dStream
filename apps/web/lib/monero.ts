@@ -161,18 +161,22 @@ async function verifyViaPublicApi(
     expectedAmount: number
 ): Promise<PaymentVerification> {
     try {
-        // xmrchain.net search by payment ID
-        const url = `https://xmrchain.net/api/search/${paymentId}`;
-        const response = await fetch(url);
+        // Use internal proxy to avoid CORS issues on mobile
+        const response = await fetch('/api/monero/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentId })
+        });
 
         if (!response.ok) {
-            // Payment ID might not be indexed yet
-            return { verified: false, confirmations: 0, error: 'Payment not found in explorer' };
+            // Internal error or upstream 404
+            return { verified: false, confirmations: 0, error: 'Payment lookup failed' };
         }
 
         const data = await response.json();
 
-        if (data.status === 'fail' || !data.data) {
+        // XMRChain API format check
+        if (!data || data.status === 'fail' || !data.data) {
             return { verified: false, confirmations: 0, error: 'Payment not found' };
         }
 
@@ -230,4 +234,38 @@ export function validateMoneroAddress(address: string): { valid: boolean; type: 
     }
 
     return { valid: false, type: 'invalid' };
+}
+
+/**
+ * Monero Keys Interface
+ */
+export interface MoneroKeys {
+    address: string;
+    viewKeyPrivate: string;
+    spendKeyPublic?: string;
+    spendKeyPrivate?: string; // We generally avoid storing this on web
+}
+
+/**
+ * Validate a Monero Secret Key (View or Spend)
+ * Format: 64 hex characters (32 bytes)
+ */
+export function validateSecretKey(key: string): boolean {
+    if (!key) return false;
+    // Basic hex check + length
+    const hexRegex = /^[0-9a-fA-F]{64}$/;
+    if (!hexRegex.test(key)) return false;
+
+    // TODO: Advanced: Check if key is a valid scalar on Ed25519 curve (requires elliptic/noble)
+    // For now, length+hex is a good basic check for paste errors.
+    return true;
+}
+
+/**
+ * Placeholder: Derive Monero keys (stub)
+ * Real derivation requires `monero-javascript` or similar heavy WASM blob.
+ * For this phase, we just validate the input format.
+ */
+export function validateKeySet(viewKey: string, address: string): boolean {
+    return validateSecretKey(viewKey) && validateMoneroAddress(address).valid;
 }

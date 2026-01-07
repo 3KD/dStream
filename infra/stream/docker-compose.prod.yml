@@ -51,5 +51,24 @@ services:
       - mediamtx
     restart: always
 
+  # Caddy - Reverse Proxy & SSL
+  caddy:
+    image: caddy:2.7-alpine
+    container_name: dStream_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../prod/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - mediamtx
+
 volumes:
   hls_data:
+  caddy_data:
+  caddy_config:

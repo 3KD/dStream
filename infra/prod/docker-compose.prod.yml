@@ -33,14 +33,16 @@ services:
 
   # Next.js Web App
   web:
-    build: ../../apps/web
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile.prod
     container_name: dStream_web_prod
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_STREAM_URL=https://${DOMAIN:-example.com}/stream
-      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-example.com}/api
+      - NEXT_PUBLIC_STREAM_URL=https://${DOMAIN}/stream
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN}/api
     volumes:
-      - hls_data:/app/public/hls-data # Shared volume if serving HLS via Web? No, via MediaMTX.
+      - hls_data:/app/public/hls-data # Shared volume optional if using MediaMTX independent serving, but here we likely proxy via Caddy or MediaMTX directly. Since web is standalone, it doesn't serve HLS. Caddy handles /stream -> mediamtx.
 
   # Manifest Signing (Security)
   manifest:

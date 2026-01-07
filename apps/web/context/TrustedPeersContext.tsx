@@ -11,6 +11,7 @@ interface TrustedPeersContextType {
     addKey: (key: string) => void;
     removeKey: (key: string) => void;
     banKey: (key: string) => Promise<void>;
+    bulkBan: (keys: string[]) => Promise<void>;
     unbanKey: (key: string) => void;
     isTrusted: (key: string) => boolean;
     isBanned: (key: string) => boolean;
@@ -142,21 +143,38 @@ export function TrustedPeersProvider({ children }: { children: React.ReactNode }
         saveTrusted(trustedKeys.filter((k) => k !== key));
     };
 
+    interface TrustedPeersContextType {
+        trustedKeys: string[];
+        bannedKeys: string[];
+        addKey: (key: string) => void;
+        removeKey: (key: string) => void;
+        banKey: (key: string) => Promise<void>;
+        bulkBan: (keys: string[]) => Promise<void>;
+        unbanKey: (key: string) => void;
+        isTrusted: (key: string) => boolean;
+        isBanned: (key: string) => boolean;
+    }
+
+    // ... (context init)
+
+    // ... (useEffect load)
+
+    // ... (saveTrusted, saveBanned, publishList, addKey, removeKey)
+
     const banKey = async (key: string) => {
         if (!key || bannedKeys.includes(key)) return;
-        console.log("Banning key:", key);
+        // console.log("Banning key:", key);
 
         // 1. Add to Banned List (Mute)
         const newBanned = [...bannedKeys, key];
         await saveBanned(newBanned);
 
-        // 2. Remove from Trusted if present
-        if (trustedKeys.includes(key)) {
-            removeKey(key);
-        }
+        // 2. Remove from Trusted
+        if (trustedKeys.includes(key)) removeKey(key);
 
-        // 3. (Optional) Publish Kind 1984 Report (Public Shame/Signal)
+        // 3. Publish Report (only for single bans)
         if (identity?.nostrPrivateKey) {
+            // ... (report publishing logic)
             try {
                 const hexToBytes = (hex: string) => {
                     const bytes = new Uint8Array(hex.length / 2);
@@ -174,6 +192,23 @@ export function TrustedPeersProvider({ children }: { children: React.ReactNode }
         }
     };
 
+    const bulkBan = async (keys: string[]) => {
+        const validNewKeys = keys.filter(k => k && !bannedKeys.includes(k));
+        if (validNewKeys.length === 0) return;
+
+        const newBanned = [...bannedKeys, ...validNewKeys];
+        // Dedupe just in case
+        const uniqueBanned = Array.from(new Set(newBanned));
+
+        await saveBanned(uniqueBanned);
+
+        // Also remove from trusted if present
+        const newTrusted = trustedKeys.filter(k => !validNewKeys.includes(k));
+        if (newTrusted.length !== trustedKeys.length) {
+            saveTrusted(newTrusted);
+        }
+    };
+
     const unbanKey = (key: string) => {
         saveBanned(bannedKeys.filter(k => k !== key));
     };
@@ -186,7 +221,7 @@ export function TrustedPeersProvider({ children }: { children: React.ReactNode }
     }
 
     return (
-        <TrustedPeersContext.Provider value={{ trustedKeys, bannedKeys, addKey, removeKey, banKey, unbanKey, isTrusted, isBanned }}>
+        <TrustedPeersContext.Provider value={{ trustedKeys, bannedKeys, addKey, removeKey, banKey, bulkBan, unbanKey, isTrusted, isBanned }}>
             {children}
         </TrustedPeersContext.Provider>
     );

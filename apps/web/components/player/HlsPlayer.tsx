@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { AlertCircle, Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, PictureInPicture2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { P2PStats } from "./P2PStats";
 import { P2P_CONFIG } from "@/lib/config";
@@ -20,6 +20,10 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
     const [isMuted, setIsMuted] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [hlsInstance, setHlsInstance] = useState<Hls | null>(null);
+    const [isReconnecting, setIsReconnecting] = useState(false);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectAttemptsRef = useRef(0);
+    const MAX_RECONNECT_ATTEMPTS = 10;
 
     // Stats State
     const [peers, setPeers] = useState(0);
@@ -201,33 +205,57 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     console.log(`[HLS] Error: ${data.type} / ${data.details}`, data);
 
-                    // Handle specific "stream not found" cases
                     if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
-                        data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) {
-                        // Check if it's a 404
-                        const response = data.response as { code?: number } | undefined;
-                        if (response?.code === 404 || data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
+                        data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
+                        data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+
+                        // Check if we've exhausted reconnection attempts
+                        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+                            console.log(`[HLS] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
+                            setIsReconnecting(false);
+                            setError("Stream ended or unavailable. The broadcaster may have stopped streaming.");
                             hls?.destroy();
-                            setError("Stream not found. The broadcaster may have ended the stream or it hasn't started yet.");
                             return;
                         }
+
+                        reconnectAttemptsRef.current += 1;
+                        console.log(`[HLS] Reconnection attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}`);
+
+                        setIsReconnecting(true);
+                        setError(null);
+
+                        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+                        reconnectTimeoutRef.current = setTimeout(() => {
+                            if (hls) {
+                                console.log("[HLS] Attempting reconnection...");
+                                hls.startLoad();
+                            }
+                        }, 3000); // Retry every 3s
+
+                        return;
                     }
 
                     if (data.fatal) {
                         switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                // Only retry a few times, then give up
-                                console.warn("[HLS] Network error, attempting recovery...");
-                                hls?.startLoad();
-                                break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
                                 hls?.recoverMediaError();
                                 break;
                             default:
                                 hls?.destroy();
+                                setIsReconnecting(false);
                                 setError("Unable to load stream. Please try again later.");
                                 break;
                         }
+                    }
+                });
+
+                hls.on(Hls.Events.MANIFEST_LOADED, () => {
+                    setIsReconnecting(false);
+                    setError(null);
+                    reconnectAttemptsRef.current = 0; // Reset counter on success
+                    if (reconnectTimeoutRef.current) {
+                        clearTimeout(reconnectTimeoutRef.current);
+                        reconnectTimeoutRef.current = null;
                     }
                 });
 
@@ -293,6 +321,7 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
         return () => {
             if (manifestInterval) clearInterval(manifestInterval);
             if (p2pInterval) clearInterval(p2pInterval);
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
             if (hls) hls.destroy();
             if (p2pEngine) p2pEngine.destroy();
         };
@@ -310,6 +339,50 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
         videoRef.current.muted = !isMuted;
         setIsMuted(!isMuted);
     };
+
+    const toggleFullscreen = () => {
+        if (!videoRef.current) return;
+        if (!document.fullscreenElement) {
+            videoRef.current.parentElement?.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    const [isPiPActive, setIsPiPActive] = useState(false);
+
+    const togglePictureInPicture = async () => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        try {
+            if (document.pictureInPictureElement) {
+                await document.exitPictureInPicture();
+                setIsPiPActive(false);
+            } else if (document.pictureInPictureEnabled) {
+                await video.requestPictureInPicture();
+                setIsPiPActive(true);
+            }
+        } catch (err) {
+            console.error('[PiP] Failed to toggle:', err);
+        }
+    };
+
+    // Sync PiP state when user exits via browser controls
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const onEnterPiP = () => setIsPiPActive(true);
+        const onExitPiP = () => setIsPiPActive(false);
+        video.addEventListener('enterpictureinpicture', onEnterPiP);
+        video.addEventListener('leavepictureinpicture', onExitPiP);
+        return () => {
+            video.removeEventListener('enterpictureinpicture', onEnterPiP);
+            video.removeEventListener('leavepictureinpicture', onExitPiP);
+        };
+    }, []);
+
+    const [showStats, setShowStats] = useState(false);
 
     // UI Sync
     useEffect(() => {
@@ -330,6 +403,15 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
 
     return (
         <div className={cn("relative w-full aspect-video bg-black rounded-lg overflow-hidden group", className)}>
+            {isReconnecting && !error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20 text-white">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="font-bold tracking-tight">Reconnecting...</p>
+                        <p className="text-xs text-neutral-400">Broadcaster connection dropped or shifting.</p>
+                    </div>
+                </div>
+            )}
             {error && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20 text-white">
                     <div className="flex flex-col items-center gap-2">
@@ -338,17 +420,8 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
                     </div>
                 </div>
             )}
-            {Hls.isSupported() && !error && (
-                <P2PStats
-                    peers={peers}
-                    downloadSpeed={downloadSpeed}
-                    uploadSpeed={uploadSpeed}
-                    totalP2P={totalP2P}
-                    totalHTTP={totalHTTP}
-                />
-            )}
             <video ref={videoRef} className="w-full h-full object-contain" playsInline muted={isMuted} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
                 <div className="flex items-center gap-4 text-white w-full">
                     <button onClick={togglePlay} className="hover:text-primary transition">
                         {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
@@ -356,10 +429,46 @@ export function VideoPlayer({ src, className, autoPlay = true }: VideoPlayerProp
                     <button onClick={toggleMute} className="hover:text-primary transition">
                         {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
                     </button>
-                    <div className="ml-auto text-xs font-mono text-gray-300">
-                        LIVE {peers > 0 ? <span className="text-green-400">• P2P Active</span> : null}
+                    <div className="ml-auto flex items-center gap-4">
+                        {Hls.isSupported() && !error && (
+                            <button
+                                onClick={() => setShowStats(!showStats)}
+                                className="text-xs font-mono text-gray-300 hover:text-white transition flex items-center gap-1"
+                            >
+                                {peers > 0 ? (
+                                    <>
+                                        <span className="text-green-400">●</span> P2P Active ({peers} peers)
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-gray-500">●</span> P2P Stats
+                                    </>
+                                )}
+                            </button>
+                        )}
+                        <button
+                            onClick={togglePictureInPicture}
+                            className={`hover:text-primary transition ${isPiPActive ? 'text-blue-400' : ''}`}
+                            title={isPiPActive ? "Exit Picture-in-Picture" : "Picture-in-Picture"}
+                        >
+                            <PictureInPicture2 className="w-5 h-5" />
+                        </button>
+                        <button onClick={toggleFullscreen} className="hover:text-primary transition" title="Fullscreen">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
+                {showStats && Hls.isSupported() && !error && (
+                    <P2PStats
+                        peers={peers}
+                        downloadSpeed={downloadSpeed}
+                        uploadSpeed={uploadSpeed}
+                        totalP2P={totalP2P}
+                        totalHTTP={totalHTTP}
+                    />
+                )}
             </div>
         </div>
     );

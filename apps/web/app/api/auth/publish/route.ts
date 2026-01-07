@@ -1,13 +1,14 @@
-
+                                                                
 import { NextRequest, NextResponse } from 'next/server';
 import { deriveStreamPath } from '@/lib/streamId';
 import * as ed from '@noble/ed25519';
 
 // In-memory rate limiter (simple token bucket per IP)
 // Note: In serverless, this resets often. In Docker container, it persists for the life of the process.
+// Increased for dev: WebRTC reconnects frequently, each triggering an auth request
 const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
 const BLOCK_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_MINUTE = 100;
+const MAX_REQUESTS_PER_MINUTE = 1000; // Increased from 100 - WebRTC is chatty
 
 // MediaMTX sends a POST request with this structure
 interface MediaMTXAuthPayload {
