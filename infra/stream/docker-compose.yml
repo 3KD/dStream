@@ -80,8 +80,22 @@ services:
     command: >
       -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i sine=frequency=440:beep_factor=4 -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -g 60 -keyint_min 60 -sc_threshold 0 -c:a aac -b:a 128k -f flv rtmp://mediamtx:1935/test
     restart: unless-stopped
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i sine=frequency=440:beep_factor=4 -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -g 60 -keyint_min 60 -sc_threshold 0 -c:a aac -b:a 128k -f flv rtmp://mediamtx:1935/test
+    restart: unless-stopped
     profiles:
       - test
+
+  # Real Monero Wallet RPC (Connects to Remote Node)
+  monero:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc:latest
+    container_name: dStream_monero
+    ports:
+      - "18081:18081" # RPC Port
+    environment:
+      - MONERO_WALLET_RPC_PASSWORD=superuser
+      - DAEMON_HOST=node.community.rino.io:18081
+    restart: unless-stopped
 
 volumes:
   hls_data:
