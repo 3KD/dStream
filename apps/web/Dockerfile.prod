@@ -19,6 +19,9 @@ COPY . .
 # Next.js telemetry disable
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Increase Node.js heap size for build (VPS memory constraint)
+ENV NODE_OPTIONS="--max-old-space-size=1024"
+
 # Build application
 RUN npm run build
 
