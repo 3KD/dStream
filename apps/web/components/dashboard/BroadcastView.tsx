@@ -840,7 +840,6 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                             Analytics
                         </button>
                         <button
-                            onClick={() => setActiveTab("studio")}
                             onClick={() => setActiveTab("messages")}
                             className={`pb-2 px-1 text-sm font-bold transition-colors ${activeTab === "messages" ? "text-white border-b-2 border-purple-500" : "text-neutral-500 hover:text-neutral-300"}`}
                         >
