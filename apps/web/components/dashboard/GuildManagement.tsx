@@ -17,6 +17,10 @@ export function GuildManagement() {
     const [joinGuildId, setJoinGuildId] = useState("");
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
+    // Editing State
+    const [editingGuild, setEditingGuild] = useState<any | null>(null); // Guild object
+    const [newMemberPubkey, setNewMemberPubkey] = useState("");
+
     // Find guilds the user is a member of
     const myGuilds = guilds.filter(g =>
         g.members.includes(identity?.nostrPublicKey || "") ||
@@ -31,13 +35,45 @@ export function GuildManagement() {
         setTimeout(() => setFeedback(null), 5000);
     };
 
+    const handleEditGuild = (guild: any) => {
+        setEditingGuild(guild);
+        setGuildName(guild.name);
+        setGuildDescription(guild.description);
+        setFeaturedPubkey(guild.featured?.pubkey || "");
+        setFeaturedStreamId(guild.featured?.stream_id || "");
+        // Members are handled directly from guild.members
+    };
+
+    const handleCancelEdit = () => {
+        setEditingGuild(null);
+        setGuildName("");
+        setGuildDescription("");
+        setFeaturedPubkey("");
+        setFeaturedStreamId("");
+        setNewMemberPubkey("");
+    };
+
+    const handleAddMember = () => {
+        if (!editingGuild || !newMemberPubkey.trim()) return;
+        // Add to local editing state (optimistic) - actual save happens on "Update Guild"
+        const updatedMembers = [...new Set([...editingGuild.members, newMemberPubkey.trim()])];
+        setEditingGuild({ ...editingGuild, members: updatedMembers });
+        setNewMemberPubkey("");
+    };
+
+    const handleRemoveMember = (pubkeyToRemove: string) => {
+        if (!editingGuild) return;
+        const updatedMembers = editingGuild.members.filter((m: string) => m !== pubkeyToRemove);
+        setEditingGuild({ ...editingGuild, members: updatedMembers });
+    };
+
     const handleCreateGuild = async () => {
         if (!identity?.nostrPublicKey) return;
         setIsSaving(true);
         setFeedback(null);
 
         try {
-            const guildId = `${identity.nostrPublicKey.slice(0, 8)}-guild-${Date.now()}`;
+            const guildId = editingGuild ? editingGuild.id : `${identity.nostrPublicKey.slice(0, 8)}-guild-${Date.now()}`;
             const event = {
                 kind: KIND_GUILD_LIST,
                 created_at: Math.floor(Date.now() / 1000),
@@ -55,6 +91,13 @@ export function GuildManagement() {
                 event.tags.push(["featured", featuredPubkey, featuredStreamId]);
             }
 
+            // Add Members
+            if (editingGuild && editingGuild.members) {
+                editingGuild.members.forEach((m: string) => {
+                    if (m) event.tags.push(["p", m]);
+                });
+            }
+
             // Sign the event
             const signedEvent = await signNostrEvent(event);
 
@@ -63,11 +106,8 @@ export function GuildManagement() {
             const successCount = results.filter(r => r.status === 'fulfilled').length;
 
             if (successCount > 0) {
-                showFeedback('success', `Guild "${guildName}" published to ${successCount} relay(s)!`);
-                setGuildName("");
-                setGuildDescription("");
-                setFeaturedPubkey("");
-                setFeaturedStreamId("");
+                showFeedback('success', `Guild "${guildName}" ${editingGuild ? 'updated' : 'published'} to ${successCount} relay(s)!`);
+                handleCancelEdit(); // Reset form
             } else {
                 showFeedback('error', 'Failed to publish to any relays. Try again.');
             }
@@ -134,6 +174,15 @@ export function GuildManagement() {
                                 </div>
                                 <p className="text-sm text-neutral-400 line-clamp-2">{guild.description || "No description"}</p>
                                 <div className="text-xs text-neutral-600 mt-2 font-mono">{guild.members.length} members</div>
+
+                                {guild.pubkey === identity?.nostrPublicKey && (
+                                    <button
+                                        onClick={() => handleEditGuild(guild)}
+                                        className="mt-3 text-xs w-full py-1.5 rounded bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 transition"
+                                    >
+                                        Manage Guild
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -172,12 +221,50 @@ export function GuildManagement() {
                         <Users className="w-6 h-6 text-purple-400" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold">Create Guild</h2>
-                        <p className="text-sm text-neutral-500">Start your own curation collective.</p>
+                        <h2 className="text-xl font-bold">{editingGuild ? "Edit Guild" : "Create Guild"}</h2>
+                        <p className="text-sm text-neutral-500">{editingGuild ? "Update details and manage members." : "Start your own curation collective."}</p>
                     </div>
                 </div>
 
                 <div className="space-y-4">
+                    {editingGuild && (
+                        <div className="p-4 bg-neutral-950 rounded-xl border border-neutral-800 mb-6">
+                            <h3 className="text-sm font-bold text-neutral-300 mb-3 flex items-center gap-2">
+                                <Users className="w-4 h-4 text-blue-400" />
+                                Manage Members ({editingGuild.members.length})
+                            </h3>
+
+                            <div className="flex gap-2 mb-3">
+                                <input
+                                    type="text"
+                                    value={newMemberPubkey}
+                                    onChange={(e) => setNewMemberPubkey(e.target.value)}
+                                    placeholder="Member Pubkey (hex)"
+                                    className="flex-1 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded text-xs font-mono"
+                                />
+                                <button
+                                    onClick={handleAddMember}
+                                    disabled={!newMemberPubkey}
+                                    className="px-3 py-2 bg-blue-600/20 text-blue-500 hover:bg-blue-600/30 rounded text-xs font-bold disabled:opacity-50"
+                                >
+                                    Add
+                                </button>
+                            </div>
+
+                            <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                                {editingGuild.members.length === 0 && <span className="text-xs text-neutral-600 italic">No members yet.</span>}
+                                {editingGuild.members.map((m: string) => (
+                                    <div key={m} className="flex justify-between items-center px-2 py-1 bg-neutral-900 rounded border border-neutral-800/50">
+                                        <span className="text-[10px] font-mono text-neutral-400 truncate w-3/4">{m}</span>
+                                        <button onClick={() => handleRemoveMember(m)} className="text-red-500 hover:text-red-400">
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-neutral-400 mb-1">Guild Name</label>
                         <input
@@ -227,13 +314,23 @@ export function GuildManagement() {
                         </div>
                     </div>
 
-                    <button
-                        onClick={handleCreateGuild}
-                        disabled={!guildName || isSaving}
-                        className="w-full mt-6 flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all active:scale-95"
-                    >
-                        {isSaving ? "Publishing..." : <><Plus className="w-5 h-5" /> Create Guild</>}
-                    </button>
+                    <div className="flex gap-2">
+                        {editingGuild && (
+                            <button
+                                onClick={handleCancelEdit}
+                                className="flex-1 px-6 py-3 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                        <button
+                            onClick={handleCreateGuild}
+                            disabled={!guildName || isSaving}
+                            className={`flex-items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all active:scale-95 ${editingGuild ? 'flex-1' : 'w-full'}`}
+                        >
+                            {isSaving ? "Saving..." : <>{editingGuild ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />} {editingGuild ? "Update Guild" : "Create Guild"}</>}
+                        </button>
+                    </div>
                 </div>
             </div>
 
