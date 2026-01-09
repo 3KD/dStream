@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { CaptionOverlay } from "@/components/player/CaptionOverlay";
 import Link from "next/link";
-import { Video, Mic, MicOff, VideoOff, Radio, Settings, Eye, Wifi, WifiOff, Square, RefreshCw, AtSign, Shield, ShieldCheck, Mail, MessageSquare } from "lucide-react";
+import { MessageSquare, Settings, Radio, Square, Eye, Shield, ShieldAlert, ShieldCheck, AtSign, Video, VideoOff, Mic, MicOff, Wifi, WifiOff, RefreshCw, Mail } from "lucide-react";
 import { IdentityBadge } from "@/components/identity/IdentityBadge";
 import { useIdentity } from "@/context/IdentityContext";
 import { WHIPClient } from "@/lib/whipClient";
@@ -10,7 +11,6 @@ import { finalizeEvent } from "nostr-tools";
 import { publishEvent, KIND_STREAM_ANNOUNCE, minePow } from "@/lib/nostr";
 import { deriveStreamPath } from "@/lib/streamId";
 import { validateMoneroAddress } from "@/lib/monero";
-import { ShieldAlert } from "lucide-react";
 import { AnalyticsView } from "@/components/dashboard/AnalyticsView";
 import { ProfileEditor } from "@/components/identity/ProfileEditor";
 import { ModerationView } from "@/components/dashboard/ModerationView";
@@ -709,6 +709,8 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                             playsInline
                             className={`w-full h-full object-cover ${!videoEnabled ? 'opacity-0' : ''}`}
                         />
+                        {/* Caption Overlay */}
+                        <CaptionOverlay streamId={currentStreamId || ""} isBroadcaster={true} />
 
                         {!videoEnabled && (
                             <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">

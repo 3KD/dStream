@@ -8,6 +8,7 @@ import { useInbox } from "@/context/InboxContext";
 import { publishEvent } from "@/lib/nostr";
 import { nip04, finalizeEvent } from "nostr-tools";
 import { shortPubKey } from "@/lib/identity";
+import { pool, RELAYS } from "@/lib/nostr";
 
 interface DM {
     id: string;
@@ -35,6 +36,54 @@ export function InboxModal() {
         setShowNewChat(false);
         setNewChatPubkey("");
     };
+
+    // --- Profile Fetching Logic ---
+    const [profiles, setProfiles] = useState<Record<string, { name?: string; picture?: string; display_name?: string }>>({});
+
+    useEffect(() => {
+        if (!isOpen || threads.length === 0) return;
+
+        const missingPubkeys = threads
+            .map(t => t.peerPubkey)
+            .filter(pubkey => !profiles[pubkey] && !getAlias(pubkey)?.startsWith('npub')); // Fetch if we don't have it and getAlias isn't already a good name
+
+        if (missingPubkeys.length === 0) return;
+
+        const fetchProfiles = async () => {
+            try {
+                // Fetch Kind 0 for these pubkeys
+                const events = await pool.querySync(RELAYS, {
+                    kinds: [0],
+                    authors: missingPubkeys
+                });
+
+                const newProfiles: Record<string, any> = {};
+                events.forEach(ev => {
+                    try {
+                        const content = JSON.parse(ev.content);
+                        newProfiles[ev.pubkey] = content;
+                    } catch (e) { }
+                });
+
+                setProfiles(prev => ({ ...prev, ...newProfiles }));
+            } catch (e) {
+                console.warn("Failed to fetch inbox profiles", e);
+            }
+        };
+
+        fetchProfiles();
+    }, [isOpen, threads]);
+
+    const getDisplayName = (pubkey: string) => {
+        const p = profiles[pubkey];
+        if (p) return p.display_name || p.name || shortPubKey(pubkey);
+        return getAlias(pubkey);
+    };
+
+    const getAvatar = (pubkey: string) => {
+        return profiles[pubkey]?.picture;
+    };
+    // ------------------------------
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -169,7 +218,15 @@ export function InboxModal() {
                                 <div className="flex justify-between items-start mb-1">
                                     <span className={`font-bold truncate pr-2 flex items-center gap-2 text-sm ${thread.hasUnread ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'}`}>
                                         {thread.hasUnread && <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />}
-                                        {getAlias(thread.peerPubkey)}
+                                        {/* Avatar if available */}
+                                        {getAvatar(thread.peerPubkey) ? (
+                                            <img src={getAvatar(thread.peerPubkey)} className="w-5 h-5 rounded-full object-cover bg-neutral-800" alt="" />
+                                        ) : (
+                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-[8px] text-white">
+                                                {getDisplayName(thread.peerPubkey)?.[0]?.toUpperCase() || "?"}
+                                            </div>
+                                        )}
+                                        {getDisplayName(thread.peerPubkey)}
                                     </span>
                                     <span className="text-[10px] text-neutral-600 whitespace-nowrap">
                                         {new Date(thread.lastMessageAt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -228,12 +285,16 @@ export function InboxModal() {
                                     <Reply className="w-5 h-5" />
                                 </button>
 
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-white font-bold text-sm ring-2 ring-black">
-                                    {getAlias(selectedPeer)[0].toUpperCase()}
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-white font-bold text-sm ring-2 ring-black overflow-hidden relative">
+                                    {getAvatar(selectedPeer) ? (
+                                        <img src={getAvatar(selectedPeer)} className="w-full h-full object-cover" alt={getDisplayName(selectedPeer)} />
+                                    ) : (
+                                        getDisplayName(selectedPeer)[0].toUpperCase()
+                                    )}
                                 </div>
 
                                 <div className="flex flex-col">
-                                    <span className="font-bold text-white leading-tight">{getAlias(selectedPeer)}</span>
+                                    <span className="font-bold text-white leading-tight">{getDisplayName(selectedPeer)}</span>
                                     <span className="text-[10px] text-neutral-500 font-mono flex items-center gap-1">
                                         {shortPubKey(selectedPeer)}
                                         <Lock className="w-3 h-3 opacity-50" />
@@ -281,7 +342,7 @@ export function InboxModal() {
                                                 sendReply();
                                             }
                                         }}
-                                        placeholder={`Message ${getAlias(selectedPeer)}...`}
+                                        placeholder={`Message ${getDisplayName(selectedPeer)}...`}
                                         disabled={sending}
                                         rows={1}
                                         className="flex-1 bg-transparent border-none text-white focus:ring-0 resize-none max-h-32 py-2 px-2 custom-scrollbar placeholder:text-neutral-600"
