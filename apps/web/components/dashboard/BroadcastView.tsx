@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { CaptionOverlay } from "@/components/player/CaptionOverlay";
+import { P2PBroadcaster } from '@/components/p2p/P2PBroadcaster';
+import { useNostrGuilds } from '@/hooks/useNostrGuilds'; // reusing for pool/relays
 import Link from "next/link";
 import { MessageSquare, Settings, Radio, Square, Eye, Shield, ShieldAlert, ShieldCheck, AtSign, Video, VideoOff, Mic, MicOff, Wifi, WifiOff, RefreshCw, Mail } from "lucide-react";
 import { IdentityBadge } from "@/components/identity/IdentityBadge";
@@ -57,6 +59,9 @@ export function BroadcastView() {
     // Monetization
     const [streamPrice, setStreamPrice] = useState(0); // XMR
     const [streamDuration, setStreamDuration] = useState(24); // Hours default
+    const [showCaptions, setShowCaptions] = useState(false);
+    const [isP2PEnabled, setIsP2PEnabled] = useState(false);
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [escrowAmount, setEscrowAmount] = useState(0.01);
     const [currentStreamId, setCurrentStreamId] = useState<string | null>(null); // Identity-bound path
 
@@ -710,7 +715,17 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                             className={`w-full h-full object-cover ${!videoEnabled ? 'opacity-0' : ''}`}
                         />
                         {/* Caption Overlay */}
-                        <CaptionOverlay streamId={currentStreamId || ""} isBroadcaster={true} />
+                        <CaptionOverlay
+                            streamId={currentStreamId || ""}
+                            isBroadcaster={true}
+                        />
+
+                        {/* P2P Broadcaster (Hidden Logic) */}
+                        {isP2PEnabled && isLive && localStream && (
+                            <div className="absolute bottom-20 left-4 z-50 animate-in fade-in slide-in-from-bottom-5">
+                                <P2PBroadcaster stream={localStream} isP2PEnabled={isP2PEnabled} />
+                            </div>
+                        )}
 
                         {!videoEnabled && (
                             <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
@@ -955,6 +970,26 @@ Watch at: ${window.location.origin}/watch/${derivedPath}`, // Use streamKey and 
                                 </div>
 
                                 {/* Identity Actions */}
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setIsP2PEnabled(!isP2PEnabled)}
+                                        className={`px-3 py-1 rounded text-xs font-bold ${isP2PEnabled
+                                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                                            : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700'
+                                            }`}
+                                    >
+                                        {isP2PEnabled ? 'P2P ON' : 'P2P OFF'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCaptions(!showCaptions)}
+                                        className={`px-3 py-1 rounded text-xs font-bold ${showCaptions
+                                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                                            : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700'
+                                            }`}
+                                    >
+                                        {showCaptions ? 'CAPTIONS ON' : 'CAPTIONS OFF'}
+                                    </button>
+                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
                                         onClick={() => {

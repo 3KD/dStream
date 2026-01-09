@@ -23,6 +23,7 @@ import { Nip05Badge } from "@/components/identity/Nip05Badge";
 import { GuildBadges } from "@/components/identity/GuildBadges";
 import { useStream } from "@/context/StreamContext";
 import { usePresence } from "@/hooks/usePresence";
+import { P2PPlayer } from "@/components/p2p/P2PPlayer";
 
 // For MVP, we point to /hls which is proxied to localhost:8880
 const STREAM_BASE_URL = "/hls";
@@ -43,6 +44,10 @@ export default function WatchPage({ params }: WatchPageProps) {
     const { isStaked, isSlashed, slash } = useEscrow();
     const { isFavorite, toggleFavorite } = useFavorites();
     const isFavorited = channel ? isFavorite(channel) : false;
+
+    // P2P State
+    const [isP2P, setIsP2P] = useState(false);
+    const [p2pStatus, setP2pStatus] = useState("Idle");
 
     useEffect(() => {
         params.then(p => setChannel(p.channel));
@@ -261,7 +266,30 @@ export default function WatchPage({ params }: WatchPageProps) {
                                     )}
                                 </div>
                             ) : (
-                                <VideoPlayer src={streamUrl} autoPlay={true} />
+                                <div className="w-full h-full relative">
+                                    {isP2P && activeStream?.pubkey ? (
+                                        <div className="w-full h-full">
+                                            <P2PPlayer
+                                                broadcasterPubkey={activeStream.pubkey}
+                                                onStatusChange={setP2pStatus}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <VideoPlayer src={streamUrl} autoPlay={true} />
+                                    )}
+
+                                    <div className="absolute top-4 right-4 z-40">
+                                        <button
+                                            onClick={() => setIsP2P(!isP2P)}
+                                            className={`px-3 py-1 rounded text-xs font-bold shadow-lg backdrop-blur-md transition-all ${isP2P
+                                                    ? 'bg-purple-600/90 text-white border border-purple-400'
+                                                    : 'bg-black/60 text-neutral-300 border border-white/10 hover:bg-black/80'
+                                                }`}
+                                        >
+                                            {isP2P ? `P2P: ${p2pStatus}` : 'Switch to P2P (Beta)'}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -380,7 +408,7 @@ export default function WatchPage({ params }: WatchPageProps) {
                         <ChatBox channel={channel} broadcasterPubkey={pubkey || undefined} />
                     </div>
                 </div>
-            </main>
+            </main >
         </div >
     );
 }
