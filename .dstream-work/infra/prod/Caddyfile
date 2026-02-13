@@ -1,0 +1,7 @@
+{
+  email admin@dstream.stream
+}
+
+dstream.stream, www.dstream.stream {
+  reverse_proxy dstream-web-1:5656
+}

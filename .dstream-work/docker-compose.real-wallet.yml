@@ -1,0 +1,94 @@
+services:
+  web:
+    environment:
+      DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-http://xmr-wallet-rpc-receiver:18083}"
+      DSTREAM_XMR_SESSION_SECRET: "${DSTREAM_XMR_SESSION_SECRET:-dev-session-secret-0123456789abcdef}"
+    depends_on:
+      xmr-wallet-rpc-receiver:
+        condition: service_started
+      xmr-wallet-init:
+        condition: service_completed_successfully
+
+  monerod-regtest:
+    image: ghcr.io/sethforprivacy/simple-monerod:latest
+    command:
+      - --regtest
+      - --offline
+      - --rpc-bind-ip=0.0.0.0
+      - --rpc-bind-port=18081
+      - --confirm-external-bind
+      - --fixed-difficulty=1
+      - --keep-fakechain
+    ports:
+      - "${DSTREAM_MONEROD_RPC_PORT:-28081}:18081"
+    volumes:
+      - dstream_monerod_data:/home/monero/.bitmonero
+    restart: unless-stopped
+
+  xmr-wallet-perms:
+    image: alpine:3.19
+    command: ["sh", "-lc", "mkdir -p /wallets && chmod 777 /wallets"]
+    volumes:
+      - dstream_xmr_wallets:/wallets
+    restart: "no"
+
+  xmr-wallet-rpc-receiver:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc:v0.18.4.5
+    command:
+      - --daemon-address=monerod-regtest:18081
+      - --rpc-bind-port=18083
+      - --wallet-dir=/home/monero/wallets
+      - --disable-rpc-login
+      - --allow-mismatched-daemon-version
+    depends_on:
+      xmr-wallet-perms:
+        condition: service_completed_successfully
+      monerod-regtest:
+        condition: service_started
+    ports:
+      - "${DSTREAM_XMR_WALLET_RPC_RECEIVER_PORT:-28083}:18083"
+    volumes:
+      - dstream_xmr_wallets:/home/monero/wallets
+    restart: unless-stopped
+
+  xmr-wallet-rpc-sender:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc:v0.18.4.5
+    command:
+      - --daemon-address=monerod-regtest:18081
+      - --rpc-bind-port=18083
+      - --wallet-dir=/home/monero/wallets
+      - --disable-rpc-login
+      - --allow-mismatched-daemon-version
+    depends_on:
+      xmr-wallet-perms:
+        condition: service_completed_successfully
+      monerod-regtest:
+        condition: service_started
+    ports:
+      - "${DSTREAM_XMR_WALLET_RPC_SENDER_PORT:-28084}:18083"
+    volumes:
+      - dstream_xmr_wallets:/home/monero/wallets
+    restart: unless-stopped
+
+  xmr-wallet-init:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "scripts/xmr-wallet-init.mjs"]
+    environment:
+      XMR_INIT_RECEIVER_RPC: "http://xmr-wallet-rpc-receiver:18083"
+      XMR_INIT_SENDER_RPC: "http://xmr-wallet-rpc-sender:18083"
+      XMR_INIT_RECEIVER_WALLET: "${DSTREAM_XMR_RECEIVER_WALLET_NAME:-receiver_wallet}"
+      XMR_INIT_SENDER_WALLET: "${DSTREAM_XMR_SENDER_WALLET_NAME:-sender_wallet}"
+      XMR_INIT_WALLET_PASS: "${DSTREAM_XMR_WALLET_FILE_PASS:-}"
+    depends_on:
+      xmr-wallet-rpc-receiver:
+        condition: service_started
+      xmr-wallet-rpc-sender:
+        condition: service_started
+    volumes:
+      - .:/app:ro
+    restart: "no"
+
+volumes:
+  dstream_monerod_data:
+  dstream_xmr_wallets:

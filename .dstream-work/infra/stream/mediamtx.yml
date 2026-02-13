@@ -1,0 +1,28 @@
+# MediaMTX configuration for dStream (rebuild)
+logLevel: info
+api: yes
+apiAddress: :9990
+
+# HLS
+hls: yes
+hlsAddress: :8880
+hlsDirectory: /hls
+hlsAlwaysRemux: yes
+hlsAllowOrigins: [ "*" ]
+hlsVariant: fmp4
+# Keep segments short for near-real-time playback.
+hlsSegmentDuration: 2s
+# LL-HLS parts (Hls.js + modern Safari); optional but improves startup/latency.
+hlsPartDuration: 200ms
+
+# WebRTC / WHIP
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8181
+webrtcLocalTCPAddress: :8189
+webrtcAllowOrigins: [ "*" ]
+webrtcAdditionalHosts: [ "host.docker.internal", "localhost", "127.0.0.1" ]
+
+paths:
+  all:
+    source: publisher

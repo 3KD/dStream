@@ -1,0 +1,125 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NOTE: Next.js public env vars are inlined at build time.
+        # For local usage, this points the browser at the locally exposed relay port.
+        NEXT_PUBLIC_NOSTR_RELAYS: "${NEXT_PUBLIC_NOSTR_RELAYS:-ws://localhost:8081}"
+        NEXT_PUBLIC_HLS_ORIGIN: "${NEXT_PUBLIC_HLS_ORIGIN:-}"
+        # Optional. Helps WebRTC (WHIP + P2P) on restrictive networks/NAT.
+        NEXT_PUBLIC_WEBRTC_ICE_SERVERS: "${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-stun:stun.cloudflare.com:3478}"
+    environment:
+      # Next.js reverse proxy targets (server-only).
+      DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
+      DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
+      # Monero verified tips (server-only). Defaults to the local mock wallet RPC service.
+      DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-http://xmr-mock:18083}"
+      DSTREAM_XMR_WALLET_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-}"
+      DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
+      DSTREAM_XMR_ACCOUNT_INDEX: "${DSTREAM_XMR_ACCOUNT_INDEX:-0}"
+      DSTREAM_XMR_CONFIRMATIONS_REQUIRED: "${DSTREAM_XMR_CONFIRMATIONS_REQUIRED:-10}"
+      DSTREAM_XMR_ESCROW_SESSION_TTL_SEC: "${DSTREAM_XMR_ESCROW_SESSION_TTL_SEC:-3600}"
+      DSTREAM_XMR_SESSION_SECRET: "${DSTREAM_XMR_SESSION_SECRET:-dev-session-secret-0123456789abcdef}"
+      # Allow /dev/* pages and /api/dev/log in local docker runs (still opt-in in non-local envs).
+      DSTREAM_DEVTOOLS: "${DSTREAM_DEVTOOLS:-1}"
+    depends_on:
+      mediamtx:
+        condition: service_started
+      relay:
+        condition: service_started
+      xmr-mock:
+        condition: service_started
+    ports:
+      - "${DSTREAM_WEB_PORT:-5656}:5656"
+    restart: unless-stopped
+
+  xmr-mock:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "services/monero-mock/index.mjs"]
+    environment:
+      XMR_MOCK_HTTP_PORT: "18083"
+    volumes:
+      - .:/app:ro
+    restart: unless-stopped
+
+  manifest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "services/manifest/index.mjs"]
+    environment:
+      HLS_DIR: "/hls"
+      MEDIAMTX_HLS_URL: "${MEDIAMTX_HLS_URL:-http://mediamtx:8880}"
+      # Relay list used for publishing manifests (container network default points at local relay service).
+      NOSTR_RELAYS: "${MANIFEST_RELAYS:-ws://relay:8080}"
+      MANIFEST_EPOCH_MS: "${MANIFEST_EPOCH_MS:-12000}"
+      MANIFEST_HTTP_PORT: "${MANIFEST_HTTP_PORT:-3001}"
+      # Optional: provide a stable Nostr secret key for the manifest signer (64-hex).
+      MANIFEST_SECRET_KEY_HEX: "${MANIFEST_SECRET_KEY_HEX:-}"
+    depends_on:
+      mediamtx:
+        condition: service_started
+      relay:
+        condition: service_started
+    volumes:
+      - dstream_hls:/hls:ro
+    restart: unless-stopped
+
+  hls-init:
+    image: alpine:3.19
+    command: ["sh", "-lc", "mkdir -p /hls && chmod 777 /hls"]
+    volumes:
+      - dstream_hls:/hls
+    restart: "no"
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    depends_on:
+      hls-init:
+        condition: service_completed_successfully
+    ports:
+      - "1940:1935" # RTMP ingest (optional)
+      - "8888:8880" # HLS/HTTP output
+      - "8889:8889" # WebRTC/WHIP
+      - "9990:9990" # API
+      - "8181:8181/udp" # ICE/UDP
+      - "8189:8189" # ICE/TCP
+    volumes:
+      # Override with `DSTREAM_MEDIAMTX_CONFIG=/tmp/dstream-mediamtx.yml` for browsers (Firefox) that don't accept loopback ICE candidates.
+      - ${DSTREAM_MEDIAMTX_CONFIG:-./infra/stream/mediamtx.yml}:/mediamtx.yml:ro
+      - dstream_hls:/hls
+    restart: unless-stopped
+
+  transcoder:
+    build:
+      context: .
+      dockerfile: services/transcoder/Dockerfile
+    environment:
+      HLS_DIR: "/hls"
+      TRANSCODER_SOURCE_HLS_BASE: "${TRANSCODER_SOURCE_HLS_BASE:-http://mediamtx:8880}"
+      TRANSCODER_OUTPUT_RTMP_BASE: "${TRANSCODER_OUTPUT_RTMP_BASE:-rtmp://mediamtx:1935}"
+      TRANSCODER_PROFILES: "${TRANSCODER_PROFILES:-720p:1280:720:2500k:128k,480p:854:480:1200k:96k,360p:640:360:700k:64k}"
+      TRANSCODER_POLL_MS: "${TRANSCODER_POLL_MS:-2500}"
+      TRANSCODER_STALE_MS: "${TRANSCODER_STALE_MS:-12000}"
+      TRANSCODER_MAX_STREAMS: "${TRANSCODER_MAX_STREAMS:-24}"
+    depends_on:
+      mediamtx:
+        condition: service_started
+    volumes:
+      - dstream_hls:/hls:ro
+    restart: unless-stopped
+
+  relay:
+    image: scsibug/nostr-rs-relay:latest
+    ports:
+      - "8081:8080"
+    volumes:
+      - relay_data:/usr/src/app/db
+    restart: unless-stopped
+
+volumes:
+  relay_data:
+  dstream_hls:

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Mobile Checks
+        run: npm run check:mobile
+
+      - name: Hardening Preflight
+        env:
+          NEXT_PUBLIC_NOSTR_RELAYS: wss://relay.damus.io,wss://nos.lol
+          NEXT_PUBLIC_WEBRTC_ICE_SERVERS: stun:stun.cloudflare.com:3478,turn:turn.example.com:3478?transport=udp
+          DSTREAM_WHIP_PROXY_ORIGIN: http://localhost:8889
+          DSTREAM_HLS_PROXY_ORIGIN: http://localhost:8888
+          DSTREAM_XMR_WALLET_RPC_ORIGIN: http://localhost:18083
+          DSTREAM_XMR_SESSION_SECRET: ci-hardening-secret-0123456789abcdef
+        run: npm run harden:check
+
+      - name: Build
+        run: npm run build

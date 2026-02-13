@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "files": {
+    "indexHtml": "apps/mobile/www/index.html",
+    "mobileCss": "apps/mobile/www/mobile.css",
+    "mobileJs": "apps/mobile/www/mobile.js"
+  },
+  "hashes": {
+    "indexHtml": "sha256:a2bddfd3e64a78405971a99ec796a210d4c563ce87f118c92664d8dd9484ef92",
+    "mobileCss": "sha256:d271fa693103d3b9be4cf0ff9fef816b43c52659294986aaa8a99ac186415800",
+    "mobileJs": "sha256:3c6b0e438458bb5c0bcba209c543446df1eecf4d85b5abfe317b51a847df0777"
+  },
+  "copy": {
+    "title": "dStream mobile setup",
+    "subtitle": "Configure your own edge node and relays. This app then launches your node directly.",
+    "buttons": {
+      "cancel-edit": "Cancel",
+      "edit-config": "Node & Relays",
+      "launch-existing": "Launch saved config",
+      "reset-config": "Reset",
+      "save-only": "Save only"
+    },
+    "labels": {
+      "edge-url": "Edge node URL",
+      "relay-list": "Relay list (comma or newline separated)"
+    }
+  },
+  "structure": {
+    "idElements": [
+      {
+        "tag": "button",
+        "id": "cancel-edit",
+        "classes": [
+          "secondary"
+        ]
+      },
+      {
+        "tag": "input",
+        "id": "edge-url",
+        "classes": []
+      },
+      {
+        "tag": "button",
+        "id": "edit-config",
+        "classes": [
+          "secondary"
+        ]
+      },
+      {
+        "tag": "div",
+        "id": "error",
+        "classes": [
+          "error"
+        ]
+      },
+      {
+        "tag": "button",
+        "id": "launch-existing",
+        "classes": [
+          "primary"
+        ]
+      },
+      {
+        "tag": "textarea",
+        "id": "relay-list",
+        "classes": []
+      },
+      {
+        "tag": "button",
+        "id": "reset-config",
+        "classes": [
+          "secondary"
+        ]
+      },
+      {
+        "tag": "button",
+        "id": "save-only",
+        "classes": [
+          "secondary"
+        ]
+      },
+      {
+        "tag": "span",
+        "id": "saved-config",
+        "classes": []
+      },
+      {
+        "tag": "section",
+        "id": "saved-panel",
+        "classes": [
+          "saved-panel"
+        ]
+      },
+      {
+        "tag": "form",
+        "id": "setup-form",
+        "classes": [
+          "field"
+        ]
+      },
+      {
+        "tag": "span",
+        "id": "storage-mode",
+        "classes": []
+      }
+    ],
+    "selectors": [
+      ":root",
+      ".card",
+      ".error",
+      ".field",
+      ".mono",
+      ".row",
+      ".saved-panel",
+      ".saved-title",
+      ".screen",
+      "[hidden]",
+      "*",
+      "body",
+      "button",
+      "button.primary",
+      "button.secondary",
+      "h1",
+      "input",
+      "label",
+      "p",
+      "textarea"
+    ]
+  }
+}
