@@ -59,6 +59,40 @@ function parseCsvOrJsonList(raw) {
   return trimmed.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function parseIceServerUrls(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        const urls = [];
+        for (const entry of parsed) {
+          if (typeof entry === "string") {
+            urls.push(entry);
+            continue;
+          }
+          if (!entry || typeof entry !== "object") continue;
+          const value = entry.urls;
+          if (typeof value === "string") {
+            urls.push(value);
+            continue;
+          }
+          if (Array.isArray(value)) {
+            for (const urlValue of value) {
+              if (typeof urlValue === "string") urls.push(urlValue);
+            }
+          }
+        }
+        return urls.map((item) => item.trim()).filter(Boolean);
+      }
+    } catch {
+      // fall back to CSV
+    }
+  }
+  return trimmed.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 function isHttpUrl(value) {
   try {
     const parsed = new URL(value);
@@ -177,7 +211,8 @@ function checkProdRules(options = {}) {
     }
   }
 
-  const iceServers = parseCsvOrJsonList(readEnv("NEXT_PUBLIC_WEBRTC_ICE_SERVERS"));
+  const iceRaw = readEnv("NEXT_PUBLIC_WEBRTC_ICE_SERVERS");
+  const iceServers = parseIceServerUrls(iceRaw);
   if (iceServers.length === 0) {
     errors.push("NEXT_PUBLIC_WEBRTC_ICE_SERVERS must include at least one STUN/TURN server in production.");
   } else {
@@ -200,6 +235,10 @@ function checkProdRules(options = {}) {
       });
       if (exampleIce.length > 0) {
         errors.push(`Deploy mode forbids placeholder ICE hosts: ${exampleIce.join(", ")}`);
+      }
+
+      if (/replace-turn-password|changeme|example/i.test(String(iceRaw || ""))) {
+        errors.push("Deploy mode forbids placeholder TURN credentials in NEXT_PUBLIC_WEBRTC_ICE_SERVERS.");
       }
     }
   }
@@ -274,6 +313,21 @@ function checkProdRules(options = {}) {
     const devtools = readEnv("DSTREAM_DEVTOOLS").trim();
     if (!devtools) warnings.push("Deploy mode expects DSTREAM_DEVTOOLS=0.");
     if (devtools === "1") errors.push("Deploy mode requires DSTREAM_DEVTOOLS=0.");
+  }
+
+  const turnPassword = readEnv("TURN_PASSWORD").trim();
+  const turnExternalIp = readEnv("TURN_EXTERNAL_IP").trim();
+  if (strictExternal) {
+    if (!turnExternalIp) {
+      errors.push("Deploy mode requires TURN_EXTERNAL_IP when using bundled TURN service.");
+    } else if (isPrivateHost(turnExternalIp)) {
+      errors.push("Deploy mode requires TURN_EXTERNAL_IP to be a public IP.");
+    }
+    if (!turnPassword) {
+      errors.push("Deploy mode requires TURN_PASSWORD when using bundled TURN service.");
+    } else if (/replace-turn-password|changeme|example/i.test(turnPassword)) {
+      errors.push("Deploy mode forbids placeholder TURN_PASSWORD.");
+    }
   }
 
   const profilesRaw = readEnv("TRANSCODER_PROFILES").trim();

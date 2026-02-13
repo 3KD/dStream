@@ -25,9 +25,17 @@ See `.env.example`. Quick reference:
 **Client/public**
 - `NEXT_PUBLIC_NOSTR_RELAYS`: relay list (CSV or JSON array).
 - `NEXT_PUBLIC_HLS_ORIGIN`: base URL for the announce “streaming hint”.
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`: ICE server URLs (CSV or JSON array).
+- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`: ICE server URLs (CSV or JSON array). For authenticated TURN, use JSON objects with `urls`, `username`, `credential`.
 - `NEXT_PUBLIC_NIP05_POLICY`: `off|badge|require` policy for NIP-05 UI enforcement.
 - `NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`: optional platform support donation address shown on `/donate`.
+
+**TURN (bundled compose service)**
+- `TURN_REALM`: TURN realm (default `dstream.stream`).
+- `TURN_USERNAME`: static TURN username.
+- `TURN_PASSWORD`: static TURN password (must not be placeholder in deploy mode).
+- `TURN_EXTERNAL_IP`: public server IP advertised by coturn.
+- `TURN_PORT`: TURN listening port (default `3478`).
+- `TURN_MIN_PORT` / `TURN_MAX_PORT`: relay allocation port range.
 
 **Server-only (web reverse proxy)**
 - `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
@@ -197,6 +205,7 @@ This validates production-critical config, including:
 - relay host safety (no loopback/private relay hosts in deploy mode),
 - placeholder host rejection in deploy mode (`*.example*`),
 - ICE server configuration (STUN/TURN),
+- TURN password and external-IP sanity for bundled coturn (`TURN_PASSWORD`, `TURN_EXTERNAL_IP`),
 - public HLS origin safety (`https://` + non-local host in deploy mode),
 - proxy origin URL correctness,
 - production devtools disabled (`DSTREAM_DEVTOOLS=0`),

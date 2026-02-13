@@ -29,6 +29,9 @@ cat /tmp/dstream-prod-ps.txt
 if ! grep -qE 'dstream-web-1|web' /tmp/dstream-prod-ps.txt; then
   fail "web container not present in compose ps output"
 fi
+if ! grep -qE 'dstream-turn-1|turn' /tmp/dstream-prod-ps.txt; then
+  fail "turn container not present in compose ps output"
+fi
 
 echo
 echo "🔹 Checking remote internal web health..."
@@ -46,6 +49,12 @@ remote_env="$(
 
 if echo "${remote_env}" | grep -qiE 'NEXT_PUBLIC_WEBRTC_ICE_SERVERS=.*turn\.example\.com'; then
   fail "remote .env.production still uses turn.example.com"
+fi
+if echo "${remote_env}" | grep -qiE 'TURN_PASSWORD=.*(replace-turn-password|changeme|example)'; then
+  fail "remote .env.production still uses a placeholder TURN password"
+fi
+if echo "${remote_env}" | grep -qiE '^TURN_EXTERNAL_IP=$'; then
+  fail "remote .env.production has empty TURN_EXTERNAL_IP"
 fi
 
 if echo "${remote_env}" | grep -qiE 'DSTREAM_XMR_WALLET_RPC_ORIGIN=.*xmr-mock'; then

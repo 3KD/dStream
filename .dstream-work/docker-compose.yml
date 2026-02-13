@@ -16,7 +16,7 @@ services:
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
       DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
       # Monero verified tips (server-only). Defaults to the local mock wallet RPC service.
-      DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-http://xmr-mock:18083}"
+      DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-}"
       DSTREAM_XMR_WALLET_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-}"
       DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
       DSTREAM_XMR_ACCOUNT_INDEX: "${DSTREAM_XMR_ACCOUNT_INDEX:-0}"
@@ -30,10 +30,31 @@ services:
         condition: service_started
       relay:
         condition: service_started
-      xmr-mock:
+      turn:
         condition: service_started
     ports:
       - "${DSTREAM_WEB_PORT:-5656}:5656"
+    restart: unless-stopped
+
+  turn:
+    image: coturn/coturn:4.6.3-r2
+    command:
+      - -n
+      - --log-file=stdout
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=${TURN_REALM:-dstream.stream}
+      - --user=${TURN_USERNAME:-dstream-turn}:${TURN_PASSWORD:-replace-turn-password}
+      - --listening-port=3478
+      - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
+      - --min-port=${TURN_MIN_PORT:-49160}
+      - --max-port=${TURN_MAX_PORT:-49200}
+      - --no-cli
+    ports:
+      - "${TURN_PORT:-3478}:3478/tcp"
+      - "${TURN_PORT:-3478}:3478/udp"
+      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/tcp"
+      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/udp"
     restart: unless-stopped
 
   xmr-mock:

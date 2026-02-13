@@ -26,6 +26,7 @@ The check validates:
 - relay host safety (no loopback/private relay hosts in deploy mode),
 - relay/ICE placeholder host safety (deploy mode rejects `*.example*`),
 - ICE server config (TURN required),
+- TURN service config sanity (`TURN_PASSWORD` non-placeholder, `TURN_EXTERNAL_IP` public),
 - public HLS hint safety (`NEXT_PUBLIC_HLS_ORIGIN` must be `https://` + non-local in deploy mode),
 - proxy origin URL validity,
 - production devtools state (`DSTREAM_DEVTOOLS=0`),
