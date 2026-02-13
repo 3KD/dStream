@@ -85,6 +85,19 @@ function hostName(value) {
   }
 }
 
+function isExampleHost(host) {
+  const value = String(host || "").trim().toLowerCase();
+  if (!value) return false;
+  return value === "example.com" || value.endsWith(".example.com") || value.endsWith(".example");
+}
+
+function extractIceHost(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = /^(?:stun:|turn:|turns:)\[?([^\]/?:]+)\]?/i.exec(raw);
+  return match ? String(match[1] || "").toLowerCase() : "";
+}
+
 function isLoopbackHost(host) {
   const value = String(host || "").trim().toLowerCase();
   return value === "localhost" || value === "::1" || value === "[::1]" || value === "127.0.0.1" || value === "0.0.0.0";
@@ -157,6 +170,10 @@ function checkProdRules(options = {}) {
       if (localRelays.length > 0) {
         errors.push(`Deploy mode forbids local/private relay hosts: ${localRelays.join(", ")}`);
       }
+      const exampleRelays = relayList.filter((relay) => isExampleHost(hostName(relay)));
+      if (exampleRelays.length > 0) {
+        errors.push(`Deploy mode forbids placeholder relay hosts: ${exampleRelays.join(", ")}`);
+      }
     }
   }
 
@@ -168,6 +185,23 @@ function checkProdRules(options = {}) {
     if (invalidIce.length > 0) warnings.push(`Unexpected ICE server format: ${invalidIce.join(", ")}`);
     const hasTurn = iceServers.some((value) => /^(turn:|turns:)/i.test(value));
     if (!hasTurn) errors.push("At least one TURN server is required in NEXT_PUBLIC_WEBRTC_ICE_SERVERS for production.");
+    if (strictExternal) {
+      const privateIce = iceServers.filter((value) => {
+        const host = extractIceHost(value);
+        return host ? isPrivateHost(host) : false;
+      });
+      if (privateIce.length > 0) {
+        errors.push(`Deploy mode forbids local/private ICE hosts: ${privateIce.join(", ")}`);
+      }
+
+      const exampleIce = iceServers.filter((value) => {
+        const host = extractIceHost(value);
+        return host ? isExampleHost(host) : false;
+      });
+      if (exampleIce.length > 0) {
+        errors.push(`Deploy mode forbids placeholder ICE hosts: ${exampleIce.join(", ")}`);
+      }
+    }
   }
 
   const hlsOrigin = readEnv("NEXT_PUBLIC_HLS_ORIGIN").trim();
@@ -182,6 +216,9 @@ function checkProdRules(options = {}) {
       }
       if (isPrivateHost(hostName(hlsOrigin))) {
         errors.push("Deploy mode requires NEXT_PUBLIC_HLS_ORIGIN to use a publicly reachable host.");
+      }
+      if (isExampleHost(hostName(hlsOrigin))) {
+        errors.push("Deploy mode forbids placeholder NEXT_PUBLIC_HLS_ORIGIN host.");
       }
     }
   } else {
@@ -199,6 +236,9 @@ function checkProdRules(options = {}) {
   const walletOrigin = readEnv("DSTREAM_XMR_WALLET_RPC_ORIGIN").trim();
   if (walletOrigin) {
     if (!isHttpUrl(walletOrigin)) errors.push("DSTREAM_XMR_WALLET_RPC_ORIGIN must be a valid http(s) URL.");
+    if (strictExternal && /xmr-mock/i.test(walletOrigin)) {
+      errors.push("Deploy mode forbids xmr-mock wallet RPC origin. Configure a real wallet RPC service.");
+    }
     const confirmationsRaw = readEnv("DSTREAM_XMR_CONFIRMATIONS_REQUIRED").trim();
     const confirmationsEffective = confirmationsRaw || "10";
     if (!isDigits(confirmationsEffective)) errors.push("DSTREAM_XMR_CONFIRMATIONS_REQUIRED must be digits.");
@@ -226,6 +266,8 @@ function checkProdRules(options = {}) {
     errors.push("DSTREAM_XMR_SESSION_SECRET is required in production.");
   } else if (sessionSecret.length < 32) {
     errors.push("DSTREAM_XMR_SESSION_SECRET should be at least 32 characters.");
+  } else if (/replace|example|change-before-public-deploy|changeme/i.test(sessionSecret)) {
+    errors.push("DSTREAM_XMR_SESSION_SECRET appears to be a placeholder; set a high-entropy production secret.");
   }
 
   if (strictExternal) {

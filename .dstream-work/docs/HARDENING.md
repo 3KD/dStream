@@ -18,18 +18,28 @@ Template dry-run:
 ENV_FILE=.env.production.example npm run harden:deploy
 ```
 
+Note: `.env.production.example` contains placeholders, so deploy-mode checks will fail until real production values are supplied.
+
 The check validates:
 
 - relay URL safety (`wss://` only in deploy mode),
 - relay host safety (no loopback/private relay hosts in deploy mode),
+- relay/ICE placeholder host safety (deploy mode rejects `*.example*`),
 - ICE server config (TURN required),
 - public HLS hint safety (`NEXT_PUBLIC_HLS_ORIGIN` must be `https://` + non-local in deploy mode),
 - proxy origin URL validity,
 - production devtools state (`DSTREAM_DEVTOOLS=0`),
 - Monero session secret presence/strength,
+- Monero session secret placeholder rejection (`replace*`, `change-before-public-deploy*`, `changeme*`),
 - Monero wallet RPC auth requirement when wallet RPC is enabled,
+- wallet RPC mock-origin rejection in deploy mode (`xmr-mock`),
 - NIP-05 policy config validity (`NEXT_PUBLIC_NIP05_POLICY`),
 - transcoder profile sanity.
+
+Deployment script gate:
+
+- `infra/prod/deploy.sh` now runs this preflight automatically before rsync/build.
+- To bypass intentionally (for temporary/dev usage only): `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1`.
 
 ## 2) External surface verification (required)
 
@@ -58,6 +68,7 @@ npm run smoke:wallet:cap
 npm run smoke:escrow
 npm run smoke:escrow:v3
 npm run smoke:wallet:real
+npm run smoke:prod:runtime -- root@your-host
 ```
 
 Notes:

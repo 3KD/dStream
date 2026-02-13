@@ -15,7 +15,10 @@ const FORBIDDEN_PATTERNS = [
   /ws:\/\/127\.0\.0\.1/i,
   /http:\/\/localhost/i,
   /http:\/\/127\.0\.0\.1/i,
-  /localhost:8081/i
+  /localhost:8081/i,
+  /turn\.example\.com/i,
+  /stream\.example\.com/i,
+  /origin\.example\.com/i
 ];
 
 function fail(msg) {

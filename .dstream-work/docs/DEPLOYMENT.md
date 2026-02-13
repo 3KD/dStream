@@ -185,16 +185,27 @@ ENV_FILE=.env.production npm run harden:deploy
 EXTERNAL_BASE_URL=https://stream.example.com npm run smoke:external:readiness
 ```
 
+Then run runtime verification against your host:
+
+```bash
+SSH_TARGET=root@your-host npm run smoke:prod:runtime
+```
+
 This validates production-critical config, including:
 
 - relay URL safety (`wss://` only in deploy mode),
 - relay host safety (no loopback/private relay hosts in deploy mode),
+- placeholder host rejection in deploy mode (`*.example*`),
 - ICE server configuration (STUN/TURN),
 - public HLS origin safety (`https://` + non-local host in deploy mode),
 - proxy origin URL correctness,
 - production devtools disabled (`DSTREAM_DEVTOOLS=0`),
 - Monero session secret requirement,
+- Monero session secret placeholder rejection,
+- mock wallet RPC rejection in deploy mode (`xmr-mock`),
 - transcoder profile sanity checks.
+
+`infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
 
 To validate a specific env file without exporting it into your shell:
 
@@ -202,11 +213,13 @@ To validate a specific env file without exporting it into your shell:
 ENV_FILE=.env.production npm run harden:deploy
 ```
 
-To lint the committed template before filling real secrets/hosts:
+To lint the committed template syntax before filling real secrets/hosts:
 
 ```bash
-ENV_FILE=.env.production.example npm run harden:deploy
+ENV_FILE=.env.production.example npm run harden:check
 ```
+
+Note: deploy-mode checks are expected to fail on `.env.production.example` until placeholders are replaced.
 
 See also `docs/HARDENING.md`.
 

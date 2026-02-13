@@ -68,6 +68,22 @@ if [[ ! -f "${PROJECT_DIR}/.env.production" ]]; then
   exit 1
 fi
 
+if [[ "${DSTREAM_DEPLOY_SKIP_PREFLIGHT:-0}" != "1" ]]; then
+  if [[ ! -f "${PROJECT_DIR}/scripts/harden-check.mjs" ]]; then
+    echo "ERROR: ${PROJECT_DIR}/scripts/harden-check.mjs not found."
+    exit 1
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: node is required for preflight checks."
+    exit 1
+  fi
+  echo "🔹 Running deploy preflight (harden:deploy)..."
+  (
+    cd "${PROJECT_DIR}"
+    HARDEN_MODE=deploy ENV_FILE="${PROJECT_DIR}/.env.production" node scripts/harden-check.mjs
+  )
+fi
+
 echo "🚀 Deploying dStream current stack"
 echo "   local:  ${PROJECT_DIR}"
 echo "   remote: ${TARGET}:${REMOTE_DIR}"

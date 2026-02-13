@@ -49,6 +49,7 @@
     "check:mobile:golden:update": "node scripts/check-mobile-ui-golden.mjs --update",
     "check:mobile": "npm run check:mobile-shell && npm run check:mobile:golden",
     "smoke:external:readiness": "node scripts/smoke-external-readiness.mjs",
+    "smoke:prod:runtime": "bash scripts/smoke-production-runtime.sh",
     "mobile:sync": "npm --workspace mobile run sync",
     "mobile:open:ios": "npm --workspace mobile run open:ios",
     "mobile:open:android": "npm --workspace mobile run open:android",
