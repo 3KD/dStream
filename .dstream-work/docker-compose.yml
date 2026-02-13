@@ -10,6 +10,7 @@ services:
         NEXT_PUBLIC_HLS_ORIGIN: "${NEXT_PUBLIC_HLS_ORIGIN:-}"
         # Optional. Helps WebRTC (WHIP + P2P) on restrictive networks/NAT.
         NEXT_PUBLIC_WEBRTC_ICE_SERVERS: "${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-stun:stun.cloudflare.com:3478}"
+        NEXT_PUBLIC_SUPPORT_XMR_ADDRESS: "${NEXT_PUBLIC_SUPPORT_XMR_ADDRESS:-}"
     environment:
       # Next.js reverse proxy targets (server-only).
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
