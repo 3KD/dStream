@@ -107,6 +107,11 @@ Real-wallet variation (regtest daemon + sender/receiver wallet-rpc + wallet boot
 npm run stack:up:real-wallet
 ```
 
+Production deploy note:
+
+- `infra/prod/deploy.sh` automatically adds `docker-compose.real-wallet.yml` when `.env.production` sets `DSTREAM_XMR_WALLET_RPC_ORIGIN` to `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
+- Set `DSTREAM_DEPLOY_REAL_WALLET=1` to force, or `DSTREAM_DEPLOY_REAL_WALLET=0` to disable.
+
 Then open:
 - Web app: `http://localhost:5656` (or set `DSTREAM_WEB_PORT` to change the host port)
 - Relay (for browsers): `ws://localhost:8081`
@@ -212,6 +217,7 @@ This validates production-critical config, including:
 - Monero session secret requirement,
 - Monero session secret placeholder rejection,
 - mock wallet RPC rejection in deploy mode (`xmr-mock`),
+- Monero backend origin required in deploy mode,
 - transcoder profile sanity checks.
 
 `infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.

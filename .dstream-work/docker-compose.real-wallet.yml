@@ -38,7 +38,7 @@ services:
       - --daemon-address=monerod-regtest:18081
       - --rpc-bind-port=18083
       - --wallet-dir=/home/monero/wallets
-      - --disable-rpc-login
+      - --rpc-login=${DSTREAM_XMR_WALLET_RPC_USER:-produser}:${DSTREAM_XMR_WALLET_RPC_PASS:-prodpass}
       - --allow-mismatched-daemon-version
     depends_on:
       xmr-wallet-perms:
@@ -57,7 +57,7 @@ services:
       - --daemon-address=monerod-regtest:18081
       - --rpc-bind-port=18083
       - --wallet-dir=/home/monero/wallets
-      - --disable-rpc-login
+      - --rpc-login=${DSTREAM_XMR_WALLET_RPC_USER:-produser}:${DSTREAM_XMR_WALLET_RPC_PASS:-prodpass}
       - --allow-mismatched-daemon-version
     depends_on:
       xmr-wallet-perms:
@@ -80,6 +80,8 @@ services:
       XMR_INIT_RECEIVER_WALLET: "${DSTREAM_XMR_RECEIVER_WALLET_NAME:-receiver_wallet}"
       XMR_INIT_SENDER_WALLET: "${DSTREAM_XMR_SENDER_WALLET_NAME:-sender_wallet}"
       XMR_INIT_WALLET_PASS: "${DSTREAM_XMR_WALLET_FILE_PASS:-}"
+      XMR_INIT_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-produser}"
+      XMR_INIT_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-prodpass}"
     depends_on:
       xmr-wallet-rpc-receiver:
         condition: service_started

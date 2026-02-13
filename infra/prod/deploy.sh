@@ -102,9 +102,18 @@ rsync -az --delete \
   "${PROJECT_DIR}/" "${TARGET}:${REMOTE_DIR}/"
 
 COMPOSE_ARGS="-f docker-compose.yml"
-if [[ "${DSTREAM_DEPLOY_REAL_WALLET:-0}" == "1" ]]; then
+DEPLOY_REAL_WALLET="${DSTREAM_DEPLOY_REAL_WALLET:-auto}"
+if [[ "${DEPLOY_REAL_WALLET}" == "auto" ]]; then
+  if grep -Eiq '^DSTREAM_XMR_WALLET_RPC_ORIGIN=.*xmr-wallet-rpc-(receiver|sender)' "${PROJECT_DIR}/.env.production"; then
+    DEPLOY_REAL_WALLET="1"
+  else
+    DEPLOY_REAL_WALLET="0"
+  fi
+fi
+if [[ "${DEPLOY_REAL_WALLET}" == "1" ]]; then
   COMPOSE_ARGS="${COMPOSE_ARGS} -f docker-compose.real-wallet.yml"
 fi
+echo "🔹 Compose profile: $([[ "${DEPLOY_REAL_WALLET}" == "1" ]] && echo 'real-wallet' || echo 'base')"
 
 echo "🔹 Rebuilding and restarting containers..."
 run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \

@@ -5,6 +5,8 @@ const SENDER_RPC = (process.env.XMR_INIT_SENDER_RPC || "http://127.0.0.1:28084")
 const RECEIVER_WALLET = (process.env.XMR_INIT_RECEIVER_WALLET || "receiver_wallet").trim();
 const SENDER_WALLET = (process.env.XMR_INIT_SENDER_WALLET || "sender_wallet").trim();
 const WALLET_PASS = process.env.XMR_INIT_WALLET_PASS || "";
+const RPC_USER = (process.env.XMR_INIT_RPC_USER || "").trim();
+const RPC_PASS = process.env.XMR_INIT_RPC_PASS || "";
 const TIMEOUT_SECS = Number(process.env.XMR_INIT_TIMEOUT_SECS || 90);
 
 function assert(condition, message) {
@@ -16,9 +18,14 @@ function sleep(ms) {
 }
 
 async function rpc(origin, method, params = {}) {
+  const headers = { "content-type": "application/json" };
+  if (RPC_USER) {
+    const token = Buffer.from(`${RPC_USER}:${RPC_PASS}`, "utf8").toString("base64");
+    headers.authorization = `Basic ${token}`;
+  }
   const res = await fetch(`${origin}/json_rpc`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: "0", method, params })
   });
   const text = await res.text();
@@ -92,6 +99,7 @@ async function main() {
   console.log(`  sender rpc:   ${SENDER_RPC}`);
   console.log(`  receiver wallet: ${RECEIVER_WALLET}`);
   console.log(`  sender wallet:   ${SENDER_WALLET}`);
+  if (RPC_USER) console.log("  rpc auth: basic");
 
   await waitForRpc(RECEIVER_RPC);
   await waitForRpc(SENDER_RPC);

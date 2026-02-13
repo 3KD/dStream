@@ -34,12 +34,14 @@ The check validates:
 - Monero session secret placeholder rejection (`replace*`, `change-before-public-deploy*`, `changeme*`),
 - Monero wallet RPC auth requirement when wallet RPC is enabled,
 - wallet RPC mock-origin rejection in deploy mode (`xmr-mock`),
+- Monero backend requirement in deploy mode (`DSTREAM_XMR_WALLET_RPC_ORIGIN` required),
 - NIP-05 policy config validity (`NEXT_PUBLIC_NIP05_POLICY`),
 - transcoder profile sanity.
 
 Deployment script gate:
 
 - `infra/prod/deploy.sh` now runs this preflight automatically before rsync/build.
+- deploy auto-enables the `docker-compose.real-wallet.yml` overlay when `.env.production` points wallet RPC origin at `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
 - To bypass intentionally (for temporary/dev usage only): `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1`.
 
 ## 2) External surface verification (required)

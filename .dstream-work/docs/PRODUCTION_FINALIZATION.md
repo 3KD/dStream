@@ -6,6 +6,7 @@ This is the close-out checklist for calling dStream production complete.
 
 - `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` uses real STUN/TURN infrastructure (no `turn.example.com`).
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN` points to a real wallet RPC service (not `xmr-mock`).
+- `DSTREAM_XMR_WALLET_RPC_USER` and `DSTREAM_XMR_WALLET_RPC_PASS` are set and match wallet-rpc.
 - `DSTREAM_XMR_SESSION_SECRET` is replaced with a high-entropy secret (not placeholder text).
 - Relay list includes at least two reliable `wss://` relays.
 

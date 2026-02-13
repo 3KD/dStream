@@ -290,7 +290,11 @@ function checkProdRules(options = {}) {
       errors.push("DSTREAM_XMR_WALLET_RPC_USER and DSTREAM_XMR_WALLET_RPC_PASS must be set when wallet RPC is enabled.");
     }
   } else {
-    warnings.push("DSTREAM_XMR_WALLET_RPC_ORIGIN is not set; verified Monero flows will be unavailable.");
+    if (strictExternal) {
+      errors.push("Deploy mode requires DSTREAM_XMR_WALLET_RPC_ORIGIN for Monero backend readiness.");
+    } else {
+      warnings.push("DSTREAM_XMR_WALLET_RPC_ORIGIN is not set; verified Monero flows will be unavailable.");
+    }
   }
 
   const nip05Policy = readEnv("NEXT_PUBLIC_NIP05_POLICY").trim().toLowerCase();
