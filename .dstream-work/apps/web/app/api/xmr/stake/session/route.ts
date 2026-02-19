@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
 import { assertStreamIdentity } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
-import { getXmrWalletRpcAccountIndex, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { getXmrConfirmationsRequired, getXmrStakeSessionTtlSec, getXmrWalletRpcAccountIndex, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { expireStakeSession, getActiveStakeSessionForViewerStream, markStakeSessionObserved, registerStakeSession } from "@/lib/monero/stakeSessionStore";
 import { makeStakeLabel, signStakeSession, type StakeSessionV1 } from "@/lib/monero/stakeSession";
+import { getStakeTotals } from "@/lib/monero/stakeVerify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,9 +84,42 @@ export async function POST(req: NextRequest): Promise<Response> {
   const accountIndex = getXmrWalletRpcAccountIndex();
   const createdAtMs = Date.now();
   const nonce = makeNonce();
-  const label = makeStakeLabel({ streamPubkey, streamId, nonce });
+  const label = makeStakeLabel({ streamPubkey, streamId, viewerPubkey, nonce });
 
   try {
+    const existing = getActiveStakeSessionForViewerStream({ viewerPubkey, streamPubkey, streamId });
+    if (existing) {
+      const ttlMs = getXmrStakeSessionTtlSec() * 1000;
+      const ageMs = Date.now() - existing.createdAtMs;
+
+      if (existing.lastObservedAtMs === null && ageMs > ttlMs) {
+        const totals = await getStakeTotals({
+          client,
+          accountIndex: existing.payload.accountIndex,
+          addressIndex: existing.payload.addressIndex,
+          confirmationsRequired: getXmrConfirmationsRequired()
+        });
+        if (totals.transferCount > 0) {
+          markStakeSessionObserved(existing.token, totals.lastObservedAtMs ?? Date.now());
+        } else {
+          expireStakeSession(existing.token);
+        }
+      }
+    }
+
+    const reusable = getActiveStakeSessionForViewerStream({ viewerPubkey, streamPubkey, streamId });
+    if (reusable) {
+      return Response.json({
+        ok: true,
+        address: reusable.address,
+        accountIndex: reusable.payload.accountIndex,
+        addressIndex: reusable.payload.addressIndex,
+        viewerPubkey,
+        session: reusable.token,
+        reused: true
+      });
+    }
+
     const created = await client.createAddress({ accountIndex, label });
     const payload: StakeSessionV1 = {
       v: 1,
@@ -98,17 +133,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       nonce
     };
     const session = signStakeSession(payload);
+    registerStakeSession({
+      token: session,
+      payload,
+      address: created.address
+    });
     return Response.json({
       ok: true,
       address: created.address,
       accountIndex,
       addressIndex: created.addressIndex,
       viewerPubkey,
-      session
+      session,
+      reused: false
     });
   } catch (err: any) {
     const message = `xmr stake session error (${err?.message ?? "unknown"})`;
     return new Response(message, { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
 }
-

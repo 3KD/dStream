@@ -30,12 +30,17 @@ function run() {
   const requiredFiles = [
     "apps/mobile/package.json",
     "apps/mobile/capacitor.config.ts",
+    "apps/mobile/Gemfile",
+    "apps/mobile/fastlane/Appfile",
+    "apps/mobile/fastlane/Fastfile",
+    "apps/mobile/release.env.example",
     "apps/mobile/www/index.html",
     "apps/mobile/www/mobile.js",
     "apps/mobile/www/mobile.css",
     "apps/mobile/golden/ui.snapshot.json",
     "docs/MOBILE_APP.md",
-    "docs/MOBILE_RELEASE_CHECKLIST.md"
+    "docs/MOBILE_RELEASE_CHECKLIST.md",
+    "docs/MOBILE_STORE_DEPLOY.md"
   ];
   for (const file of requiredFiles) assertFile(file);
 
@@ -103,6 +108,14 @@ function run() {
     assertMatch(releaseChecklist, /iOS/i, "docs/MOBILE_RELEASE_CHECKLIST.md missing iOS section");
     assertMatch(releaseChecklist, /Android/i, "docs/MOBILE_RELEASE_CHECKLIST.md missing Android section");
     assertMatch(releaseChecklist, /permissions/i, "docs/MOBILE_RELEASE_CHECKLIST.md missing permission checklist");
+  }
+
+  const storeDeploy = readText("docs/MOBILE_STORE_DEPLOY.md");
+  if (storeDeploy) {
+    assertMatch(storeDeploy, /TestFlight/i, "docs/MOBILE_STORE_DEPLOY.md missing TestFlight flow");
+    assertMatch(storeDeploy, /Play Console/i, "docs/MOBILE_STORE_DEPLOY.md missing Play Console flow");
+    assertMatch(storeDeploy, /mobile:release:ios:testflight/, "docs/MOBILE_STORE_DEPLOY.md missing ios release command");
+    assertMatch(storeDeploy, /mobile:release:android:internal/, "docs/MOBILE_STORE_DEPLOY.md missing android release command");
   }
 
   if (errors.length > 0) {

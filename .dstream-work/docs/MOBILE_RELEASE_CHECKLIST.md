@@ -2,6 +2,12 @@
 
 Use this checklist before publishing a mobile build that points to production edge infrastructure.
 
+Reference docs:
+
+- `docs/MOBILE_STORE_LISTING_COPY.md` (store listing text)
+- `docs/MOBILE_STORE_SUBMISSION_SHEET.md` (field-by-field submission sheet)
+- `docs/MOBILE_STORE_METADATA_MATRIX.md` (privacy/content rating metadata guidance)
+
 ## Preflight
 
 - Confirm mobile config persistence:
@@ -11,8 +17,14 @@ Use this checklist before publishing a mobile build that points to production ed
 - Confirm edge URL resolves and serves `/mobile/bootstrap`.
 - Run:
   - `npm run check:mobile`
+  - `npm run check:mobile:store`
   - `npm run test:mobile:permissions`
   - `npm --workspace mobile run sync`
+
+If using env file:
+
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=ios MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs`
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=android MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs`
 
 ## iOS permission flow
 
@@ -25,6 +37,10 @@ Run on a clean install (simulator or device):
 5. Re-open app, grant camera + microphone, confirm local preview initializes.
 6. Start stream and verify `/watch/:npub/:streamId` playback from a second client.
 
+Automation helper:
+
+- `IOS_SIM_UDID=booted IOS_BUNDLE_ID=stream.dstream npm run test:mobile:permissions:ios`
+
 ## Android permission flow
 
 Run on a clean install (emulator or device):
@@ -34,6 +50,28 @@ Run on a clean install (emulator or device):
 3. Deny both permissions and confirm user-facing guidance appears (no crash).
 4. Grant camera + microphone and confirm local preview initializes.
 5. Start stream and verify `/watch/:npub/:streamId` playback from a second client.
+
+Automation helper:
+
+- `ANDROID_PACKAGE_NAME=stream.dstream npm run test:mobile:permissions:android`
+
+## Store upload execution
+
+iOS TestFlight:
+
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:ios:testflight`
+
+iOS App Store:
+
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:ios:appstore`
+
+Android internal:
+
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:android:internal`
+
+Android production:
+
+- `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:android:production`
 
 ## Visual regression evidence
 

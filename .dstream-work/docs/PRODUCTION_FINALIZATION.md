@@ -8,6 +8,10 @@ This is the close-out checklist for calling dStream production complete.
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN` points to a real wallet RPC service (not `xmr-mock`).
 - `DSTREAM_XMR_WALLET_RPC_USER` and `DSTREAM_XMR_WALLET_RPC_PASS` are set and match wallet-rpc.
 - `DSTREAM_XMR_SESSION_SECRET` is replaced with a high-entropy secret (not placeholder text).
+- Refund policy constants are explicitly set and production-safe:
+  - `DSTREAM_XMR_REFUND_MIN_SERVED_BYTES > 0`
+  - `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES > DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`
+  - `DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC` are tuned for your policy.
 - Relay list includes at least two reliable `wss://` relays.
 
 Run:
@@ -26,12 +30,11 @@ cd /Users/erik/Projects/JRNY
 DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
 ```
 
-Verify:
+Verify (single gate command):
 
 ```bash
 cd /Users/erik/Projects/JRNY/.dstream-work
-EXTERNAL_BASE_URL=https://dstream.stream npm run smoke:external:readiness
-SSH_TARGET=root@your-host npm run smoke:prod:runtime
+EXTERNAL_BASE_URL=https://dstream.stream SSH_TARGET=root@your-host npm run gate:prod -- .env.production
 ```
 
 ## 3) Live media acceptance (manual)
@@ -48,16 +51,17 @@ Use two devices/networks:
 
 ## 4) Operational hardening
 
-- Switch deploy access from password SSH to key-based SSH.
-- Add uptime checks and alerting for:
-  - `https://dstream.stream/`
-  - `https://dstream.stream/broadcast`
-  - relay endpoint availability
-  - MediaMTX health (`/v3/paths/list`)
-- Add backup policy for:
-  - `.env.production` (encrypted backup),
-  - wallet state/keys,
-  - Caddy data (`/data`) and config.
+Runbook: `/Users/erik/Projects/JRNY/.dstream-work/docs/OPS_RUNBOOK.md`
+
+Required:
+
+```bash
+cd /Users/erik/Projects/JRNY/.dstream-work
+SSH_TARGET=root@your-host npm run ops:ssh:key
+SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
+SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
+SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:backup
+```
 
 ## 5) Mobile release close-out
 

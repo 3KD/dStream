@@ -56,12 +56,22 @@ test("normalizeSocialState coerces lists and settings", () => {
       p2pAssistEnabled: true,
       p2pPeerMode: "trusted_only",
       playbackAutoplayMuted: false,
+      showMatureContent: true,
       broadcastHostMode: "host_only",
       broadcastRebroadcastThreshold: 9,
       paymentDefaults: {
-        xmrTipAddress: " 4abc ",
+        xmrTipAddress: ` ${"4".repeat(95)} `,
         stakeXmr: "0.05 ",
-        stakeNote: "  note  "
+        stakeNote: "  note  ",
+        paymentMethods: [
+          { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM" },
+          { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" }
+        ],
+        preferredWalletByAsset: {
+          xmr: "cake",
+          eth: "metamask",
+          bad: "unknown"
+        }
       }
     }
   };
@@ -83,13 +93,42 @@ test("normalizeSocialState coerces lists and settings", () => {
   assert.equal(normalized.settings.p2pAssistEnabled, true);
   assert.equal(normalized.settings.p2pPeerMode, "trusted_only");
   assert.equal(normalized.settings.playbackAutoplayMuted, false);
+  assert.equal(normalized.settings.showMatureContent, true);
   assert.equal(normalized.settings.broadcastHostMode, "host_only");
   assert.equal(normalized.settings.broadcastRebroadcastThreshold, 9);
   assert.deepEqual(normalized.settings.paymentDefaults, {
-    xmrTipAddress: "4abc",
+    xmrTipAddress: "4".repeat(95),
     stakeXmr: "0.05",
-    stakeNote: "note"
+    stakeNote: "note",
+    paymentMethods: [
+      { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM" },
+      { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", network: undefined, label: undefined }
+    ],
+    preferredWalletByAsset: {
+      xmr: "cake",
+      eth: "metamask"
+    }
   });
+});
+
+test("normalizeSocialState drops invalid xmr defaults", () => {
+  const input: any = {
+    version: 1,
+    aliases: {},
+    trustedPubkeys: [],
+    mutedPubkeys: [],
+    blockedPubkeys: [],
+    favorites: { creators: [], streams: [] },
+    settings: {
+      paymentDefaults: {
+        xmrTipAddress: "48ab...def"
+      }
+    }
+  };
+
+  const normalized = normalizeSocialState(input);
+  assert.ok(normalized);
+  assert.equal(normalized.settings.paymentDefaults.xmrTipAddress, "");
 });
 
 test("parseSocialState returns null for wrong version", () => {
@@ -101,4 +140,5 @@ test("createDefaultSocialState creates versioned state", () => {
   const state = createDefaultSocialState();
   assert.equal(state.version, 1);
   assert.ok(state.settings);
+  assert.equal(state.settings.showMatureContent, false);
 });

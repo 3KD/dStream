@@ -1,0 +1,211 @@
+fastlane_version "2.226.0"
+
+require "shellwords"
+require "fileutils"
+
+ROOT_DIR = File.expand_path("..", __dir__)
+IOS_WORKSPACE = File.join(ROOT_DIR, "ios", "App", "App.xcworkspace")
+ANDROID_DIR = File.join(ROOT_DIR, "android")
+BUILD_DIR = File.join(ROOT_DIR, "build")
+
+default_platform(:ios)
+
+def ensure_path_exists!(path, label)
+  UI.user_error!("Missing #{label}: #{path}. Run `npm --workspace mobile run sync` first.") unless File.exist?(path)
+end
+
+def ensure_build_dir!
+  FileUtils.mkdir_p(BUILD_DIR)
+end
+
+def app_store_api_key_from_env!
+  key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"].to_s.strip
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+  key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"].to_s.strip
+  key_content = ENV["APP_STORE_CONNECT_API_KEY"].to_s
+
+  UI.user_error!("Missing APP_STORE_CONNECT_API_KEY_ID.") if key_id.empty?
+  UI.user_error!("Missing APP_STORE_CONNECT_ISSUER_ID.") if issuer_id.empty?
+  if key_path.empty? && key_content.strip.empty?
+    UI.user_error!("Set APP_STORE_CONNECT_API_KEY_PATH or APP_STORE_CONNECT_API_KEY.")
+  end
+
+  options = {
+    key_id: key_id,
+    issuer_id: issuer_id,
+    in_house: false,
+    duration: 1200
+  }
+
+  if key_path.empty?
+    options[:key_content] = key_content
+  else
+    options[:key_filepath] = File.expand_path(key_path, ROOT_DIR)
+  end
+
+  app_store_connect_api_key(**options)
+end
+
+def ios_xcargs
+  team_id = ENV["APPLE_DEVELOPER_TEAM_ID"].to_s.strip
+  return nil if team_id.empty?
+  "DEVELOPMENT_TEAM=#{team_id}"
+end
+
+def android_signing_props_from_env!
+  keys = {
+    "ANDROID_KEYSTORE_PATH" => ENV["ANDROID_KEYSTORE_PATH"].to_s.strip,
+    "ANDROID_KEYSTORE_PASSWORD" => ENV["ANDROID_KEYSTORE_PASSWORD"].to_s.strip,
+    "ANDROID_KEY_ALIAS" => ENV["ANDROID_KEY_ALIAS"].to_s.strip,
+    "ANDROID_KEY_PASSWORD" => ENV["ANDROID_KEY_PASSWORD"].to_s.strip
+  }
+  missing = keys.keys.select { |key| keys[key].empty? }
+  UI.user_error!("Missing Android signing env vars: #{missing.join(', ')}") unless missing.empty?
+
+  keystore_path = File.expand_path(keys["ANDROID_KEYSTORE_PATH"], ROOT_DIR)
+  UI.user_error!("Android keystore not found: #{keystore_path}") unless File.exist?(keystore_path)
+
+  props = {
+    "android.injected.signing.store.file" => keystore_path,
+    "android.injected.signing.store.password" => keys["ANDROID_KEYSTORE_PASSWORD"],
+    "android.injected.signing.key.alias" => keys["ANDROID_KEY_ALIAS"],
+    "android.injected.signing.key.password" => keys["ANDROID_KEY_PASSWORD"]
+  }
+
+  version_code = ENV["ANDROID_VERSION_CODE"].to_s.strip
+  version_name = ENV["ANDROID_VERSION_NAME"].to_s.strip
+  props["android.injected.version.code"] = version_code unless version_code.empty?
+  props["android.injected.version.name"] = version_name unless version_name.empty?
+
+  props
+end
+
+def android_play_json_key_path!
+  path = ENV["ANDROID_PLAY_JSON_KEY_PATH"].to_s.strip
+  UI.user_error!("Missing ANDROID_PLAY_JSON_KEY_PATH.") if path.empty?
+  expanded = File.expand_path(path, ROOT_DIR)
+  UI.user_error!("ANDROID_PLAY_JSON_KEY_PATH not found: #{expanded}") unless File.exist?(expanded)
+  expanded
+end
+
+def android_release_status
+  status = ENV["ANDROID_RELEASE_STATUS"].to_s.strip
+  return "completed" if status.empty?
+  status
+end
+
+def android_aab_output_path
+  File.join(BUILD_DIR, "android", "dstream-release.aab")
+end
+
+platform :ios do
+  desc "Build signed IPA and upload to TestFlight"
+  lane :testflight do
+    ensure_path_exists!(IOS_WORKSPACE, "iOS workspace")
+    ensure_build_dir!
+    api_key = app_store_api_key_from_env!
+
+    build_app(
+      workspace: IOS_WORKSPACE,
+      scheme: "App",
+      clean: true,
+      export_method: "app-store",
+      output_directory: File.join(BUILD_DIR, "ios"),
+      output_name: "dstream-ios.ipa",
+      include_symbols: true,
+      include_bitcode: false,
+      xcargs: ios_xcargs
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: File.join(BUILD_DIR, "ios", "dstream-ios.ipa"),
+      skip_waiting_for_build_processing: ENV["IOS_WAIT_FOR_BUILD_PROCESSING"] != "1",
+      distribute_external: ENV["IOS_DISTRIBUTE_EXTERNAL"] == "1",
+      groups: ENV["IOS_TESTFLIGHT_GROUPS"].to_s.strip.empty? ? nil : ENV["IOS_TESTFLIGHT_GROUPS"].split(",").map(&:strip)
+    )
+  end
+
+  desc "Build signed IPA and upload App Store release"
+  lane :appstore do
+    ensure_path_exists!(IOS_WORKSPACE, "iOS workspace")
+    ensure_build_dir!
+    api_key = app_store_api_key_from_env!
+
+    build_app(
+      workspace: IOS_WORKSPACE,
+      scheme: "App",
+      clean: true,
+      export_method: "app-store",
+      output_directory: File.join(BUILD_DIR, "ios"),
+      output_name: "dstream-ios.ipa",
+      include_symbols: true,
+      include_bitcode: false,
+      xcargs: ios_xcargs
+    )
+
+    upload_to_app_store(
+      api_key: api_key,
+      ipa: File.join(BUILD_DIR, "ios", "dstream-ios.ipa"),
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: ENV["IOS_SUBMIT_FOR_REVIEW"] == "1",
+      automatic_release: ENV["IOS_AUTOMATIC_RELEASE"] == "1",
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+end
+
+platform :android do
+  desc "Build signed Android release bundle (.aab)"
+  lane :bundle_release do
+    ensure_path_exists!(File.join(ANDROID_DIR, "gradlew"), "Android project")
+    ensure_build_dir!
+
+    props = android_signing_props_from_env!
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      project_dir: ANDROID_DIR,
+      properties: props
+    )
+
+    src = File.join(ANDROID_DIR, "app", "build", "outputs", "bundle", "release", "app-release.aab")
+    ensure_path_exists!(src, "Android release bundle")
+    dest = android_aab_output_path
+    FileUtils.mkdir_p(File.dirname(dest))
+    FileUtils.cp(src, dest)
+    UI.message("Android bundle copied to #{dest}")
+  end
+
+  desc "Upload Android .aab to Play Console internal track"
+  lane :internal do
+    bundle_release
+    upload_to_play_store(
+      track: "internal",
+      release_status: android_release_status,
+      json_key: android_play_json_key_path!,
+      package_name: ENV.fetch("ANDROID_APPLICATION_ID", "stream.dstream"),
+      aab: android_aab_output_path,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Upload Android .aab to Play Console production track"
+  lane :production do
+    bundle_release
+    upload_to_play_store(
+      track: "production",
+      release_status: android_release_status,
+      json_key: android_play_json_key_path!,
+      package_name: ENV.fetch("ANDROID_APPLICATION_ID", "stream.dstream"),
+      aab: android_aab_output_path,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

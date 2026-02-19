@@ -10,7 +10,9 @@ const cases = [
     chipClass: "bg-blue-900/30 text-blue-300",
     watermarkClass: "text-blue-500",
     title: "Independent Journalists",
-    detail: "Broadcast with portable identity and relay-based discovery that does not depend on one platform gatekeeper."
+    subtitle: "Censorship-resistant continuity",
+    detail:
+      "Publish under your own Nostr identity and keep channel continuity even when ingest providers, relay sets, or edge stacks are swapped."
   },
   {
     icon: Mic,
@@ -19,7 +21,9 @@ const cases = [
     chipClass: "bg-purple-900/30 text-purple-300",
     watermarkClass: "text-purple-500",
     title: "Performers and Creators",
-    detail: "Run direct audience monetization flows with private Monero tips and optional verified receipts."
+    subtitle: "Direct payout ownership",
+    detail:
+      "Run verified Monero tip/stake flows and expose additional payout rails with wallet integration preferences per asset."
   },
   {
     icon: Radio,
@@ -28,7 +32,9 @@ const cases = [
     chipClass: "bg-emerald-900/30 text-emerald-300",
     watermarkClass: "text-emerald-500",
     title: "Live Community Hosts",
-    detail: "Maintain persistent stream identity (`npub + streamId`) across infrastructure and delivery changes."
+    subtitle: "Portable stream routing",
+    detail:
+      "Operate streams as canonical `(pubkey, streamId)` routes with WHEP-first playback and deterministic HLS fallback."
   },
   {
     icon: Coins,
@@ -37,7 +43,9 @@ const cases = [
     chipClass: "bg-amber-900/30 text-amber-300",
     watermarkClass: "text-amber-500",
     title: "Incentive-Driven Networks",
-    detail: "Use stake-gated assist and receipt-aware settlement paths to encourage contribution over leeching."
+    subtitle: "Assist economics",
+    detail:
+      "Use host policy modes, rebroadcast queue thresholds, and stake-aware assist roles to align bandwidth contribution incentives."
   },
   {
     icon: Globe,
@@ -46,7 +54,9 @@ const cases = [
     chipClass: "bg-cyan-900/30 text-cyan-300",
     watermarkClass: "text-cyan-500",
     title: "Self-Host Operators",
-    detail: "Deploy with Docker stack, configurable relays, and production hardening checks without central registry lock-in."
+    subtitle: "Production-operable stack",
+    detail:
+      "Deploy with Docker, TURN, relay, wallet-rpc, backup/restore, and gate checks while preserving protocol-level portability."
   },
   {
     icon: Users,
@@ -55,7 +65,27 @@ const cases = [
     chipClass: "bg-fuchsia-900/30 text-fuchsia-300",
     watermarkClass: "text-fuchsia-500",
     title: "Curated Communities",
-    detail: "Use guild curation, moderation tooling, and inbox/profile surfaces for relay-native community operations."
+    subtitle: "Governance + moderation",
+    detail:
+      "Apply relay-backed moderation, role assignment, aliases, and inbox/profile workflows for long-lived decentralized communities."
+  }
+];
+
+const implementationProfiles = [
+  {
+    title: "Creator Solo Stack",
+    profile: "Single origin + relay + TURN",
+    outcome: "Fast setup, direct monetization, portable identity."
+  },
+  {
+    title: "Community Cluster",
+    profile: "Shared relay set + multiple broadcasters",
+    outcome: "Moderation delegation and long-lived guild/community continuity."
+  },
+  {
+    title: "Self-Hosted Operator",
+    profile: "Production compose + gate checks + backups",
+    outcome: "Controlled runtime, predictable upgrades, and auditable deploy path."
   }
 ];
 
@@ -68,12 +98,12 @@ export default function UseCasesPage() {
           <p className="text-xs uppercase tracking-wider text-neutral-500">Use Cases</p>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight">Who this build is for</h1>
           <p className="text-neutral-300 max-w-3xl mx-auto">
-            dStream is built for operators and creators who need transport flexibility, portable identity, and open discovery.
+            dStream is built for operators and creators who need transport flexibility, portable identity, and direct payout control.
           </p>
         </header>
 
         <section className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cases.map(({ icon: Icon, title, detail, label, borderHover, chipClass, watermarkClass }) => (
+          {cases.map(({ icon: Icon, title, subtitle, detail, label, borderHover, chipClass, watermarkClass }) => (
             <article key={title} className={`relative overflow-hidden rounded-2xl border border-neutral-800/60 bg-neutral-900/50 p-6 transition ${borderHover}`}>
               <div className="pointer-events-none absolute top-0 right-0 p-4 opacity-20">
                 <Icon className={`w-24 h-24 ${watermarkClass}`} />
@@ -83,18 +113,51 @@ export default function UseCasesPage() {
                 {label}
               </div>
               <h2 className="mt-4 text-xl font-bold">{title}</h2>
+              <p className="mt-1 text-xs uppercase tracking-wider text-neutral-400">{subtitle}</p>
               <p className="mt-2 text-sm text-neutral-300 leading-relaxed">{detail}</p>
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
             </article>
           ))}
         </section>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-center space-y-4">
-          <h2 className="text-2xl font-bold">Next steps</h2>
-          <p className="text-sm text-neutral-300">Read the protocol description or jump straight into broadcasting.</p>
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
+          <h2 className="text-2xl font-bold text-center">Implementation Profiles</h2>
+          <div className="overflow-x-auto rounded-xl border border-neutral-800">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-950/60 text-neutral-400">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Profile</th>
+                  <th className="text-left px-4 py-2 font-medium">Runtime Pattern</th>
+                  <th className="text-left px-4 py-2 font-medium">Operational Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {implementationProfiles.map((row) => (
+                  <tr key={row.title} className="border-t border-neutral-800 text-neutral-200 align-top">
+                    <td className="px-4 py-2 font-semibold text-neutral-100">{row.title}</td>
+                    <td className="px-4 py-2 text-neutral-300">{row.profile}</td>
+                    <td className="px-4 py-2 text-neutral-300">{row.outcome}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
+          <h2 className="text-2xl font-bold text-center">Next steps</h2>
+          <p className="text-sm text-neutral-300 text-center">
+            Read runtime docs, configure wallet integrations, then launch a broadcast with your payout rails configured.
+          </p>
           <div className="flex flex-wrap justify-center gap-3">
             <Link href="/whitepaper" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">
               Whitepaper
+            </Link>
+            <Link href="/docs" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">
+              Technical Docs
+            </Link>
+            <Link href="/settings#wallet-integrations" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">
+              Wallet Integrations
             </Link>
             <Link href="/broadcast" className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700">
               Start Streaming

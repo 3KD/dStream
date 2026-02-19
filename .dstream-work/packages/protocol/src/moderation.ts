@@ -1,4 +1,7 @@
 import type {
+  DiscoveryModerationAction,
+  DiscoveryModerationRecord,
+  DiscoveryModerationTargetType,
   NostrEvent,
   StreamModerationAction,
   StreamModerationRecord,
@@ -11,9 +14,20 @@ import { isHex64 } from "./validate";
 
 const MOD_ACTIONS: ReadonlySet<StreamModerationAction> = new Set(["mute", "block", "clear"]);
 const MOD_ROLES: ReadonlySet<StreamModeratorRole> = new Set(["moderator", "subscriber", "none"]);
+const DISCOVERY_ACTIONS: ReadonlySet<DiscoveryModerationAction> = new Set(["hide", "show"]);
+const DISCOVERY_TARGET_TYPES: ReadonlySet<DiscoveryModerationTargetType> = new Set(["pubkey", "stream"]);
 
 function makeModerationDTag(input: { streamPubkey: string; streamId: string; targetPubkey: string }): string {
   return `${makeStreamKey(input.streamPubkey, input.streamId)}:${input.targetPubkey}`;
+}
+
+function makeDiscoveryModerationDTag(input: {
+  targetType: DiscoveryModerationTargetType;
+  targetPubkey: string;
+  targetStreamId?: string;
+}): string {
+  if (input.targetType === "pubkey") return `pubkey:${input.targetPubkey}`;
+  return `stream:${makeStreamKey(input.targetPubkey, input.targetStreamId ?? "")}`;
 }
 
 export interface BuildStreamModerationInput {
@@ -142,6 +156,90 @@ export function parseStreamModeratorRoleEvent(
     streamId: scope.streamId,
     targetPubkey,
     role,
+    createdAt: event.created_at,
+    raw: event
+  };
+}
+
+export interface BuildDiscoveryModerationInput {
+  pubkey: string;
+  createdAt: number;
+  action: DiscoveryModerationAction;
+  targetType: DiscoveryModerationTargetType;
+  targetPubkey: string;
+  targetStreamId?: string;
+  reason?: string;
+}
+
+export function buildDiscoveryModerationEvent(input: BuildDiscoveryModerationInput): Omit<NostrEvent, "id" | "sig"> {
+  if (!isHex64(input.pubkey)) throw new Error("pubkey must be 64-hex");
+  if (!DISCOVERY_ACTIONS.has(input.action)) throw new Error("action must be one of: hide, show");
+  if (!DISCOVERY_TARGET_TYPES.has(input.targetType)) throw new Error("targetType must be one of: pubkey, stream");
+  if (!isHex64(input.targetPubkey)) throw new Error("targetPubkey must be 64-hex");
+
+  const targetPubkey = input.targetPubkey.toLowerCase();
+  let targetStreamId: string | undefined;
+  if (input.targetType === "stream") {
+    targetStreamId = (input.targetStreamId ?? "").trim();
+    if (!targetStreamId) throw new Error("targetStreamId required for stream target");
+    assertStreamIdentity(targetPubkey, targetStreamId);
+  }
+
+  const tags: string[][] = [
+    ["d", makeDiscoveryModerationDTag({ targetType: input.targetType, targetPubkey, targetStreamId })],
+    ["action", input.action],
+    ["target_type", input.targetType],
+    ["target_pubkey", targetPubkey]
+  ];
+
+  if (targetStreamId) tags.push(["target_stream_id", targetStreamId]);
+  if (input.reason?.trim()) tags.push(["reason", input.reason.trim()]);
+
+  return {
+    kind: NOSTR_KINDS.APP_DISCOVERY_MOD,
+    pubkey: input.pubkey.toLowerCase(),
+    created_at: input.createdAt,
+    tags,
+    content: ""
+  };
+}
+
+export function parseDiscoveryModerationEvent(event: NostrEvent): DiscoveryModerationRecord | null {
+  if (!event || event.kind !== NOSTR_KINDS.APP_DISCOVERY_MOD) return null;
+  if (!isHex64(event.pubkey)) return null;
+
+  const actionRaw = getFirstTagValue(event.tags ?? [], "action");
+  if (!actionRaw || !DISCOVERY_ACTIONS.has(actionRaw as DiscoveryModerationAction)) return null;
+  const action = actionRaw as DiscoveryModerationAction;
+
+  const targetTypeRaw = getFirstTagValue(event.tags ?? [], "target_type");
+  if (!targetTypeRaw || !DISCOVERY_TARGET_TYPES.has(targetTypeRaw as DiscoveryModerationTargetType)) return null;
+  const targetType = targetTypeRaw as DiscoveryModerationTargetType;
+
+  const targetPubkey = getFirstTagValue(event.tags ?? [], "target_pubkey")?.toLowerCase();
+  if (!targetPubkey || !isHex64(targetPubkey)) return null;
+
+  let targetStreamId: string | undefined;
+  if (targetType === "stream") {
+    targetStreamId = (getFirstTagValue(event.tags ?? [], "target_stream_id") ?? "").trim();
+    if (!targetStreamId) return null;
+    try {
+      assertStreamIdentity(targetPubkey, targetStreamId);
+    } catch {
+      return null;
+    }
+  }
+
+  const dTag = getFirstTagValue(event.tags ?? [], "d");
+  if (!dTag || dTag !== makeDiscoveryModerationDTag({ targetType, targetPubkey, targetStreamId })) return null;
+
+  return {
+    pubkey: event.pubkey.toLowerCase(),
+    action,
+    targetType,
+    targetPubkey,
+    targetStreamId,
+    reason: getFirstTagValue(event.tags ?? [], "reason")?.trim() || undefined,
     createdAt: event.created_at,
     raw: event
   };

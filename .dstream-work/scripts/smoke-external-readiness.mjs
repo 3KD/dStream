@@ -8,6 +8,7 @@ const MAX_CHUNKS = Number.parseInt(String(process.env.EXTERNAL_MAX_CHUNKS || "40
 const REQUIRE_WSS = String(process.env.REQUIRE_WSS || "1").trim() !== "0";
 const REQUIRE_TURN = String(process.env.REQUIRE_TURN || "1").trim() !== "0";
 const ALLOW_LOCAL_HINTS = String(process.env.ALLOW_LOCAL_HINTS || "0").trim() === "1";
+const DEBUG_MATCH = String(process.env.EXTERNAL_DEBUG_MATCH || "0").trim() === "1";
 
 const REQUIRED_PATHS = ["/", "/browse", "/broadcast", "/settings"];
 const FORBIDDEN_PATTERNS = [
@@ -65,6 +66,7 @@ async function fetchText(url) {
 async function main() {
   const errors = [];
   const pages = [];
+  const scanEntries = [];
 
   console.log(`external readiness: probing ${BASE_URL}`);
 
@@ -73,6 +75,7 @@ async function main() {
     try {
       const body = await fetchText(url);
       pages.push({ path, url, body });
+      scanEntries.push({ label: `page:${path}`, body });
       console.log(`  ok ${path}`);
     } catch (err) {
       errors.push(`Path check failed (${path}): ${err?.message ?? String(err)}`);
@@ -93,18 +96,24 @@ async function main() {
   for (const chunkUrl of chunkUrls) {
     try {
       const body = await fetchText(chunkUrl);
-      chunks.push(body);
+      chunks.push({ url: chunkUrl, body });
+      scanEntries.push({ label: `chunk:${chunkUrl}`, body });
     } catch (err) {
       errors.push(`Chunk fetch failed: ${chunkUrl} (${err?.message ?? String(err)})`);
     }
   }
 
-  const combined = `${pages.map((p) => p.body).join("\n")}\n${chunks.join("\n")}`;
+  const combined = `${pages.map((p) => p.body).join("\n")}\n${chunks.map((c) => c.body).join("\n")}`;
 
   if (!ALLOW_LOCAL_HINTS) {
     for (const pattern of FORBIDDEN_PATTERNS) {
       if (pattern.test(combined)) {
-        errors.push(`Forbidden local network hint found in public bundle: ${pattern}`);
+        let detail = "";
+        if (DEBUG_MATCH) {
+          const source = scanEntries.find((entry) => pattern.test(entry.body));
+          if (source) detail = ` (source: ${source.label})`;
+        }
+        errors.push(`Forbidden local network hint found in public bundle: ${pattern}${detail}`);
       }
     }
   }

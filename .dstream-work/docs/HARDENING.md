@@ -1,6 +1,6 @@
 # Production Hardening Checklist
 
-Last updated: 2026-02-12
+Last updated: 2026-02-13
 
 This checklist is the deployment gate for production-like environments.
 
@@ -26,15 +26,19 @@ The check validates:
 - relay host safety (no loopback/private relay hosts in deploy mode),
 - relay/ICE placeholder host safety (deploy mode rejects `*.example*`),
 - ICE server config (TURN required),
-- TURN service config sanity (`TURN_PASSWORD` non-placeholder, `TURN_EXTERNAL_IP` public),
+- TURN service config sanity (`TURN_PASSWORD` non-placeholder + length>=12, `TURN_EXTERNAL_IP` public),
 - public HLS hint safety (`NEXT_PUBLIC_HLS_ORIGIN` must be `https://` + non-local in deploy mode),
 - proxy origin URL validity,
 - production devtools state (`DSTREAM_DEVTOOLS=0`),
 - Monero session secret presence/strength,
 - Monero session secret placeholder rejection (`replace*`, `change-before-public-deploy*`, `changeme*`),
 - Monero wallet RPC auth requirement when wallet RPC is enabled,
+- Monero wallet RPC credential quality in deploy mode (non-generic username, no placeholder pass, minimum pass length),
 - wallet RPC mock-origin rejection in deploy mode (`xmr-mock`),
+- wallet RPC placeholder-host rejection in deploy mode (`*.example*`),
 - Monero backend requirement in deploy mode (`DSTREAM_XMR_WALLET_RPC_ORIGIN` required),
+- explicit non-zero refund threshold policy in deploy mode (`DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`, `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES`),
+- refund policy bounds in deploy mode (`DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`, `DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT`),
 - NIP-05 policy config validity (`NEXT_PUBLIC_NIP05_POLICY`),
 - transcoder profile sanity.
 
@@ -100,8 +104,22 @@ If missing in production, tip/stake session signing fails fast instead of silent
 
 ## 6) Remaining non-code hardening
 
-Still required before public launch:
+Operational hardening is now scriptable:
 
-- Production relay fleet policy (minimum two reliable `wss://` relays).
-- Operational wallet RPC network boundaries and backup/restore policy.
-- Monitoring/alerting and incident response runbook.
+```bash
+cd /Users/erik/Projects/JRNY/.dstream-work
+SSH_TARGET=root@your-host npm run ops:ssh:key
+SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
+SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
+SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:backup
+```
+
+Restore workflow (destructive, force-gated):
+
+```bash
+DSTREAM_RESTORE_FORCE=1 SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:restore -- /opt/dstream/backups/<timestamp-or-archive>
+```
+
+Runbook:
+
+- `/Users/erik/Projects/JRNY/.dstream-work/docs/OPS_RUNBOOK.md`

@@ -162,6 +162,14 @@ function isDigits(value) {
   return /^\d+$/.test(String(value || "").trim());
 }
 
+function parseNonNegativeIntOrNull(value) {
+  const raw = String(value || "").trim();
+  if (!isDigits(raw)) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.trunc(parsed);
+}
+
 function parseProfiles(raw) {
   const entries = String(raw || "")
     .split(",")
@@ -278,6 +286,9 @@ function checkProdRules(options = {}) {
     if (strictExternal && /xmr-mock/i.test(walletOrigin)) {
       errors.push("Deploy mode forbids xmr-mock wallet RPC origin. Configure a real wallet RPC service.");
     }
+    if (strictExternal && isExampleHost(hostName(walletOrigin))) {
+      errors.push("Deploy mode forbids placeholder DSTREAM_XMR_WALLET_RPC_ORIGIN host.");
+    }
     const confirmationsRaw = readEnv("DSTREAM_XMR_CONFIRMATIONS_REQUIRED").trim();
     const confirmationsEffective = confirmationsRaw || "10";
     if (!isDigits(confirmationsEffective)) errors.push("DSTREAM_XMR_CONFIRMATIONS_REQUIRED must be digits.");
@@ -288,6 +299,81 @@ function checkProdRules(options = {}) {
     const walletPass = readEnv("DSTREAM_XMR_WALLET_RPC_PASS").trim();
     if (!walletUser || !walletPass) {
       errors.push("DSTREAM_XMR_WALLET_RPC_USER and DSTREAM_XMR_WALLET_RPC_PASS must be set when wallet RPC is enabled.");
+    } else if (strictExternal) {
+      if (!/^[a-zA-Z0-9._-]{6,64}$/.test(walletUser)) {
+        errors.push("Deploy mode requires DSTREAM_XMR_WALLET_RPC_USER format [a-zA-Z0-9._-] with length 6-64.");
+      }
+      if (/^(user|admin|root|test|produser|wallet|monero|rpc|example|changeme)$/i.test(walletUser)) {
+        errors.push("Deploy mode forbids generic DSTREAM_XMR_WALLET_RPC_USER values.");
+      }
+      if (/replace|changeme|example/i.test(walletUser)) {
+        errors.push("Deploy mode forbids placeholder DSTREAM_XMR_WALLET_RPC_USER.");
+      }
+      if (/replace|changeme|example|password/i.test(walletPass)) {
+        errors.push("Deploy mode forbids placeholder DSTREAM_XMR_WALLET_RPC_PASS.");
+      }
+      if (walletPass.length < 12) {
+        errors.push("Deploy mode requires DSTREAM_XMR_WALLET_RPC_PASS length >= 12.");
+      }
+    }
+
+    const refundMinRaw = readEnv("DSTREAM_XMR_REFUND_MIN_SERVED_BYTES").trim();
+    const refundFullRaw = readEnv("DSTREAM_XMR_REFUND_FULL_SERVED_BYTES").trim();
+    const refundMaxReceiptsRaw = readEnv("DSTREAM_XMR_REFUND_MAX_RECEIPTS").trim();
+    const refundMaxAgeRaw = readEnv("DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC").trim();
+    const refundMaxPerReceiptRaw = readEnv("DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT").trim();
+    const refundMinSessionAgeRaw = readEnv("DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC").trim();
+
+    const refundMin = parseNonNegativeIntOrNull(refundMinRaw || "0");
+    const refundFull = parseNonNegativeIntOrNull(refundFullRaw || refundMinRaw || "0");
+    const refundMaxReceipts = parseNonNegativeIntOrNull(refundMaxReceiptsRaw || "32");
+    const refundMaxAge = parseNonNegativeIntOrNull(refundMaxAgeRaw || "900");
+    const refundMaxPerReceipt = parseNonNegativeIntOrNull(refundMaxPerReceiptRaw || "536870912");
+    const refundMinSessionAge = parseNonNegativeIntOrNull(refundMinSessionAgeRaw || "30");
+
+    if (refundMin === null) errors.push("DSTREAM_XMR_REFUND_MIN_SERVED_BYTES must be non-negative digits.");
+    if (refundFull === null) errors.push("DSTREAM_XMR_REFUND_FULL_SERVED_BYTES must be non-negative digits.");
+    if (refundMaxReceipts === null || refundMaxReceipts < 1) errors.push("DSTREAM_XMR_REFUND_MAX_RECEIPTS must be >= 1.");
+    if (refundMaxAge === null || refundMaxAge < 1) errors.push("DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC must be >= 1.");
+    if (refundMaxPerReceipt === null || refundMaxPerReceipt < 1) {
+      errors.push("DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT must be >= 1.");
+    }
+    if (refundMinSessionAge === null || refundMinSessionAge < 0) {
+      errors.push("DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC must be >= 0.");
+    }
+
+    if (refundMin !== null && refundFull !== null && refundFull < refundMin) {
+      errors.push("DSTREAM_XMR_REFUND_FULL_SERVED_BYTES must be >= DSTREAM_XMR_REFUND_MIN_SERVED_BYTES.");
+    }
+
+    if (strictExternal) {
+      if (!refundMinRaw) {
+        errors.push("Deploy mode requires explicit DSTREAM_XMR_REFUND_MIN_SERVED_BYTES.");
+      } else if (refundMin === 0) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_MIN_SERVED_BYTES > 0.");
+      }
+
+      if (!refundFullRaw) {
+        errors.push("Deploy mode requires explicit DSTREAM_XMR_REFUND_FULL_SERVED_BYTES.");
+      } else if ((refundFull ?? 0) <= (refundMin ?? 0)) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_FULL_SERVED_BYTES > DSTREAM_XMR_REFUND_MIN_SERVED_BYTES.");
+      }
+
+      if (refundMaxReceipts !== null && refundMaxReceipts > 256) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_MAX_RECEIPTS <= 256.");
+      }
+      if (refundMaxAge !== null && (refundMaxAge < 60 || refundMaxAge > 86_400)) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC in range 60..86400.");
+      }
+      if (refundMinSessionAge !== null && (refundMinSessionAge < 15 || refundMinSessionAge > 86_400)) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC in range 15..86400.");
+      }
+      if (refundMaxPerReceipt !== null && refundMaxPerReceipt > 2_147_483_648) {
+        errors.push("Deploy mode requires DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT <= 2147483648.");
+      }
+    } else {
+      if (refundMin === 0) warnings.push("DSTREAM_XMR_REFUND_MIN_SERVED_BYTES is 0; refunds are effectively ungated by contribution.");
+      if ((refundFull ?? 0) === 0) warnings.push("DSTREAM_XMR_REFUND_FULL_SERVED_BYTES is 0; creditPercentBps will always saturate.");
     }
   } else {
     if (strictExternal) {
@@ -331,6 +417,8 @@ function checkProdRules(options = {}) {
       errors.push("Deploy mode requires TURN_PASSWORD when using bundled TURN service.");
     } else if (/replace-turn-password|changeme|example/i.test(turnPassword)) {
       errors.push("Deploy mode forbids placeholder TURN_PASSWORD.");
+    } else if (turnPassword.length < 12) {
+      errors.push("Deploy mode requires TURN_PASSWORD length >= 12.");
     }
   }
 

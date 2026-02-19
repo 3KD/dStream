@@ -6,6 +6,9 @@ import { parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 
+const STREAM_ANNOUNCE_LOOKBACK_SEC = 180 * 24 * 60 * 60;
+const STREAM_ANNOUNCE_HISTORY_LIMIT = 60;
+
 export function useStreamAnnounce(pubkey: string, streamId: string) {
   const [announce, setAnnounce] = useState<StreamAnnounce | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,8 +31,8 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
       kinds: [30311],
       authors: [pubkey],
       "#d": [streamId],
-      since: Math.floor(Date.now() / 1000) - 86400,
-      limit: 10
+      since: Math.floor(Date.now() / 1000) - STREAM_ANNOUNCE_LOOKBACK_SEC,
+      limit: STREAM_ANNOUNCE_HISTORY_LIMIT
     };
 
     const sub = subscribeMany(relays, [filter], {

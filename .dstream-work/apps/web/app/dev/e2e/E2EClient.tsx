@@ -13,6 +13,7 @@ import { WhipClient } from "@/lib/whip";
 import { runP2PDataChannelHandshake } from "@/lib/p2p/webrtcHandshake";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { describeOriginStreamIdRules, makeOriginStreamId } from "@/lib/origin";
+import { NOSTR_RELAY_OVERRIDE_STORAGE_KEY } from "@/lib/config";
 
 type StepStatus = "pending" | "running" | "ok" | "fail";
 
@@ -304,6 +305,33 @@ export default function E2EClient() {
   }, [pushLog]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const next = JSON.stringify(relays);
+    let previous: string | null = null;
+    let applied = false;
+
+    try {
+      previous = window.localStorage.getItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY);
+      if (previous !== next) {
+        window.localStorage.setItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY, next);
+        applied = true;
+      }
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      if (!applied) return;
+      try {
+        if (previous === null) window.localStorage.removeItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY);
+        else window.localStorage.setItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY, previous);
+      } catch {
+        // ignore
+      }
+    };
+  }, [relays]);
+
+  useEffect(() => {
     chatRxStateRef.current = chatRxStep;
   }, [chatRxStep]);
 
@@ -526,13 +554,13 @@ export default function E2EClient() {
     setWhipStep("running");
     setHlsStep("running");
     setAnnounceStep("running");
-    setChatStep("running");
+    setChatStep(integrityMode ? "pending" : "running");
     setChatRxStep("pending");
     chatRxStateRef.current = "pending";
     chatRxLoggedRef.current = false;
     watchChatReadyRef.current = false;
-    setPresenceStep("running");
-    setP2pStep("running");
+    setPresenceStep(integrityMode ? "pending" : "running");
+    setP2pStep(integrityMode ? "pending" : "running");
     setWatchStep("pending");
     setExpectedChatId(null);
     setWatchIframeSrc(null);
@@ -646,44 +674,46 @@ export default function E2EClient() {
       // ignore
     }
 
-    try {
-      const res = await publishChat();
-      setChatStep(res.ok ? "ok" : "fail");
-      if (res.ok && res.id) {
-        setExpectedChatId(res.id);
-        setChatRxStep("running");
-      } else {
+    if (!integrityMode) {
+      try {
+        const res = await publishChat();
+        setChatStep(res.ok ? "ok" : "fail");
+        if (res.ok && res.id) {
+          setExpectedChatId(res.id);
+          setChatRxStep("running");
+        } else {
+          setChatRxStep("fail");
+        }
+      } catch (e: any) {
+        setChatStep("fail");
         setChatRxStep("fail");
+        pushLog(`Chat error: ${e?.message ?? String(e)}`);
       }
-    } catch (e: any) {
-      setChatStep("fail");
-      setChatRxStep("fail");
-      pushLog(`Chat error: ${e?.message ?? String(e)}`);
-    }
 
-    try {
-      const ok = await publishPresence();
-      setPresenceStep(ok ? "ok" : "fail");
-    } catch (e: any) {
-      setPresenceStep("fail");
-      pushLog(`Presence error: ${e?.message ?? String(e)}`);
-    }
+      try {
+        const ok = await publishPresence();
+        setPresenceStep(ok ? "ok" : "fail");
+      } catch (e: any) {
+        setPresenceStep("fail");
+        pushLog(`Presence error: ${e?.message ?? String(e)}`);
+      }
 
-    try {
-      const swarmId = await deriveSwarmId({ streamPubkey: identity.pubkey, streamId });
-      pushLog(`Swarm ID: ${swarmId}`);
-      const result = await runP2PDataChannelHandshake({
-        relays,
-        streamPubkey: identity.pubkey,
-        streamId,
-        swarmId,
-        onLog: pushLog
-      });
-      setP2pStep(result.ok ? "ok" : "fail");
-      pushLog(`P2P datachannel: ${result.ok ? "ok" : `failed (${result.reason ?? "unknown"})`}`);
-    } catch (e: any) {
-      setP2pStep("fail");
-      pushLog(`P2P datachannel: failed (${e?.message ?? String(e)})`);
+      try {
+        const swarmId = await deriveSwarmId({ streamPubkey: identity.pubkey, streamId });
+        pushLog(`Swarm ID: ${swarmId}`);
+        const result = await runP2PDataChannelHandshake({
+          relays,
+          streamPubkey: identity.pubkey,
+          streamId,
+          swarmId,
+          onLog: pushLog
+        });
+        setP2pStep(result.ok ? "ok" : "fail");
+        pushLog(`P2P datachannel: ${result.ok ? "ok" : `failed (${result.reason ?? "unknown"})`}`);
+      } catch (e: any) {
+        setP2pStep("fail");
+        pushLog(`P2P datachannel: failed (${e?.message ?? String(e)})`);
+      }
     }
   }, [
     announce,

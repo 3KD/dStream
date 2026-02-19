@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+
 export type WalletRpcConfig = {
   origin: string;
   username?: string;
@@ -85,6 +87,89 @@ function authHeader(username: string, password: string): string {
   const raw = `${username}:${password}`;
   // Node: Buffer exists; browsers: this module is intended for server/route usage.
   return `Basic ${Buffer.from(raw, "utf8").toString("base64")}`;
+}
+
+function md5Hex(input: string): string {
+  return createHash("md5").update(input, "utf8").digest("hex");
+}
+
+type DigestChallenge = {
+  realm: string;
+  nonce: string;
+  opaque?: string;
+  algorithm: string;
+  qop?: string;
+};
+
+function parseDigestChallenge(headerValue: string | null): DigestChallenge | null {
+  const raw = String(headerValue || "").trim();
+  const lower = raw.toLowerCase();
+  const digestPos = lower.indexOf("digest ");
+  if (digestPos < 0) return null;
+  const attrs: Record<string, string> = {};
+  const body = raw.slice(digestPos + 7);
+  const re = /([a-zA-Z0-9_-]+)=("([^"]*)"|([^,]+))/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(body)) !== null) {
+    const key = String(match[1] || "").toLowerCase();
+    const value = String(match[3] ?? match[4] ?? "").trim();
+    if (key) attrs[key] = value;
+  }
+  const realm = String(attrs.realm || "").trim();
+  const nonce = String(attrs.nonce || "").trim();
+  if (!realm || !nonce) return null;
+  const algorithm = String(attrs.algorithm || "MD5").trim();
+  let qop = String(attrs.qop || "").trim();
+  if (qop.includes(",")) {
+    const options = qop
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    qop = options.includes("auth") ? "auth" : options[0] || "";
+  }
+  return {
+    realm,
+    nonce,
+    opaque: String(attrs.opaque || "").trim() || undefined,
+    algorithm,
+    qop: qop || undefined
+  };
+}
+
+function digestAuthHeader(opts: {
+  username: string;
+  password: string;
+  method: string;
+  uri: string;
+  challenge: DigestChallenge;
+}): string {
+  const { username, password, method, uri, challenge } = opts;
+  const nc = "00000001";
+  const cnonce = randomBytes(8).toString("hex");
+  const algo = String(challenge.algorithm || "MD5");
+  let ha1 = md5Hex(`${username}:${challenge.realm}:${password}`);
+  if (algo.toLowerCase() === "md5-sess") {
+    ha1 = md5Hex(`${ha1}:${challenge.nonce}:${cnonce}`);
+  }
+  const ha2 = md5Hex(`${method}:${uri}`);
+  const response = challenge.qop
+    ? md5Hex(`${ha1}:${challenge.nonce}:${nc}:${cnonce}:${challenge.qop}:${ha2}`)
+    : md5Hex(`${ha1}:${challenge.nonce}:${ha2}`);
+  const parts = [
+    `username="${username}"`,
+    `realm="${challenge.realm}"`,
+    `nonce="${challenge.nonce}"`,
+    `uri="${uri}"`,
+    `response="${response}"`,
+    `algorithm=${algo}`
+  ];
+  if (challenge.opaque) parts.push(`opaque="${challenge.opaque}"`);
+  if (challenge.qop) {
+    parts.push(`qop=${challenge.qop}`);
+    parts.push(`nc=${nc}`);
+    parts.push(`cnonce="${cnonce}"`);
+  }
+  return `Digest ${parts.join(", ")}`;
 }
 
 function parseDigitsString(value: any): string | null {
@@ -192,15 +277,38 @@ export class MoneroWalletRpcClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const headers: Record<string, string> = { "content-type": "application/json" };
-      if (this.username && this.password) headers.authorization = authHeader(this.username, this.password);
+      const endpoint = `${this.origin}/json_rpc`;
+      const uri = new URL(endpoint).pathname || "/json_rpc";
+      const body = JSON.stringify({ jsonrpc: "2.0", id: "0", method, params });
+      const request = async (auth?: string) => {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (auth) headers.authorization = auth;
+        return this.fetchImpl(endpoint, {
+          method: "POST",
+          headers,
+          body,
+          signal: controller.signal
+        });
+      };
 
-      const res = await this.fetchImpl(`${this.origin}/json_rpc`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ jsonrpc: "2.0", id: "0", method, params }),
-        signal: controller.signal
-      });
+      const basic = this.username && this.password ? authHeader(this.username, this.password) : "";
+      let res = await request(basic || undefined);
+      if (res.status === 401 && this.username && this.password) {
+        const challenge = parseDigestChallenge(res.headers.get("www-authenticate"));
+        if (challenge) {
+          const digest = digestAuthHeader({
+            username: this.username,
+            password: this.password,
+            method: "POST",
+            uri,
+            challenge
+          });
+          res = await request(digest);
+        }
+        if (res.status === 401) {
+          res = await request();
+        }
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");

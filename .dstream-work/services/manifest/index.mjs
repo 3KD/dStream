@@ -329,7 +329,7 @@ async function main() {
       try {
         await publish(pool, relays, event);
         published.set(key, contentHash);
-        latestManifest = { ...unsigned, id: event.id };
+        latestManifest = event;
         console.log(`[manifest] published stream=${streamPubkey.slice(0, 8)}…/${streamId} epoch=${epochStartMs} segs=${segmentEntries.length}`);
       } catch (e) {
         console.warn("[manifest] publish failed", e?.message || e);

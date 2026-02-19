@@ -3,6 +3,7 @@ import { getWebRtcIceServers } from "./webrtc";
 export type WhipPublishOptions = {
   videoMaxBitrateKbps?: number;
   videoMaxFps?: number;
+  onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
 };
 
 export class WhipClient {
@@ -18,6 +19,9 @@ export class WhipClient {
 
     this.pc = new RTCPeerConnection({
       iceServers: getWebRtcIceServers()
+    });
+    this.pc.addEventListener("connectionstatechange", () => {
+      options?.onConnectionStateChange?.(this.pc?.connectionState ?? "closed");
     });
 
     stream.getTracks().forEach((track) => {

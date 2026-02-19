@@ -5,6 +5,7 @@ import {
   buildGuildEvent,
   buildGuildMembershipEvent,
   buildGuildRoleEvent,
+  buildDiscoveryModerationEvent,
   buildStreamAnnounceEvent,
   buildStreamChatEvent,
   buildStreamManifestRootEvent,
@@ -24,6 +25,7 @@ import {
   parseGuildEvent,
   parseGuildMembershipEvent,
   parseGuildRoleEvent,
+  parseDiscoveryModerationEvent,
   parseStreamModerationEvent,
   parseStreamModeratorRoleEvent,
   parseStreamPresenceEvent,
@@ -48,8 +50,21 @@ test("stream announce: build + parse roundtrip", () => {
     image: "https://example.com/img.png",
     streaming: "https://example.com/index.m3u8",
     xmr: "4".repeat(95),
+    payments: [
+      { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM main" },
+      { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", label: "BTC tips" }
+    ],
     hostMode: "p2p_economy",
     rebroadcastThreshold: 6,
+    streamChatSlowModeSec: 8,
+    streamChatSubscriberOnly: true,
+    streamChatFollowerOnly: false,
+    discoverable: false,
+    matureContent: true,
+    viewerAllowPubkeys: ["f".repeat(64)],
+    vodArchiveEnabled: false,
+    feeWaiverGuilds: [{ guildPubkey: "c".repeat(64), guildId: "builders" }],
+    feeWaiverVipPubkeys: ["d".repeat(64)],
     manifestSignerPubkey: "b".repeat(64),
     stakeAmountAtomic: "1000",
     stakeNote: "bond",
@@ -91,8 +106,22 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(parsed.image, "https://example.com/img.png");
   assert.equal(parsed.streaming, "https://example.com/index.m3u8");
   assert.equal(parsed.xmr, "4".repeat(95));
+  assert.deepEqual(parsed.payments, [
+    { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM main" },
+    { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", network: undefined, label: "BTC tips" },
+    { asset: "xmr", address: "4".repeat(95), network: undefined, label: undefined }
+  ]);
   assert.equal(parsed.hostMode, "p2p_economy");
   assert.equal(parsed.rebroadcastThreshold, 6);
+  assert.equal(parsed.streamChatSlowModeSec, 8);
+  assert.equal(parsed.streamChatSubscriberOnly, true);
+  assert.equal(parsed.streamChatFollowerOnly, false);
+  assert.equal(parsed.discoverable, false);
+  assert.equal(parsed.matureContent, true);
+  assert.deepEqual(parsed.viewerAllowPubkeys, ["f".repeat(64)]);
+  assert.equal(parsed.vodArchiveEnabled, false);
+  assert.deepEqual(parsed.feeWaiverGuilds, [{ guildPubkey: "c".repeat(64), guildId: "builders" }]);
+  assert.deepEqual(parsed.feeWaiverVipPubkeys, ["d".repeat(64)]);
   assert.equal(parsed.manifestSignerPubkey, "b".repeat(64));
   assert.equal(parsed.stakeAmountAtomic, "1000");
   assert.equal(parsed.stakeNote, "bond");
@@ -130,6 +159,66 @@ test("stream announce: rejects wrong kind", () => {
     content: ""
   });
   assert.equal(parsed, null);
+});
+
+test("stream announce: legacy xmr tag maps into payments", () => {
+  const event: NostrEvent = {
+    kind: NOSTR_KINDS.STREAM_ANNOUNCE,
+    pubkey: STREAM_PUBKEY,
+    created_at: 999,
+    tags: [
+      ["d", STREAM_ID],
+      ["title", "Legacy"],
+      ["status", "live"],
+      ["xmr", "4".repeat(95)]
+    ],
+    content: ""
+  };
+  const parsed = parseStreamAnnounceEvent(event);
+  assert.ok(parsed);
+  assert.equal(parsed.xmr, "4".repeat(95));
+  assert.equal(parsed.discoverable, true);
+  assert.equal(parsed.matureContent, false);
+  assert.deepEqual(parsed.viewerAllowPubkeys, []);
+  assert.deepEqual(parsed.payments, [{ asset: "xmr", address: "4".repeat(95), network: undefined, label: undefined }]);
+});
+
+test("stream announce: invalid xmr values are ignored", () => {
+  const event: NostrEvent = {
+    kind: NOSTR_KINDS.STREAM_ANNOUNCE,
+    pubkey: STREAM_PUBKEY,
+    created_at: 1000,
+    tags: [
+      ["d", STREAM_ID],
+      ["title", "Invalid XMR"],
+      ["status", "live"],
+      ["xmr", "48ab...def"],
+      ["payment", "xmr", "48ab...def", "", ""]
+    ],
+    content: ""
+  };
+  const parsed = parseStreamAnnounceEvent(event);
+  assert.ok(parsed);
+  assert.equal(parsed.xmr, undefined);
+  assert.deepEqual(parsed.payments, []);
+});
+
+test("stream announce: build omits invalid xmr values", () => {
+  const unsigned = buildStreamAnnounceEvent({
+    pubkey: STREAM_PUBKEY,
+    createdAt: 1001,
+    streamId: STREAM_ID,
+    title: "Invalid XMR Build",
+    status: "live",
+    xmr: "48ab...def",
+    payments: [{ asset: "eth", address: "0x1111111111111111111111111111111111111111" }]
+  });
+
+  const xmrTag = unsigned.tags.find((tag) => tag[0] === "xmr");
+  const xmrPaymentTag = unsigned.tags.find((tag) => tag[0] === "payment" && tag[1] === "xmr");
+  assert.equal(xmrTag, undefined);
+  assert.equal(xmrPaymentTag, undefined);
+  assert.ok(unsigned.tags.some((tag) => tag[0] === "payment" && tag[1] === "eth"));
 });
 
 test("manifest root: build + parse roundtrip", () => {
@@ -326,6 +415,28 @@ test("stream subscriber role: build + parse scoped to stream", () => {
   assert.equal(parsed.pubkey, STREAM_PUBKEY);
   assert.equal(parsed.targetPubkey, VIEWER_PUBKEY);
   assert.equal(parsed.role, "subscriber");
+});
+
+test("discovery moderation: build + parse roundtrip", () => {
+  const unsigned = buildDiscoveryModerationEvent({
+    pubkey: STREAM_PUBKEY,
+    createdAt: 710,
+    action: "hide",
+    targetType: "stream",
+    targetPubkey: VIEWER_PUBKEY,
+    targetStreamId: "demo-stream",
+    reason: "policy"
+  });
+
+  assert.equal(unsigned.kind, NOSTR_KINDS.APP_DISCOVERY_MOD);
+  const parsed = parseDiscoveryModerationEvent(unsigned as NostrEvent);
+  assert.ok(parsed);
+  assert.equal(parsed.pubkey, STREAM_PUBKEY);
+  assert.equal(parsed.action, "hide");
+  assert.equal(parsed.targetType, "stream");
+  assert.equal(parsed.targetPubkey, VIEWER_PUBKEY);
+  assert.equal(parsed.targetStreamId, "demo-stream");
+  assert.equal(parsed.reason, "policy");
 });
 
 test("chat: scoped by a-tag", () => {

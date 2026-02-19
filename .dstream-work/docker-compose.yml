@@ -15,7 +15,9 @@ services:
       # Next.js reverse proxy targets (server-only).
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
       DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
-      # Monero verified tips (server-only). Defaults to the local mock wallet RPC service.
+      # Read-only VOD archive mount path exposed by API routes.
+      DSTREAM_VOD_DIR: "${DSTREAM_VOD_DIR:-/recordings}"
+      # Monero verified tips (server-only). Set to real wallet-rpc in real deployments.
       DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-}"
       DSTREAM_XMR_WALLET_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-}"
       DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
@@ -34,6 +36,8 @@ services:
         condition: service_started
     ports:
       - "${DSTREAM_WEB_PORT:-5656}:5656"
+    volumes:
+      - dstream_recordings:/recordings:ro
     restart: unless-stopped
 
   turn:
@@ -58,6 +62,7 @@ services:
     restart: unless-stopped
 
   xmr-mock:
+    profiles: ["mock-wallet"]
     image: node:20-alpine
     working_dir: /app
     command: ["node", "services/monero-mock/index.mjs"]
@@ -92,9 +97,10 @@ services:
 
   hls-init:
     image: alpine:3.19
-    command: ["sh", "-lc", "mkdir -p /hls && chmod 777 /hls"]
+    command: ["sh", "-lc", "mkdir -p /hls /recordings && chmod 777 /hls /recordings"]
     volumes:
       - dstream_hls:/hls
+      - dstream_recordings:/recordings
     restart: "no"
 
   mediamtx:
@@ -113,6 +119,7 @@ services:
       # Override with `DSTREAM_MEDIAMTX_CONFIG=/tmp/dstream-mediamtx.yml` for browsers (Firefox) that don't accept loopback ICE candidates.
       - ${DSTREAM_MEDIAMTX_CONFIG:-./infra/stream/mediamtx.yml}:/mediamtx.yml:ro
       - dstream_hls:/hls
+      - dstream_recordings:/recordings
     restart: unless-stopped
 
   transcoder:
@@ -145,3 +152,4 @@ services:
 volumes:
   relay_data:
   dstream_hls:
+  dstream_recordings:

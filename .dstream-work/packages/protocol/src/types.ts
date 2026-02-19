@@ -22,11 +22,21 @@ export const NOSTR_KINDS = {
   STREAM_MOD_ACTION: 30317,
   STREAM_MOD_ROLE: 30318,
   GUILD_MEMBERSHIP: 30319,
-  GUILD_ROLE: 30320
+  GUILD_ROLE: 30320,
+  APP_DISCOVERY_MOD: 30321
 } as const;
 
 export type StreamStatus = "live" | "ended";
 export type StreamHostMode = "p2p_economy" | "host_only";
+export const STREAM_PAYMENT_ASSETS = ["xmr", "eth", "btc", "usdt", "xrp", "usdc", "sol", "trx", "doge", "bch", "ada", "pepe"] as const;
+export type StreamPaymentAsset = (typeof STREAM_PAYMENT_ASSETS)[number];
+
+export interface StreamPaymentMethod {
+  asset: StreamPaymentAsset;
+  address: string;
+  network?: string;
+  label?: string;
+}
 
 export interface StreamCaptionTrack {
   lang: string;
@@ -44,6 +54,11 @@ export interface StreamRendition {
   codecs?: string;
 }
 
+export interface StreamGuildFeeWaiver {
+  guildPubkey: string;
+  guildId: string;
+}
+
 export interface StreamAnnounce {
   pubkey: string;
   streamId: string;
@@ -55,9 +70,19 @@ export interface StreamAnnounce {
   xmr?: string;
   hostMode?: StreamHostMode;
   rebroadcastThreshold?: number;
+  streamChatSlowModeSec?: number;
+  streamChatSubscriberOnly?: boolean;
+  streamChatFollowerOnly?: boolean;
+  discoverable: boolean;
+  matureContent: boolean;
+  viewerAllowPubkeys: string[];
+  vodArchiveEnabled?: boolean;
+  feeWaiverGuilds: StreamGuildFeeWaiver[];
+  feeWaiverVipPubkeys: string[];
   manifestSignerPubkey?: string;
   stakeAmountAtomic?: string;
   stakeNote?: string;
+  payments: StreamPaymentMethod[];
   captions: StreamCaptionTrack[];
   renditions: StreamRendition[];
   topics: string[];
@@ -170,6 +195,20 @@ export interface StreamModeratorRoleAssignment {
   streamId: string;
   targetPubkey: string;
   role: StreamModeratorRole;
+  createdAt: number;
+  raw: NostrEvent;
+}
+
+export type DiscoveryModerationAction = "hide" | "show";
+export type DiscoveryModerationTargetType = "pubkey" | "stream";
+
+export interface DiscoveryModerationRecord {
+  pubkey: string;
+  action: DiscoveryModerationAction;
+  targetType: DiscoveryModerationTargetType;
+  targetPubkey: string;
+  targetStreamId?: string;
+  reason?: string;
   createdAt: number;
   raw: NostrEvent;
 }

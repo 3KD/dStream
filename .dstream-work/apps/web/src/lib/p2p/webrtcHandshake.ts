@@ -281,13 +281,26 @@ export async function runP2PDataChannelHandshake(opts: {
     await alicePc.setLocalDescription(offer);
     if (!alicePc.localDescription) throw new Error("alice localDescription missing after setLocalDescription");
 
-    const offerOk = await aliceSignal.send(bob.pubkey, {
+    const offerPayload = {
       ...makeBase("offer"),
       sdp: alicePc.localDescription.sdp
-    } as P2PSignalPayloadV1);
-    if (!offerOk.ok) throw new Error("failed to publish offer");
+    } as P2PSignalPayloadV1;
 
-    log("P2P: alice sent offer");
+    let offerAttempt = 0;
+    while (!alicePc.remoteDescription && now() < deadline) {
+      offerAttempt += 1;
+      const offerOk = await aliceSignal.send(bob.pubkey, offerPayload);
+      if (!offerOk.ok && offerAttempt === 1) throw new Error("failed to publish offer");
+
+      if (offerAttempt === 1) log("P2P: alice sent offer");
+      else log(`P2P: alice resent offer (#${offerAttempt})`);
+
+      const waitUntil = Math.min(deadline, now() + 1200);
+      while (!alicePc.remoteDescription && now() < waitUntil) {
+        await sleep(50);
+      }
+    }
+    if (!alicePc.remoteDescription) throw new Error("timed out waiting for answer");
 
     // Give the data channel a moment to open after signaling completes.
     while (aliceDc.readyState !== "open" && now() < deadline) {

@@ -12,6 +12,7 @@ export function useStreamIntegrity(opts: {
   streamPubkey: string;
   streamId: string;
   manifestSignerPubkey: string | null | undefined;
+  fallbackManifestUrl?: string | null;
 }) {
   const relays = useMemo(() => getNostrRelays(), []);
 
@@ -73,6 +74,37 @@ export function useStreamIntegrity(opts: {
     };
   }, [relays, session]);
 
+  useEffect(() => {
+    const fallbackUrl = (opts.fallbackManifestUrl ?? "").trim();
+    if (!session || !fallbackUrl) return;
+
+    let cancelled = false;
+
+    const pollFallback = async () => {
+      try {
+        const res = await fetch(fallbackUrl, { cache: "no-store" });
+        if (!res.ok) return;
+        const event = (await res.json().catch(() => null)) as any;
+        if (!event || typeof event !== "object") return;
+        if (typeof event.id === "string" && seenIdsRef.current.has(event.id)) return;
+        if (!validateEvent(event) || !verifyEvent(event)) return;
+        const parsed = parseStreamManifestRootEvent(event);
+        if (!parsed) return;
+        session.ingestManifest(parsed);
+        if (typeof event.id === "string") seenIdsRef.current.add(event.id);
+        if (!cancelled) setSnapshot(session.snapshot());
+      } catch {
+        // ignore
+      }
+    };
+
+    void pollFallback();
+    const interval = setInterval(() => void pollFallback(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [opts.fallbackManifestUrl, session]);
+
   return { session, snapshot };
 }
-

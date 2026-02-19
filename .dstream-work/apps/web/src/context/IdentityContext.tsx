@@ -39,6 +39,7 @@ interface IdentityContextValue {
   switchLocalIdentity: (pubkey: string) => boolean;
   removeLocalIdentity: (pubkey: string) => boolean;
   setLocalIdentityLabel: (pubkey: string, label: string) => boolean;
+  exportIdentityStore: () => unknown;
   logout: () => void;
   signEvent: (unsigned: UnsignedNostrEvent) => Promise<NostrToolsEvent>;
   nip04: Nip04Cipher | null;
@@ -331,6 +332,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     setStore((prev) => ({ ...prev, active: null }));
   }, []);
 
+  const exportIdentityStore = useCallback(() => JSON.parse(JSON.stringify(store)) as IdentityStoreV2, [store]);
+
   const signEvent = useCallback(
     async (unsigned: UnsignedNostrEvent): Promise<NostrToolsEvent> => {
       if (!identity) throw new Error("No identity connected.");
@@ -385,6 +388,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       switchLocalIdentity,
       removeLocalIdentity,
       setLocalIdentityLabel,
+      exportIdentityStore,
       logout,
       signEvent,
       nip04: nip04Cipher
@@ -400,6 +404,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       switchLocalIdentity,
       removeLocalIdentity,
       setLocalIdentityLabel,
+      exportIdentityStore,
       logout,
       signEvent,
       nip04Cipher

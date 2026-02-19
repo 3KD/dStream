@@ -129,16 +129,13 @@ See `docs/DEPLOYMENT.md`, `.env.example`, and `.env.production.example`.
 Before production deploys, run:
 
 ```bash
-# Strict deploy gate (public relay/HLS hints, TURN present, devtools disabled).
-ENV_FILE=.env.production npm run harden:deploy
-
-# Verify deployed bundle does not leak local-only endpoints.
-EXTERNAL_BASE_URL=https://stream.example.com npm run smoke:external:readiness
-SSH_TARGET=root@your-host npm run smoke:prod:runtime
+EXTERNAL_BASE_URL=https://stream.example.com SSH_TARGET=root@your-host npm run gate:prod -- .env.production
 ```
 
 See `docs/HARDENING.md` for the full production gate checklist.
 See `docs/PRODUCTION_FINALIZATION.md` for the final close-out checklist.
+See `docs/OPS_RUNBOOK.md` for SSH-key hardening, healthcheck cron, and backup/restore flows.
+See `docs/MOBILE_STORE_DEPLOY.md` for App Store / Play Store release automation.
 
 ## Structure
 

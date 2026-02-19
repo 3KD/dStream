@@ -1,0 +1,6 @@
+ios_app_identifier(ENV.fetch("IOS_APP_IDENTIFIER", "stream.dstream"))
+package_name(ENV.fetch("ANDROID_APPLICATION_ID", "stream.dstream"))
+
+apple_id(ENV["APPLE_ID"]) if ENV["APPLE_ID"].to_s.strip != ""
+team_id(ENV["APPLE_DEVELOPER_TEAM_ID"]) if ENV["APPLE_DEVELOPER_TEAM_ID"].to_s.strip != ""
+itc_team_id(ENV["APP_STORE_CONNECT_TEAM_ID"]) if ENV["APP_STORE_CONNECT_TEAM_ID"].to_s.strip != ""

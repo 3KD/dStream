@@ -2,3 +2,6 @@ node_modules
 android
 ios
 .capacitor
+build
+vendor
+release.env

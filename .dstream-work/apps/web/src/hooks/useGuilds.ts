@@ -10,10 +10,6 @@ interface UseGuildsOptions {
   limit?: number;
 }
 
-function nowSec() {
-  return Math.floor(Date.now() / 1000);
-}
-
 export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,8 +24,9 @@ export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
 
     const filter: Filter = {
       kinds: [NOSTR_KINDS.GUILD],
-      since: nowSec() - 30 * 24 * 3600,
-      limit: limit * 3
+      // Guilds are long-lived discovery records, not live-presence signals.
+      // Query without a recent-time cutoff so inactive/non-broadcasting guilds remain discoverable.
+      limit: Math.max(limit * 6, 200)
     };
 
     const sub = subscribeMany(relays, [filter], {
@@ -68,4 +65,3 @@ export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
 
   return { guilds, isLoading };
 }
-

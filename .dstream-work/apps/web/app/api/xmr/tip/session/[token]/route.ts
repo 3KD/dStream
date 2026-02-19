@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { assertStreamIdentity } from "@dstream/protocol";
-import { getXmrConfirmationsRequired, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { getXmrConfirmationsRequired, getXmrTipSessionTtlSec, getXmrWalletRpcClient } from "@/lib/monero/server";
 import { verifyTipSession } from "@/lib/monero/tipSession";
 import { findLatestIncomingTip } from "@/lib/monero/tipVerify";
 
@@ -14,6 +14,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const { token } = await ctx.params;
   const session = verifyTipSession(token);
   if (!session) return new Response("invalid session token", { status: 400 });
+
+  const sessionAgeMs = Date.now() - session.createdAtMs;
+  const ttlMs = getXmrTipSessionTtlSec() * 1000;
+  if (sessionAgeMs > ttlMs) {
+    return new Response("tip session expired", { status: 410 });
+  }
 
   try {
     assertStreamIdentity(session.streamPubkey, session.streamId);
@@ -48,4 +54,3 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     return new Response(message, { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
 }
-

@@ -27,6 +27,16 @@ export function getXmrConfirmationsRequired(): number {
   return parseNonNegativeInt(process.env.DSTREAM_XMR_CONFIRMATIONS_REQUIRED, 10);
 }
 
+export function getXmrTipSessionTtlSec(): number {
+  const value = parseNonNegativeInt(process.env.DSTREAM_XMR_TIP_SESSION_TTL_SEC, 86400);
+  return Math.max(60, value);
+}
+
+export function getXmrStakeSessionTtlSec(): number {
+  const value = parseNonNegativeInt(process.env.DSTREAM_XMR_STAKE_SESSION_TTL_SEC, 3600);
+  return Math.max(60, value);
+}
+
 export function getXmrStakeSlashMinAgeSec(): number {
   return parseNonNegativeInt(process.env.DSTREAM_XMR_STAKE_SLASH_MIN_AGE_SEC, 3600);
 }

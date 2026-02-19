@@ -121,7 +121,7 @@ This is intentionally **heading-level** (JRNY has 200+ atomic checkboxes); detai
 | Payments - Monero | 7 | ✅ | Verified tipping + wallet RPC implemented (receipts optional via dashboard). |
 | Payments - Escrow | 8, 14 | ✅⚠️ | Stake gating + refund/slash settlement + multisig coordination are implemented; model remains non-contractual (not on-chain trustless escrow). |
 | Payments - Tipping UI | 7 | ✅ | Tip address + verified subaddress (QR + check) shipped. |
-| Payments - Other Methods | (explicitly out-of-scope) | ❌ | Multi-method payments are intentionally excluded by ADR `0021` (Monero-first). |
+| Payments - Other Methods | 7 | ✅⚠️ | Additional payout rails are implemented (address + wallet URI/copy flows). Verified settlement remains Monero-only (ADR `0021`). |
 | Analytics | 9 | ✅ | Implemented at `/analytics` using real presence + Monero verification telemetry. |
 | Presence | 2 | ✅ | Implemented (kind `30312`). |
 | Nostr - Events | 1 | ✅ | Publish/subscribe/sign supported. |

@@ -1,16 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { KeyRound, LogOut, Plug, Sparkles } from "lucide-react";
 import { useIdentity } from "@/context/IdentityContext";
+import { useNostrProfile } from "@/hooks/useNostrProfiles";
+import { useProfileChannels } from "@/hooks/useProfileChannels";
 import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
+
+const LIVE_STALE_SEC = 6 * 60 * 60;
 
 export function IdentityButton() {
   const { identity, isLoading, connectExtension, generateLocal, logout } = useIdentity();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"ext" | "local" | null>(null);
   const npub = identity ? pubkeyHexToNpub(identity.pubkey) : null;
+  const profileRecord = useNostrProfile(identity?.pubkey);
+  const { channels } = useProfileChannels(identity?.pubkey, { fetchLimit: 200, lookbackDays: 30 });
+
+  const displayName = useMemo(() => {
+    const profile = profileRecord?.profile;
+    if (!profile) return null;
+    const value = profile.displayName?.trim() || profile.name?.trim() || "";
+    return value || null;
+  }, [profileRecord?.profile]);
+
+  const isLive = useMemo(() => {
+    if (!identity) return false;
+    const staleCutoff = Math.floor(Date.now() / 1000) - LIVE_STALE_SEC;
+    return channels.some((channel) => channel.status === "live" && channel.createdAt >= staleCutoff);
+  }, [channels, identity]);
 
   if (isLoading) {
     return <div className="h-9 w-24 rounded-full bg-neutral-800 animate-pulse" />;
@@ -47,9 +66,12 @@ export function IdentityButton() {
           <span className="flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-full px-3 py-2 text-sm transition-colors">
             <KeyRound className="w-4 h-4 text-neutral-300" />
             {identity ? (
-              <span className="font-mono text-neutral-200">
-                {shortenText(npub ?? identity.pubkey, { head: 14, tail: 8 })}
-              </span>
+              <>
+                {displayName ? (
+                  <span className={`max-w-[10rem] truncate font-semibold ${isLive ? "text-emerald-300" : "text-blue-300"}`}>{displayName}</span>
+                ) : null}
+                <span className="font-mono text-neutral-200">{shortenText(npub ?? identity.pubkey, { head: 14, tail: 8 })}</span>
+              </>
             ) : (
               <span className="text-neutral-300">Identity</span>
             )}

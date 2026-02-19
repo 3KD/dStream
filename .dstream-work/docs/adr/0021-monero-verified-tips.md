@@ -14,9 +14,9 @@ JRNY’s vision requires:
 
 ## Decision
 
-### 1) Monero-first (no multi-chain in v1)
+### 1) Monero-first verification boundary
 
-For v1 “everything”, verified tipping is **Monero-only**. Any other payment rails (Lightning, EVM, etc.) are out of scope unless introduced by a dedicated ADR + freeze update.
+For v1 “everything”, **verified** tipping is Monero-only. Other payment rails can be exposed as address/URI payout methods, but they are not treated as verified settlement events unless covered by a dedicated ADR.
 
 ### 2) Verified tips use wallet RPC + subaddresses
 
@@ -65,4 +65,3 @@ Notes:
 - We must add unit + integration tests for:
   - receipt schema validation
   - mocked RPC verification logic
-

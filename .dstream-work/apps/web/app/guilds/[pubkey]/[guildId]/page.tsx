@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ExternalLink, Play, Plus, Save, Star, Users } from "lucide-react";
+import { ArrowLeft, ExternalLink, Play, Plus, Save, Star, Trash2, Users } from "lucide-react";
 import {
   buildGuildEvent,
   buildGuildMembershipEvent,
@@ -66,7 +66,7 @@ export default function GuildDetailPage() {
     viewerPubkey: identity?.pubkey
   });
 
-  const isOwner = !!(identity && pubkey && identity.pubkey === pubkey);
+  const isOwner = !!(identity && pubkey && identity.pubkey.trim().toLowerCase() === pubkey.trim().toLowerCase());
   const viewerIsJoined = isOwner || viewerMembershipStatus === "joined";
 
   const [editOpen, setEditOpen] = useState(false);
@@ -83,6 +83,9 @@ export default function GuildDetailPage() {
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [roleBusyByPubkey, setRoleBusyByPubkey] = useState<Record<string, boolean>>({});
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (!guild) return;
@@ -208,6 +211,89 @@ export default function GuildDetailPage() {
       setSaveError(e?.message ?? "Failed to save guild.");
     }
   }, [about, featured, guildId, identity, image, name, relays, pubkey, signEvent, topicsRaw]);
+
+  const backupGuildData = useCallback(() => {
+    if (!guild) return false;
+    try {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        guild: {
+          pubkey: guild.pubkey,
+          guildId: guild.guildId,
+          name: guild.name,
+          about: guild.about,
+          image: guild.image,
+          topics: guild.topics,
+          featuredStreams: guild.featuredStreams,
+          createdAt: guild.createdAt,
+          raw: guild.raw
+        },
+        members: members.map((member) => ({
+          pubkey: member.pubkey,
+          role: member.role,
+          joinedAt: member.joinedAt
+        }))
+      };
+      const safeGuildId = guild.guildId.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "guild";
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `dstream-guild-backup-${safeGuildId}-${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [guild, members]);
+
+  const deleteGuild = useCallback(async (withBackup: boolean) => {
+    if (!identity || !pubkey || !guild || !isOwner) return;
+    setDeleteError(null);
+    if (withBackup) {
+      const backedUp = backupGuildData();
+      if (!backedUp) {
+        setDeleteError("Failed to back up guild data. Delete cancelled.");
+        return;
+      }
+    }
+
+    const eventId = guild.raw?.id;
+    if (!eventId) {
+      setDeleteError("Guild event ID is missing from relay payload. Cannot publish delete.");
+      return;
+    }
+
+    setDeleteBusy(true);
+    try {
+      const unsigned = {
+        kind: 5,
+        pubkey: identity.pubkey,
+        created_at: nowSec(),
+        tags: [
+          ["e", eventId],
+          ["a", `30315:${guild.pubkey}:${guild.guildId}`],
+          ["k", "30315"]
+        ],
+        content: `Delete guild ${guild.guildId}`
+      };
+      const signed = await signEvent(unsigned as any);
+      const ok = await publishEvent(relays, signed as any);
+      if (!ok) {
+        setDeleteError("Failed to publish delete event to relays.");
+        return;
+      }
+      setDeleteModalOpen(false);
+      router.push("/guilds");
+    } catch (e: any) {
+      setDeleteError(e?.message ?? "Failed to publish guild delete event.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [backupGuildData, guild, identity, isOwner, pubkey, relays, router, signEvent]);
 
   const visibleRefs = useMemo(() => {
     if (!guild) return [];
@@ -457,6 +543,64 @@ export default function GuildDetailPage() {
                   </button>
                   <div className="text-xs text-neutral-500">Publishes to: {relays.join(", ")}</div>
                 </div>
+
+                <div className="pt-2 border-t border-neutral-800 space-y-2">
+                  <div className="text-xs text-neutral-500">Danger zone</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteModalOpen(true);
+                    }}
+                    disabled={deleteBusy}
+                    className="px-3 py-2 rounded-xl border border-red-800/60 bg-red-950/30 hover:bg-red-900/40 text-red-200 text-sm inline-flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Guild…
+                  </button>
+                  {deleteError && <div className="text-xs text-red-300">{deleteError}</div>}
+                </div>
+
+                {deleteModalOpen && (
+                  <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-950 p-5 space-y-4">
+                      <div className="text-lg font-semibold text-white">Delete guild?</div>
+                      <div className="text-sm text-neutral-300">
+                        Are you sure you want to delete <span className="font-semibold text-neutral-100">{guild.name}</span>?
+                      </div>
+                      <div className="text-sm text-neutral-400">
+                        Back up guild data before deleting?
+                      </div>
+                      {deleteError && <div className="text-xs text-red-300">{deleteError}</div>}
+                      <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteModalOpen(false)}
+                          disabled={deleteBusy}
+                          className="px-3 py-2 rounded-xl border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-sm text-neutral-200 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteGuild(false)}
+                          disabled={deleteBusy}
+                          className="px-3 py-2 rounded-xl border border-red-800/60 bg-red-950/30 hover:bg-red-900/40 text-sm text-red-200 disabled:opacity-50"
+                        >
+                          {deleteBusy ? "Deleting…" : "Delete Without Backup"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteGuild(true)}
+                          disabled={deleteBusy}
+                          className="px-3 py-2 rounded-xl border border-blue-800/60 bg-blue-950/30 hover:bg-blue-900/40 text-sm text-blue-200 disabled:opacity-50"
+                        >
+                          {deleteBusy ? "Deleting…" : "Back Up & Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 

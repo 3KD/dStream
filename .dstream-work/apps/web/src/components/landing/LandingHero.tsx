@@ -34,7 +34,7 @@ export function LandingHero({
       </div>
 
       <p className="text-xl text-neutral-400 max-w-2xl mx-auto">
-        <span className="text-blue-500">dStream</span> – World's first decentralized streaming protocol.
+        <span className="text-blue-500">dStream</span> – World’s first decentralized streaming protocol.
         <br />
         Freely built for people of the modern de-fi economy.
       </p>

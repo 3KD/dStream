@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff, Plus, Search, Users } from "lucide-react";
+import { EyeOff, Plus, Search, Trash2, Users } from "lucide-react";
 import { buildGuildEvent, type Guild, type GuildFeaturedStreamRef } from "@dstream/protocol";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useGuilds } from "@/hooks/useGuilds";
@@ -35,6 +35,7 @@ function parseTopics(raw: string): string[] {
 }
 
 const HIDDEN_GUILDS_STORAGE_KEY = "dstream_hidden_guilds_v1";
+const SHOW_EMPTY_GUILDS_STORAGE_KEY = "dstream_show_empty_guilds_v1";
 
 function makeGuildCanonicalKey(pubkey: string, guildId: string): string {
   return `${(pubkey ?? "").trim().toLowerCase()}:${(guildId ?? "").trim().toLowerCase()}`;
@@ -69,6 +70,10 @@ export default function GuildsPage() {
   const [createStatus, setCreateStatus] = useState<"idle" | "publishing" | "ok" | "fail">("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const [hiddenGuildKeys, setHiddenGuildKeys] = useState<string[]>([]);
+  const [showEmptyGuilds, setShowEmptyGuilds] = useState(false);
+  const [guildActionNotice, setGuildActionNotice] = useState<string | null>(null);
+  const [guildActionError, setGuildActionError] = useState<string | null>(null);
+  const [deleteBusyKey, setDeleteBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -98,6 +103,28 @@ export default function GuildsPage() {
       // ignore
     }
   }, [hiddenGuildKeys]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SHOW_EMPTY_GUILDS_STORAGE_KEY);
+      if (!raw) {
+        setShowEmptyGuilds(false);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setShowEmptyGuilds(parsed === true);
+    } catch {
+      setShowEmptyGuilds(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_EMPTY_GUILDS_STORAGE_KEY, JSON.stringify(showEmptyGuilds));
+    } catch {
+      // ignore
+    }
+  }, [showEmptyGuilds]);
 
   const hiddenGuildSet = useMemo(() => new Set(hiddenGuildKeys), [hiddenGuildKeys]);
 
@@ -133,8 +160,12 @@ export default function GuildsPage() {
       });
     }
 
+    if (!showEmptyGuilds) {
+      result = result.filter((guild) => guild.featuredStreams.length > 0);
+    }
+
     return { visibleGuilds: result, duplicateCollapseCount };
-  }, [guilds, hiddenGuildSet, search, social]);
+  }, [guilds, hiddenGuildSet, search, showEmptyGuilds, social]);
 
   const hideGuild = useCallback((guild: Guild) => {
     const key = makeGuildCanonicalKey(guild.pubkey, guild.guildId);
@@ -147,6 +178,83 @@ export default function GuildsPage() {
   const clearHiddenGuilds = useCallback(() => {
     setHiddenGuildKeys([]);
   }, []);
+
+  const hideAllVisibleGuilds = useCallback(() => {
+    const keys = visibleGuilds.map((guild) => makeGuildCanonicalKey(guild.pubkey, guild.guildId));
+    if (keys.length === 0) return;
+    setHiddenGuildKeys((prev) => {
+      const set = new Set(prev);
+      for (const key of keys) set.add(key);
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    });
+    setGuildActionNotice(`Hidden ${keys.length} guild(s) on this device.`);
+    setGuildActionError(null);
+  }, [visibleGuilds]);
+
+  const hideAllOtherGuilds = useCallback(() => {
+    if (!identity) return;
+    const keys = visibleGuilds
+      .filter((guild) => guild.pubkey !== identity.pubkey)
+      .map((guild) => makeGuildCanonicalKey(guild.pubkey, guild.guildId));
+    if (keys.length === 0) return;
+    setHiddenGuildKeys((prev) => {
+      const set = new Set(prev);
+      for (const key of keys) set.add(key);
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    });
+    setGuildActionNotice(`Hidden ${keys.length} non-owned guild(s) on this device.`);
+    setGuildActionError(null);
+  }, [identity, visibleGuilds]);
+
+  const deleteGuildOnRelays = useCallback(
+    async (guild: Guild) => {
+      if (!identity || guild.pubkey !== identity.pubkey) return;
+      const canonicalKey = makeGuildCanonicalKey(guild.pubkey, guild.guildId);
+      setGuildActionError(null);
+      setGuildActionNotice(null);
+
+      const confirmDelete = window.confirm(
+        `Delete guild "${guild.name}" (${guild.guildId}) from relays?\n\nThis publishes a Nostr deletion event for your guild event ID (where relays support deletion).`
+      );
+      if (!confirmDelete) return;
+
+      const eventId = guild.raw?.id;
+      if (!eventId) {
+        hideGuild(guild);
+        setGuildActionError("Guild event ID is missing from relay payload. Hidden locally, but relay deletion could not be published.");
+        return;
+      }
+
+      setDeleteBusyKey(canonicalKey);
+      try {
+        const aTag = `30315:${guild.pubkey}:${guild.guildId}`;
+        const unsigned = {
+          kind: 5,
+          pubkey: identity.pubkey,
+          created_at: nowSec(),
+          tags: [
+            ["e", eventId],
+            ["a", aTag],
+            ["k", "30315"]
+          ],
+          content: `Delete guild ${guild.guildId}`
+        };
+        const signed = await signEvent(unsigned as any);
+        const ok = await publishEvent(relays, signed as any);
+        if (!ok) {
+          setGuildActionError("Failed to publish delete event to relays.");
+          return;
+        }
+        hideGuild(guild);
+        setGuildActionNotice(`Delete event published for ${guild.guildId}. Hidden locally immediately.`);
+      } catch (e: any) {
+        setGuildActionError(e?.message ?? "Failed to publish guild delete event.");
+      } finally {
+        setDeleteBusyKey(null);
+      }
+    },
+    [hideGuild, identity, relays, signEvent]
+  );
 
   const addFeatured = useCallback(() => {
     setCreateError(null);
@@ -221,7 +329,7 @@ export default function GuildsPage() {
               <Users className="w-6 h-6 text-blue-500" />
               Guilds
             </h1>
-            <p className="text-sm text-neutral-400">Curated discovery published on Nostr (kind 30315).</p>
+            <p className="text-sm text-neutral-400">Curated discovery published on Nostr (kind 30315), independent of whether a guild is live right now.</p>
           </div>
           <Link className="text-sm text-neutral-300 hover:text-white" href="/">
             Home
@@ -383,6 +491,32 @@ export default function GuildsPage() {
                 {duplicateCollapseCount > 0 ? ` · ${duplicateCollapseCount} duplicates collapsed` : ""}
                 {hiddenGuildKeys.length > 0 ? ` · ${hiddenGuildKeys.length} hidden` : ""}
               </div>
+              {visibleGuilds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={hideAllVisibleGuilds}
+                  className="text-xs px-2 py-1 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-300"
+                >
+                  Hide all shown
+                </button>
+              )}
+              {identity && visibleGuilds.some((guild) => guild.pubkey !== identity.pubkey) && (
+                <button
+                  type="button"
+                  onClick={hideAllOtherGuilds}
+                  className="text-xs px-2 py-1 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-300"
+                >
+                  Hide others
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowEmptyGuilds((prev) => !prev)}
+                className="text-xs px-2 py-1 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-300"
+                title="Toggle guilds with no featured streams"
+              >
+                {showEmptyGuilds ? "Hide empty" : "Show empty"}
+              </button>
               {hiddenGuildKeys.length > 0 && (
                 <button
                   type="button"
@@ -395,8 +529,10 @@ export default function GuildsPage() {
             </div>
           </div>
           <div className="text-xs text-neutral-500">
-            Guild events are relay records. “Hide” removes repeated entries from this device only.
+            Guild events are relay records. Empty guilds are hidden by default. “Hide” removes repeated entries from this device only.
           </div>
+          {guildActionNotice && <div className="text-xs text-emerald-300">{guildActionNotice}</div>}
+          {guildActionError && <div className="text-xs text-red-300">{guildActionError}</div>}
 
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -415,6 +551,9 @@ export default function GuildsPage() {
                 const byLabel = alias ?? (npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(g.pubkey, { head: 14, tail: 8 }));
                 const href = `/guilds/${pubkeyParam}/${encodeURIComponent(g.guildId)}`;
                 const canonicalKey = makeGuildCanonicalKey(g.pubkey, g.guildId);
+                const isOwner =
+                  !!identity &&
+                  identity.pubkey.trim().toLowerCase() === g.pubkey.trim().toLowerCase();
 
                 return (
                   <article
@@ -428,7 +567,14 @@ export default function GuildsPage() {
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="font-semibold text-neutral-100 truncate">{g.name}</div>
+                            <div className="font-semibold text-neutral-100 truncate inline-flex items-center gap-2">
+                              <span className="truncate">{g.name}</span>
+                              {isOwner && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-200">
+                                  Owner
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-neutral-500 font-mono truncate">
                               by {byLabel} · <span className="text-neutral-600">{g.guildId}</span>
                             </div>
@@ -448,9 +594,28 @@ export default function GuildsPage() {
                       </div>
                     </Link>
                     <div className="px-4 pb-4 pt-1 flex items-center justify-between gap-3">
-                      <Link href={href} className="text-xs text-blue-300 hover:text-blue-200">
-                        Open guild
-                      </Link>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link href={href} className="text-xs text-blue-300 hover:text-blue-200">
+                          Open guild
+                        </Link>
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => void deleteGuildOnRelays(g)}
+                            disabled={deleteBusyKey === canonicalKey}
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-red-800/60 bg-red-950/30 hover:bg-red-900/40 text-red-200 disabled:opacity-50"
+                            title="Publish relay delete event for this guild"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            {deleteBusyKey === canonicalKey ? "Deleting…" : "Delete"}
+                          </button>
+                        )}
+                        {!isOwner && identity && (
+                          <span className="text-[11px] text-neutral-500">
+                            Not owner identity
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => hideGuild(g)}

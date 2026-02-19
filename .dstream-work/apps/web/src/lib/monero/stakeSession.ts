@@ -17,8 +17,9 @@ function hmac(payloadJson: string): string {
   return crypto.createHmac("sha256", getXmrSessionSecret()).update(payloadJson, "utf8").digest("base64url");
 }
 
-export function makeStakeLabel(session: { streamPubkey: string; streamId: string; nonce: string }): string {
-  return `dstream_stake:${session.streamPubkey}:${session.streamId}:${session.nonce}`;
+export function makeStakeLabel(session: { streamPubkey: string; streamId: string; viewerPubkey?: string; nonce: string }): string {
+  const viewerShort = session.viewerPubkey ? session.viewerPubkey.slice(0, 16) : "viewer";
+  return `dstream_stake:${session.streamPubkey}:${session.streamId}:${viewerShort}:${session.nonce}`;
 }
 
 export function signStakeSession(payload: StakeSessionV1): string {

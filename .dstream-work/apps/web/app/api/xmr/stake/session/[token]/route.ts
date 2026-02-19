@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { assertStreamIdentity } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
-import { getXmrConfirmationsRequired, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { getXmrConfirmationsRequired, getXmrStakeSessionTtlSec, getXmrWalletRpcClient } from "@/lib/monero/server";
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
+import { expireStakeSession, getStakeSessionRecord, markStakeSessionObserved } from "@/lib/monero/stakeSessionStore";
 import { getStakeTotals } from "@/lib/monero/stakeVerify";
 
 export const runtime = "nodejs";
@@ -67,12 +68,25 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
 
   try {
     const confirmationsRequired = getXmrConfirmationsRequired();
+    const ttlMs = getXmrStakeSessionTtlSec() * 1000;
+    const nowMs = Date.now();
+    const sessionRecord = getStakeSessionRecord(token);
     const totals = await getStakeTotals({
       client,
       accountIndex: session.accountIndex,
       addressIndex: session.addressIndex,
       confirmationsRequired
     });
+
+    if (totals.transferCount > 0) {
+      markStakeSessionObserved(token, totals.lastObservedAtMs ?? nowMs);
+    } else {
+      const observedAtMs = sessionRecord?.lastObservedAtMs ?? null;
+      if (observedAtMs === null && nowMs - session.createdAtMs > ttlMs) {
+        expireStakeSession(token);
+        return new Response("stake session expired", { status: 410 });
+      }
+    }
 
     return Response.json({
       ok: true,
@@ -82,6 +96,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
       accountIndex: session.accountIndex,
       addressIndex: session.addressIndex,
       confirmationsRequired,
+      sessionExpiresAtMs:
+        (sessionRecord?.lastObservedAtMs ?? null) === null ? session.createdAtMs + ttlMs : null,
+      sessionSettledAtMs: sessionRecord?.settledAtMs ?? null,
       ...totals
     });
   } catch (err: any) {
@@ -89,4 +106,3 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     return new Response(message, { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
 }
-

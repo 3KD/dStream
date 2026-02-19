@@ -41,7 +41,9 @@ Last updated: 2026-02-12
 - ✅ Escrow v3 multisig coordination shipped: session + participant joins + coordinator make/exchange/import/sign/submit routes under `/api/xmr/escrow/session/*` plus dashboard control surface (`/dashboard`)
 - ✅ Real-wallet escrow-v3 smoke auto-enables Monero multisig experimental mode for ephemeral wallets via `monero-wallet-cli` before exchange.
 - ✅ Analytics dashboard shipped: `/analytics` (real presence + Monero tip/stake telemetry)
+- ✅ Multi-asset payout rails shipped in broadcast/watch/settings (XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE) with copy + wallet URI guidance; Monero remains the only verified settlement backend.
 - ✅ Escrow trust boundary remains explicit: current model is multisig coordination + origin-enforced settlement, not on-chain contract escrow
+- ✅ Mobile store-release automation shipped: Fastlane lanes + signing/env checks + scripted release commands for TestFlight/App Store and Play internal/production (`docs/MOBILE_STORE_DEPLOY.md`)
 
 ## ADR implementation checklist
 
@@ -78,6 +80,6 @@ Last updated: 2026-02-12
 ## Known open decisions (potential drift)
 
 - P2P discovery parity: tracker/WebTorrent support is optional future work (ADR 0019); decide later if a second backend is worth it.
-- ADR 0029 policy constants still require final production tuning:
-  - public values for refund thresholds and receipt windows,
-  - operator policy on fee-credit redemption accounting outside stake refunds.
+- ADR 0029 operator redemption accounting is still product-policy dependent:
+  - `creditPercentBps` is now computed and hardened by deploy gate thresholds,
+  - how credits map to external billing/ledger systems remains an operator integration decision.

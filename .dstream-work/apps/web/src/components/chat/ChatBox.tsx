@@ -8,19 +8,39 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
 import { parseChatCommand } from "@/lib/chatCommands";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
+import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import { useNostrProfile, useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { ReportDialog } from "@/components/moderation/ReportDialog";
+import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
+
+interface ChatReportTarget {
+  type: ReportTargetType;
+  targetPubkey: string;
+  targetStreamId: string;
+  targetMessageId?: string;
+  targetMessagePreview?: string;
+  summary: string;
+}
 
 export function ChatBox({
   streamPubkey,
   streamId,
-  onMessageCountChange
+  slowModeSec,
+  subscriberOnly,
+  followerOnly,
+  onMessageCountChange,
+  className
 }: {
   streamPubkey: string;
   streamId: string;
+  slowModeSec?: number;
+  subscriberOnly?: boolean;
+  followerOnly?: boolean;
   onMessageCountChange?: (count: number) => void;
+  className?: string;
 }) {
   const { identity, signEvent } = useIdentity();
   const social = useSocial();
@@ -32,6 +52,12 @@ export function ChatBox({
   const [moderationBusyByPubkey, setModerationBusyByPubkey] = useState<Record<string, boolean>>({});
   const [roleBusyByPubkey, setRoleBusyByPubkey] = useState<Record<string, boolean>>({});
   const [subscriberBusyByPubkey, setSubscriberBusyByPubkey] = useState<Record<string, boolean>>({});
+  const [reportTarget, setReportTarget] = useState<ChatReportTarget | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
+
+  const lastMessageSentAtRef = useRef<number>(0);
 
   const moderation = useStreamModeration({
     streamPubkey,
@@ -42,6 +68,23 @@ export function ChatBox({
 
   const selfProfile = useNostrProfile(identity?.pubkey ?? null);
   const isOwner = !!(identity && identity.pubkey === streamPubkey);
+  const viewerPubkey = identity?.pubkey?.toLowerCase() ?? null;
+  const isViewerModerator = !!(viewerPubkey && moderation.moderators.has(viewerPubkey));
+  const isViewerSubscriber = !!(viewerPubkey && moderation.subscribers.has(viewerPubkey));
+  const isViewerFollower = !!(viewerPubkey && social.isFavoriteCreator(streamPubkey));
+  const bypassChatPolicy = isOwner || isViewerModerator;
+  const resolvedSlowModeSec = Number.isInteger(slowModeSec) && (slowModeSec ?? 0) > 0 ? (slowModeSec as number) : 0;
+  const slowModeEnabled = resolvedSlowModeSec > 0 && !bypassChatPolicy;
+  const chatPolicyBlockReason = useMemo(() => {
+    if (!identity) return null;
+    if (subscriberOnly && !bypassChatPolicy && !isViewerSubscriber) {
+      return "Subscriber-only chat is enabled for this stream.";
+    }
+    if (followerOnly && !bypassChatPolicy && !isViewerFollower) {
+      return "Follower-only chat is enabled. Favorite this creator to chat.";
+    }
+    return null;
+  }, [bypassChatPolicy, followerOnly, identity, isViewerFollower, isViewerSubscriber, subscriberOnly]);
   const nip05GateSatisfied = nip05Policy !== "require" || selfProfile?.nip05Verified === true;
   const canModerate = moderation.canModerate && nip05GateSatisfied;
   const canManageRoles = isOwner && nip05GateSatisfied;
@@ -152,10 +195,71 @@ export function ChatBox({
     }, 3000);
   }, []);
 
+  const closeReportDialog = useCallback(() => {
+    if (reportBusy) return;
+    setReportTarget(null);
+    setReportError(null);
+  }, [reportBusy]);
+
+  const handleSubmitReport = useCallback(
+    async (input: { reasonCode: ReportReasonCode; note: string }) => {
+      if (!reportTarget) return;
+      setReportBusy(true);
+      setReportError(null);
+      try {
+        const proof = await buildSignedScopeProof(signEvent as any, identity?.pubkey ?? null, "report_submit", [["stream", `${streamPubkey}--${streamId}`]]);
+        await submitModerationReport({
+          report: {
+            reasonCode: input.reasonCode,
+            note: input.note,
+            reporterPubkey: identity?.pubkey ?? undefined,
+            targetType: reportTarget.type,
+            targetPubkey: reportTarget.targetPubkey,
+            targetStreamId: reportTarget.targetStreamId,
+            targetMessageId: reportTarget.targetMessageId,
+            targetMessagePreview: reportTarget.targetMessagePreview,
+            contextPage: "watch_chat",
+            contextUrl: typeof window !== "undefined" ? window.location.href : undefined
+          },
+          reporterProofEvent: proof
+        });
+        setReportTarget(null);
+        setReportNotice("Report submitted. Operators can review it in Moderation.");
+        setTimeout(() => {
+          setReportNotice((current) => (current === "Report submitted. Operators can review it in Moderation." ? null : current));
+        }, 3500);
+      } catch (error: any) {
+        setReportError(error?.message ?? "Failed to submit report.");
+      } finally {
+        setReportBusy(false);
+      }
+    },
+    [identity?.pubkey, reportTarget, signEvent, streamId, streamPubkey]
+  );
+
   const handleSendInput = useCallback(
     async (input: string) => {
+      if (chatPolicyBlockReason) {
+        showNotice(chatPolicyBlockReason);
+        return false;
+      }
+      if (slowModeEnabled) {
+        const elapsedSec = (Date.now() - lastMessageSentAtRef.current) / 1000;
+        if (elapsedSec < resolvedSlowModeSec) {
+          showNotice(`Slow mode: wait ${Math.ceil(resolvedSlowModeSec - elapsedSec)}s.`);
+          return false;
+        }
+      }
+
       const parsed = parseChatCommand(input);
-      if (!parsed) return await sendMessage(input);
+      if (!parsed) {
+        const ok = await sendMessage(input);
+        if (!ok) {
+          showNotice("Failed to publish chat message to relays. Check relay connectivity in Settings → Nostr relays.");
+        }
+        if (ok && slowModeEnabled) lastMessageSentAtRef.current = Date.now();
+        return ok;
+      }
       if (!parsed.ok) {
         showNotice(parsed.error);
         return false;
@@ -184,6 +288,7 @@ export function ChatBox({
           content: command.message,
           observerPubkeys: observers
         });
+        if (ok && slowModeEnabled) lastMessageSentAtRef.current = Date.now();
         if (!ok) showNotice("Failed to send whisper.");
         return ok;
       }
@@ -239,11 +344,23 @@ export function ChatBox({
       showNotice("Unblocked locally.");
       return true;
     },
-    [canModerate, canWhisper, moderation, sendMessage, sendWhisper, showNotice, social, streamPubkey]
+    [
+      canModerate,
+      canWhisper,
+      chatPolicyBlockReason,
+      moderation,
+      resolvedSlowModeSec,
+      sendMessage,
+      sendWhisper,
+      showNotice,
+      slowModeEnabled,
+      social,
+      streamPubkey
+    ]
   );
 
   return (
-    <div className="flex flex-col h-full bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+    <div className={`flex flex-col h-full min-h-0 bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden ${className ?? ""}`}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm">Chat</span>
@@ -260,50 +377,86 @@ export function ChatBox({
           Moderation and role management require a verified NIP-05 identity on this deployment.
         </div>
       )}
+      {chatPolicyBlockReason && (
+        <div className="px-3 py-2 text-xs text-amber-200 border-b border-neutral-800 bg-amber-950/20">{chatPolicyBlockReason}</div>
+      )}
+      {slowModeEnabled && (
+        <div className="px-3 py-2 text-xs text-neutral-300 border-b border-neutral-800 bg-neutral-950/30">
+          Slow mode enabled: one message every {resolvedSlowModeSec}s.
+        </div>
+      )}
       {commandNotice && <div className="px-3 py-2 text-xs text-blue-200 border-b border-neutral-800 bg-blue-950/20">{commandNotice}</div>}
+      {reportNotice && <div className="px-3 py-2 text-xs text-emerald-200 border-b border-neutral-800 bg-emerald-950/20">{reportNotice}</div>}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
-        {visibleMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
-        ) : (
-          <div className="py-2">
-            {visibleMessages.map((m) => {
-              const isWhisper = m.visibility === "whisper";
-              const recipients = (m.whisperRecipients ?? []).filter(Boolean);
-              let whisperLabel: string | undefined;
-              if (isWhisper) {
-                const uniqueRecipients = Array.from(new Set(recipients));
-                const toLabel = uniqueRecipients
-                  .slice(0, 3)
-                  .map((value) => pubkeyHexToNpub(value) ?? `${value.slice(0, 8)}…`)
-                  .join(", ");
-                whisperLabel = uniqueRecipients.length > 0 ? `to ${toLabel}` : "encrypted message";
-              }
-              return (
-                <ChatMessage
-                  key={m.id ?? `${m.pubkey}:${m.createdAt}:${m.content}`}
-                  msg={m}
-                  isBroadcaster={m.pubkey === streamPubkey}
-                  canModerate={canModerate}
-                  canManageRoles={canManageRoles}
-                  isModerator={moderation.moderators.has(m.pubkey)}
-                  isSubscriber={moderation.subscribers.has(m.pubkey)}
-                  isVerified={profilesByPubkey[m.pubkey]?.nip05Verified === true}
-                  isWhisper={isWhisper}
-                  whisperLabel={whisperLabel}
-                  remoteMuted={moderation.remoteMuted.has(m.pubkey)}
-                  remoteBlocked={moderation.remoteBlocked.has(m.pubkey)}
-                  moderationBusy={!!moderationBusyByPubkey[m.pubkey]}
-                  roleBusy={!!roleBusyByPubkey[m.pubkey]}
-                  subscriberRoleBusy={!!subscriberBusyByPubkey[m.pubkey]}
-                  onModerationAction={(action) => void handleModerationAction(m.pubkey, action)}
-                  onToggleModerator={() => void handleToggleModerator(m.pubkey)}
-                  onToggleSubscriber={() => void handleToggleSubscriber(m.pubkey)}
-                />
-              );
-            })}
-          </div>
-        )}
+      <div className="relative flex-1 min-h-0">
+        <div ref={scrollRef} className="absolute inset-0 overflow-y-auto min-h-0">
+          {visibleMessages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
+          ) : (
+            <div className="py-2">
+              {visibleMessages.map((m) => {
+                const isWhisper = m.visibility === "whisper";
+                const recipients = (m.whisperRecipients ?? []).filter(Boolean);
+                const profileRecord = profilesByPubkey[m.pubkey];
+                const profileName = profileRecord?.profile.displayName?.trim() || profileRecord?.profile.name?.trim() || null;
+                let whisperLabel: string | undefined;
+                if (isWhisper) {
+                  const uniqueRecipients = Array.from(new Set(recipients));
+                  const toLabel = uniqueRecipients
+                    .slice(0, 3)
+                    .map((value) => pubkeyHexToNpub(value) ?? `${value.slice(0, 8)}…`)
+                    .join(", ");
+                  whisperLabel = uniqueRecipients.length > 0 ? `to ${toLabel}` : "encrypted message";
+                }
+                return (
+                  <ChatMessage
+                    key={m.id ?? `${m.pubkey}:${m.createdAt}:${m.content}`}
+                    msg={m}
+                    isBroadcaster={m.pubkey === streamPubkey}
+                    canModerate={canModerate}
+                    canManageRoles={canManageRoles}
+                    profileName={profileName}
+                    isModerator={moderation.moderators.has(m.pubkey)}
+                    isSubscriber={moderation.subscribers.has(m.pubkey)}
+                    isVerified={profileRecord?.nip05Verified === true}
+                    isWhisper={isWhisper}
+                    whisperLabel={whisperLabel}
+                    remoteMuted={moderation.remoteMuted.has(m.pubkey)}
+                    remoteBlocked={moderation.remoteBlocked.has(m.pubkey)}
+                    moderationBusy={!!moderationBusyByPubkey[m.pubkey]}
+                    roleBusy={!!roleBusyByPubkey[m.pubkey]}
+                    subscriberRoleBusy={!!subscriberBusyByPubkey[m.pubkey]}
+                    reportBusy={reportBusy}
+                    onModerationAction={(action) => void handleModerationAction(m.pubkey, action)}
+                    onToggleModerator={() => void handleToggleModerator(m.pubkey)}
+                    onToggleSubscriber={() => void handleToggleSubscriber(m.pubkey)}
+                    onReportUser={() => {
+                      const npub = pubkeyHexToNpub(m.pubkey) ?? m.pubkey;
+                      setReportTarget({
+                        type: "user",
+                        targetPubkey: m.pubkey,
+                        targetStreamId: streamId,
+                        summary: `Report user ${npub}`
+                      });
+                    }}
+                    onReportMessage={() => {
+                      const messageId = m.id ?? `${m.pubkey}:${m.createdAt}:${m.content.slice(0, 16)}`;
+                      setReportTarget({
+                        type: "message",
+                        targetPubkey: m.pubkey,
+                        targetStreamId: streamId,
+                        targetMessageId: messageId,
+                        targetMessagePreview: m.content.slice(0, 280),
+                        summary: `Report message from ${pubkeyHexToNpub(m.pubkey) ?? m.pubkey}`
+                      });
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-neutral-900 to-transparent" />
       </div>
 
       {!identity ? (
@@ -311,8 +464,22 @@ export function ChatBox({
           Connect an identity to chat.
         </div>
       ) : (
-        <ChatInput onSend={handleSendInput} disabled={!canSend} />
+        <ChatInput
+          onSend={handleSendInput}
+          disabled={!canSend || !!chatPolicyBlockReason}
+          placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
+        />
       )}
+
+      <ReportDialog
+        open={!!reportTarget}
+        busy={reportBusy}
+        title="Report Chat Content"
+        targetSummary={reportTarget?.summary ?? ""}
+        error={reportError}
+        onClose={closeReportDialog}
+        onSubmit={handleSubmitReport}
+      />
     </div>
   );
 }

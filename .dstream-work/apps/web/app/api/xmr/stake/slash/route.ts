@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { assertStreamIdentity } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import { getXmrStakeSlashMinAgeSec, getXmrWalletRpcAccountIndex, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { markStakeSessionSettledByAddress } from "@/lib/monero/stakeSessionStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,6 +123,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       addressIndex,
       address: destinationAddress
     });
+    const settledSessions = markStakeSessionSettledByAddress({
+      streamPubkey,
+      streamId,
+      accountIndex,
+      addressIndex
+    });
 
     return Response.json({
       ok: true,
@@ -131,6 +138,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       txids: sweep.txids,
       addressIndex,
       destinationAddress,
+      settledSessions,
       slashMinAgeSec,
       lastObservedAtMs: lastTimestampSec > 0 ? lastTimestampSec * 1000 : null
     });

@@ -26,7 +26,7 @@ Current highest-fidelity implementation remains:
 
 - origin-enforced, evidence-backed settlement (ADR `0025`).
 
-Future escrow-v3 work can pursue non-custodial multisig coordination, but this ADR does not claim contract-level trustlessness.
+Future escrow-v3 work can pursue multisig coordination without operator key storage, but this ADR does not claim contract-level trustlessness.
 
 ### 2) Wallet capability profiles are canonical
 

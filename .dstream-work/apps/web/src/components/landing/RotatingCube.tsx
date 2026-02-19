@@ -69,6 +69,11 @@ interface RotatingCubeProps {
   onWordChange?: (word: string) => void;
 }
 
+const ROTATE_TRANSITION_MS = 1200;
+const LIFT_TOTAL_MS = 2500;
+const WORD_CHANGE_INTERVAL_MS = 3900;
+const INITIAL_WORD_HOLD_MS = Math.max(WORD_CHANGE_INTERVAL_MS - ROTATE_TRANSITION_MS, 0);
+
 export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   const [rotationCount, setRotationCount] = useState(0);
   const [isLifted, setIsLifted] = useState(false);
@@ -104,22 +109,26 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
 
       setIsLifted(true);
 
-      setTimeout(() => {
+      rotateTimer = setTimeout(() => {
         rotationCountRef.current += 1;
         setRotationCount(rotationCountRef.current);
-      }, 1200);
+      }, ROTATE_TRANSITION_MS);
 
-      setTimeout(() => {
+      liftTimer = setTimeout(() => {
         setIsLifted(false);
-      }, 2500);
+      }, LIFT_TOTAL_MS);
+
+      cycleTimer = setTimeout(runCycle, WORD_CHANGE_INTERVAL_MS);
     };
 
-    const timeout = setTimeout(runCycle, 1000);
-    const interval = setInterval(runCycle, 3900);
+    let cycleTimer: ReturnType<typeof setTimeout> | null = setTimeout(runCycle, INITIAL_WORD_HOLD_MS);
+    let rotateTimer: ReturnType<typeof setTimeout> | null = null;
+    let liftTimer: ReturnType<typeof setTimeout> | null = null;
 
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
+      if (cycleTimer) clearTimeout(cycleTimer);
+      if (rotateTimer) clearTimeout(rotateTimer);
+      if (liftTimer) clearTimeout(liftTimer);
     };
   }, []);
 
@@ -163,7 +172,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
         className="machined-cube"
         style={{
           transform: `translateZ(${liftZ}) rotateX(${rotateX}deg)`,
-          transition: "transform 1.2s ease-in-out"
+          transition: `transform ${ROTATE_TRANSITION_MS}ms ease-in-out`
         }}
       >
         {faces.map((word, i) => {
@@ -187,7 +196,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
               style={{
                 backgroundColor: "#0a0a0a",
                 transition: "opacity 0s, background 0.2s, box-shadow 0.2s",
-                transitionDelay: isLeaving ? "1.1s" : "0s"
+                transitionDelay: isLeaving ? `${ROTATE_TRANSITION_MS - 100}ms` : "0ms"
               }}
             >
               <span className="machined-text flex flex-row items-center whitespace-nowrap gap-3 md:gap-5">

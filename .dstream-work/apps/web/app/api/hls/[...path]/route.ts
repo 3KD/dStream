@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { authorizePlaybackProxyRequest } from "@/lib/playback-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,9 +13,16 @@ function normalizeOrigin(input: string | undefined, fallback: string): string {
 const PROXY_ORIGIN = normalizeOrigin(process.env.DSTREAM_HLS_PROXY_ORIGIN, "http://localhost:8888");
 
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response> {
+  const authz = authorizePlaybackProxyRequest(pathSegments, req.nextUrl.searchParams.get("access"));
+  if (!authz.ok) {
+    return new Response(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+  }
+
   const base = PROXY_ORIGIN.endsWith("/") ? PROXY_ORIGIN : `${PROXY_ORIGIN}/`;
   const target = new URL(pathSegments.map((s) => encodeURIComponent(s)).join("/"), base);
-  target.search = req.nextUrl.search;
+  const upstreamParams = new URLSearchParams(req.nextUrl.search);
+  upstreamParams.delete("access");
+  target.search = upstreamParams.toString();
 
   const headers = new Headers(req.headers);
   headers.delete("host");

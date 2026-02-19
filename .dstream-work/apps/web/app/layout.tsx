@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { GlobalQuickPlayDock } from "@/components/player/GlobalQuickPlayDock";
 
 const FAVICON_URL = "/logo_favicon_upright.png?v=2";
 
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">{children}</div>
             <SiteFooter />
+            <GlobalQuickPlayDock />
           </div>
         </Providers>
       </body>

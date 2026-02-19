@@ -16,6 +16,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
   const [viewerPubkeys, setViewerPubkeys] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const lastSeenRef = useRef<Map<string, number>>(new Map());
+  const lastEventCreatedAtRef = useRef<Map<string, number>>(new Map());
   const firstSeenRef = useRef<Map<string, number>>(new Map());
 
   const recompute = useCallback(() => {
@@ -44,6 +45,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
       if (last < cutoff) {
         lastSeenRef.current.delete(pk);
         firstSeenRef.current.delete(pk);
+        lastEventCreatedAtRef.current.delete(pk);
         changed = true;
       }
     }
@@ -58,6 +60,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
     setViewerCount(0);
     setViewerPubkeys([]);
     lastSeenRef.current.clear();
+    lastEventCreatedAtRef.current.clear();
     firstSeenRef.current.clear();
 
     const filter: Filter = {
@@ -72,15 +75,14 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
         const parsed = parseStreamPresenceEvent(event, { streamPubkey, streamId });
         if (!parsed) return;
 
-        const prev = lastSeenRef.current.get(parsed.pubkey) ?? 0;
-        if (parsed.createdAt <= prev) return;
-        const firstSeenPrev = firstSeenRef.current.get(parsed.pubkey);
-        if (typeof firstSeenPrev === "number") {
-          if (parsed.createdAt < firstSeenPrev) firstSeenRef.current.set(parsed.pubkey, parsed.createdAt);
-        } else {
-          firstSeenRef.current.set(parsed.pubkey, parsed.createdAt);
-        }
-        lastSeenRef.current.set(parsed.pubkey, parsed.createdAt);
+        const pubkey = parsed.pubkey.trim().toLowerCase();
+        const prevEventCreatedAt = lastEventCreatedAtRef.current.get(pubkey) ?? 0;
+        if (parsed.createdAt <= prevEventCreatedAt) return;
+
+        const now = Math.floor(Date.now() / 1000);
+        lastEventCreatedAtRef.current.set(pubkey, parsed.createdAt);
+        if (!firstSeenRef.current.has(pubkey)) firstSeenRef.current.set(pubkey, now);
+        lastSeenRef.current.set(pubkey, now);
         recompute();
         prune();
       },

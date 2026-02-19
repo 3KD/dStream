@@ -24,6 +24,7 @@ See `.env.example`. Quick reference:
 
 **Client/public**
 - `NEXT_PUBLIC_NOSTR_RELAYS`: relay list (CSV or JSON array).
+- `NEXT_PUBLIC_DISCOVERY_OPERATOR_PUBKEYS`: optional 64-hex pubkey allowlist for operator-level hide/restore controls on official discovery surfaces.
 - `NEXT_PUBLIC_HLS_ORIGIN`: base URL for the announce “streaming hint”.
 - `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`: ICE server URLs (CSV or JSON array). For authenticated TURN, use JSON objects with `urls`, `username`, `credential`.
 - `NEXT_PUBLIC_NIP05_POLICY`: `off|badge|require` policy for NIP-05 UI enforcement.
@@ -54,10 +55,14 @@ See `.env.example`. Quick reference:
 - `DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT`: anti-abuse cap for a single receipt payload (default `536870912`).
 - `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`: minimum stake-session age before refund can settle (default `30`).
 - `DSTREAM_XMR_STAKE_SLASH_MIN_AGE_SEC`: minimum age since latest stake transfer before slash is allowed (default `3600`).
+- `DSTREAM_XMR_TIP_SESSION_TTL_SEC`: max age for tip session tokens in seconds (default `86400`).
+- `DSTREAM_XMR_STAKE_SESSION_TTL_SEC`: max age for no-funds stake sessions in seconds (default `3600`).
 - `DSTREAM_XMR_SESSION_SECRET`: HMAC secret for tip/stake session tokens (**required in production**).
 - `DSTREAM_XMR_ESCROW_SESSION_TTL_SEC`: escrow-v3 multisig session TTL in seconds (default `3600`).
 - `DSTREAM_XMR_WALLET_FILE_PASS`: wallet-file password used by real-wallet init flow.
 - `DSTREAM_XMR_RECEIVER_WALLET_NAME` / `DSTREAM_XMR_SENDER_WALLET_NAME`: wallet filenames for real-wallet stack bootstrap.
+- `DSTREAM_XMR_INIT_TIMEOUT_SECS`: wallet init wait timeout for `xmr-wallet-init` in real-wallet stack (default `300`).
+- `DSTREAM_XMR_INIT_WALLET_RETRY_SECS`: wallet open/create retry window after RPC becomes reachable (default `120`).
 
 **Server-only (origin ladder transcoder)**
 - `TRANSCODER_SOURCE_HLS_BASE`: source HLS base for reading live origin playlists (default `http://mediamtx:8880`).
@@ -87,7 +92,6 @@ This repo includes a ready-to-run `docker-compose.yml` at the repo root that run
 - `web` (Next.js)
 - `mediamtx` (origin seed)
 - `relay` (local Nostr relay)
-- `xmr-mock` (dev-only mock Monero wallet RPC used for verified tip flows)
 - `manifest` (optional: integrity manifest signer; see ADR `0020`)
 - `hls-init` (one-shot volume permission fix for `/hls`)
 
@@ -107,6 +111,20 @@ Real-wallet variation (regtest daemon + sender/receiver wallet-rpc + wallet boot
 npm run stack:up:real-wallet
 ```
 
+If `xmr-wallet-init` exits during first cold start, inspect logs and increase init timeout:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.real-wallet.yml --env-file .env.production logs --tail 200 xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest
+# then raise DSTREAM_XMR_INIT_TIMEOUT_SECS (default 300) and retry
+```
+
+If logs report wallet password mismatch and this is a disposable regtest environment, purge old wallet volume data and redeploy:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.real-wallet.yml --env-file .env.production down
+docker volume rm $(docker volume ls -q | grep -E 'dstream.*xmr|dstream.*wallet' || true)
+```
+
 Production deploy note:
 
 - `infra/prod/deploy.sh` automatically adds `docker-compose.real-wallet.yml` when `.env.production` sets `DSTREAM_XMR_WALLET_RPC_ORIGIN` to `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
@@ -118,7 +136,10 @@ Then open:
 
 ### Monero verified tips (local dev)
 
-Root Compose runs a lightweight mock wallet RPC (`xmr-mock`) so verified-tip flows can be exercised without a real Monero wallet.
+Root Compose does not start a mock wallet by default.
+
+- Preferred: run real-wallet stack (`npm run stack:up:real-wallet`) for actual Monero flows.
+- Optional dev-only mock: `docker compose --profile mock-wallet up -d xmr-mock`.
 
 - Health check: `GET /api/xmr/health`
 - Create tip session: `POST /api/xmr/tip/session`
@@ -194,13 +215,14 @@ For full evidence capture, use `docs/WALLET_CERTIFICATION.md`.
 Before deployment, run:
 
 ```bash
-ENV_FILE=.env.production npm run harden:deploy
-EXTERNAL_BASE_URL=https://stream.example.com npm run smoke:external:readiness
+EXTERNAL_BASE_URL=https://stream.example.com SSH_TARGET=root@your-host npm run gate:prod -- .env.production
 ```
 
-Then run runtime verification against your host:
+Or run each gate separately:
 
 ```bash
+ENV_FILE=.env.production npm run harden:deploy
+EXTERNAL_BASE_URL=https://stream.example.com npm run smoke:external:readiness
 SSH_TARGET=root@your-host npm run smoke:prod:runtime
 ```
 
@@ -210,14 +232,17 @@ This validates production-critical config, including:
 - relay host safety (no loopback/private relay hosts in deploy mode),
 - placeholder host rejection in deploy mode (`*.example*`),
 - ICE server configuration (STUN/TURN),
-- TURN password and external-IP sanity for bundled coturn (`TURN_PASSWORD`, `TURN_EXTERNAL_IP`),
+- TURN password and external-IP sanity for bundled coturn (`TURN_PASSWORD` non-placeholder + length>=12, `TURN_EXTERNAL_IP`),
 - public HLS origin safety (`https://` + non-local host in deploy mode),
 - proxy origin URL correctness,
 - production devtools disabled (`DSTREAM_DEVTOOLS=0`),
 - Monero session secret requirement,
 - Monero session secret placeholder rejection,
+- Monero wallet RPC credential quality checks in deploy mode (non-generic username + non-placeholder password),
 - mock wallet RPC rejection in deploy mode (`xmr-mock`),
 - Monero backend origin required in deploy mode,
+- explicit non-zero refund threshold policy in deploy mode (`DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`, `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES`),
+- refund policy bounds in deploy mode (`DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`),
 - transcoder profile sanity checks.
 
 `infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
@@ -236,7 +261,7 @@ ENV_FILE=.env.production.example npm run harden:check
 
 Note: deploy-mode checks are expected to fail on `.env.production.example` until placeholders are replaced.
 
-See also `docs/HARDENING.md`.
+See also `docs/HARDENING.md` and `docs/OPS_RUNBOOK.md`.
 
 ### Automatic ladder generation
 

@@ -7,7 +7,7 @@ services:
       xmr-wallet-rpc-receiver:
         condition: service_started
       xmr-wallet-init:
-        condition: service_completed_successfully
+        condition: service_started
 
   monerod-regtest:
     image: ghcr.io/sethforprivacy/simple-monerod:latest
@@ -82,6 +82,8 @@ services:
       XMR_INIT_WALLET_PASS: "${DSTREAM_XMR_WALLET_FILE_PASS:-}"
       XMR_INIT_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-produser}"
       XMR_INIT_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-prodpass}"
+      XMR_INIT_TIMEOUT_SECS: "${DSTREAM_XMR_INIT_TIMEOUT_SECS:-300}"
+      XMR_INIT_WALLET_RETRY_SECS: "${DSTREAM_XMR_INIT_WALLET_RETRY_SECS:-120}"
     depends_on:
       xmr-wallet-rpc-receiver:
         condition: service_started

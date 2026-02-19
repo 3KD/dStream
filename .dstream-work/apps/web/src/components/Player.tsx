@@ -10,11 +10,14 @@ import { pickPlaybackMode } from "@/lib/whep-fallback";
 
 interface PlayerProps {
   src: string;
+  fallbackSrc?: string | null;
   whepSrc?: string | null;
   p2pSwarm?: P2PSwarm | null;
   integrity?: IntegritySession | null;
   onReady?: () => void;
   autoplayMuted?: boolean;
+  isLiveStream?: boolean;
+  showTimelineControls?: boolean;
   captionTracks?: Array<{
     src: string;
     lang: string;
@@ -28,6 +31,20 @@ interface QualityOption {
   label: string;
 }
 
+function isLikelyMobilePlaybackDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  if (/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)) return true;
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    try {
+      if (window.matchMedia("(pointer: coarse)").matches) return true;
+    } catch {
+      // ignore
+    }
+  }
+  return false;
+}
+
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
   const height = typeof level.height === "number" && level.height > 0 ? `${level.height}p` : null;
   const bitrate =
@@ -38,7 +55,18 @@ function formatQualityLabel(level: { width?: number; height?: number; bitrate?: 
   return "Unknown";
 }
 
-export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMuted, captionTracks }: PlayerProps) {
+export function Player({
+  src,
+  fallbackSrc,
+  whepSrc,
+  p2pSwarm,
+  integrity,
+  onReady,
+  autoplayMuted,
+  isLiveStream = true,
+  showTimelineControls = true,
+  captionTracks
+}: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const whepRef = useRef<WhepClient | null>(null);
@@ -49,13 +77,18 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
   const [needsClick, setNeedsClick] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<"hls" | "whep">("hls");
   const [note, setNote] = useState<string | null>(null);
-  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
+  const isMobilePlayback = useMemo(() => isLikelyMobilePlaybackDevice(), []);
+  const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
+  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(() => !isLikelyMobilePlaybackDevice());
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
-  const [volume, setVolume] = useState(() => ((autoplayMuted ?? true) ? 0 : 1));
+  const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
+  const [timelineStart, setTimelineStart] = useState(0);
+  const [timelineEnd, setTimelineEnd] = useState(0);
+  const [timelinePosition, setTimelinePosition] = useState(0);
   const captionTrackList = useMemo(() => {
     return (captionTracks ?? [])
       .map((track) => ({
@@ -72,8 +105,8 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
   }, [onReady]);
 
   useEffect(() => {
-    setVolume((autoplayMuted ?? true) ? 0 : 1);
-  }, [autoplayMuted]);
+    setVolume(effectiveAutoplayMuted ? 0 : 1);
+  }, [effectiveAutoplayMuted]);
 
   useEffect(() => {
     selectedQualityRef.current = selectedQuality;
@@ -107,6 +140,23 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
   }, [volume]);
 
   useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onVolumeChange = () => {
+      try {
+        const nextVolume = video.muted ? 0 : Math.min(1, Math.max(0, video.volume));
+        setVolume((prev) => (Math.abs(prev - nextVolume) < 0.001 ? prev : nextVolume));
+      } catch {
+        // ignore
+      }
+    };
+    video.addEventListener("volumechange", onVolumeChange);
+    return () => {
+      video.removeEventListener("volumechange", onVolumeChange);
+    };
+  }, []);
+
+  useEffect(() => {
     const onFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFullscreen);
     return () => document.removeEventListener("fullscreenchange", onFullscreen);
@@ -133,8 +183,16 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
     setNote(null);
     setQualityOptions([]);
     setQualityIndicator("Auto");
+    setTimelineStart(0);
+    setTimelineEnd(0);
+    setTimelinePosition(0);
 
-    if (!src || !videoRef.current) return;
+    const primarySrc = (src ?? "").trim();
+    const backupSrc = (fallbackSrc ?? "").trim();
+    const canUseBackup = backupSrc.length > 0 && backupSrc !== primarySrc;
+    let backupTried = false;
+
+    if (!primarySrc || !videoRef.current) return;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -159,7 +217,7 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
     }
     try {
       // Default to muted so autoplay works across browsers; users can unmute via controls.
-      video.muted = autoplayMuted ?? true;
+      video.muted = effectiveAutoplayMuted;
     } catch {
       // ignore
     }
@@ -174,6 +232,22 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
       }
     };
     let removeNativeListener: (() => void) | null = null;
+    const tryHlsBackup = (reason: string, beforeStart?: () => void): boolean => {
+      if (!canUseBackup || backupTried || cancelled) return false;
+      backupTried = true;
+      setError(null);
+      setStatus("Loading…");
+      setNeedsClick(false);
+      setQualityOptions([]);
+      setQualityIndicator("Auto");
+      setNote(reason);
+      try {
+        beforeStart?.();
+      } catch {
+        // ignore
+      }
+      return startHls(backupSrc);
+    };
     const onPlaying = () => {
       setNeedsClick(false);
       setStatus("Playing");
@@ -186,7 +260,7 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
 
     const integrityEnabled = !!integrity?.enabled;
 
-    const startHls = () => {
+    const startHls = (hlsSource: string): boolean => {
       setPlaybackMode("hls");
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
@@ -196,23 +270,42 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
           setStatus("Ready");
           sendReady();
         };
+        const onNativeError = () => {
+          if (
+            tryHlsBackup("Primary stream unavailable (trying backup stream path).", () => {
+              try {
+                video.pause();
+                video.removeAttribute("src");
+              } catch {
+                // ignore
+              }
+            })
+          ) {
+            return;
+          }
+          setError("Unable to load stream.");
+        };
         video.addEventListener("loadedmetadata", onLoaded);
-        video.src = src;
+        video.addEventListener("error", onNativeError);
+        video.src = hlsSource;
         void video.play().catch(() => {
           setStatus("Click to play");
           setNeedsClick(true);
         });
-        removeNativeListener = () => video.removeEventListener("loadedmetadata", onLoaded);
-        return;
+        removeNativeListener = () => {
+          video.removeEventListener("loadedmetadata", onLoaded);
+          video.removeEventListener("error", onNativeError);
+        };
+        return true;
       }
 
       if (!Hls.isSupported()) {
         setError("HLS not supported in this browser.");
-        return;
+        return false;
       }
 
       const integrityRewrite =
-        integrityEnabled && src.includes("/api/dev/tamper-hls/")
+        integrityEnabled && hlsSource.includes("/api/dev/tamper-hls/")
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
       const hls = new Hls({
@@ -234,7 +327,7 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
       } as any);
       hlsRef.current = hls;
 
-      hls.loadSource(src);
+      hls.loadSource(hlsSource);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -271,6 +364,18 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
         if (!data.fatal) return;
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
+            if (
+              tryHlsBackup("Primary stream unavailable (trying backup stream path).", () => {
+                try {
+                  hls.destroy();
+                } catch {
+                  // ignore
+                }
+                hlsRef.current = null;
+              })
+            ) {
+              return;
+            }
             setError(null);
             setStatus("Retrying…");
             setTimeout(() => {
@@ -296,6 +401,7 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
             break;
         }
       });
+      return true;
     };
 
     const endpoint = (whepSrc ?? "").trim();
@@ -342,14 +448,26 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
 
     if (integrityEnabled) {
       if (endpoint) setNote("Integrity verification enabled (using HLS path).");
-      startHls();
+      startHls(primarySrc);
+    } else if (isMobilePlayback) {
+      if (endpoint) setNote("Mobile compatibility mode (HLS preferred).");
+      const startedHls = startHls(primarySrc);
+      if (!startedHls && endpoint && rtcSupported) {
+        void (async () => {
+          const ok = await tryWhep();
+          if (!ok && !cancelled) {
+            setError("Playback unavailable in this mobile browser.");
+            setStatus("Error");
+          }
+        })();
+      }
     } else {
       void (async () => {
         const { mode, attemptedWhep } = await pickPlaybackMode({ whepSrc: endpoint, rtcSupported, tryWhep });
         if (cancelled) return;
         if (mode === "whep") return;
         if (attemptedWhep) setNote("Low-latency unavailable (falling back to HLS).");
-        startHls();
+        startHls(primarySrc);
       })();
     }
 
@@ -373,9 +491,59 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
         // ignore
       }
     };
-  }, [autoplayMuted, integrity, lowLatencyEnabled, p2pSwarm, src, whepSrc]);
+  }, [effectiveAutoplayMuted, fallbackSrc, integrity, isMobilePlayback, lowLatencyEnabled, p2pSwarm, src, whepSrc]);
 
   const canTogglePip = typeof document !== "undefined" && "pictureInPictureEnabled" in document;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const syncTimeline = () => {
+      try {
+        let start = 0;
+        let end = 0;
+        const seekable = video.seekable;
+        if (seekable && seekable.length > 0) {
+          start = seekable.start(0);
+          end = seekable.end(seekable.length - 1);
+        } else if (Number.isFinite(video.duration) && video.duration > 0) {
+          end = video.duration;
+        }
+        const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        setTimelineStart(Math.max(0, start));
+        setTimelineEnd(Math.max(0, end));
+        setTimelinePosition(Math.max(0, currentTime));
+      } catch {
+        // ignore
+      }
+    };
+
+    syncTimeline();
+    video.addEventListener("loadedmetadata", syncTimeline);
+    video.addEventListener("durationchange", syncTimeline);
+    video.addEventListener("timeupdate", syncTimeline);
+    video.addEventListener("progress", syncTimeline);
+    video.addEventListener("seeking", syncTimeline);
+    video.addEventListener("seeked", syncTimeline);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", syncTimeline);
+      video.removeEventListener("durationchange", syncTimeline);
+      video.removeEventListener("timeupdate", syncTimeline);
+      video.removeEventListener("progress", syncTimeline);
+      video.removeEventListener("seeking", syncTimeline);
+      video.removeEventListener("seeked", syncTimeline);
+    };
+  }, [src, playbackMode]);
+
+  const hasSeekWindow = timelineEnd > timelineStart + 1;
+  const showTimeline = showTimelineControls && hasSeekWindow;
+  const clampedTimelinePosition = Math.min(Math.max(timelinePosition, timelineStart), timelineEnd || timelineStart);
+  const liveLagSeconds = Math.max(0, timelineEnd - clampedTimelinePosition);
+  const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 1.5;
+  const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 1.5;
+  const showTapForSound = !error && volume === 0;
 
   const togglePip = async () => {
     const video = videoRef.current;
@@ -405,6 +573,21 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
     }
   };
 
+  const jumpToLive = () => {
+    const video = videoRef.current;
+    if (!video || !hasSeekWindow) return;
+    const target = Math.max(timelineStart, timelineEnd - 0.35);
+    try {
+      video.currentTime = target;
+      setTimelinePosition(target);
+      void video.play().catch(() => {
+        // ignore autoplay restrictions
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="relative w-full">
       <div
@@ -415,7 +598,7 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
       </div>
 
       <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-800">
-        <video ref={videoRef} className="w-full h-full" playsInline controls autoPlay>
+        <video ref={videoRef} className="w-full h-full" playsInline controls autoPlay muted={volume === 0}>
           {captionTrackList.map((track, index) => (
             <track
               key={`${track.src}-${track.lang}-${index}`}
@@ -447,6 +630,29 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
           </button>
         )}
 
+        {showTapForSound && !needsClick && (
+          <button
+            type="button"
+            onClick={() => {
+              const video = videoRef.current;
+              setVolume(1);
+              if (!video) return;
+              try {
+                video.muted = false;
+                video.volume = 1;
+              } catch {
+                // ignore
+              }
+              void video.play().catch(() => {
+                // ignore
+              });
+            }}
+            className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-neutral-950/80 border border-neutral-700 text-xs text-neutral-100 hover:bg-neutral-900/90"
+          >
+            Tap for sound
+          </button>
+        )}
+
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6 text-center">
             <div className="space-y-3">
@@ -463,6 +669,57 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
       </div>
 
       {note && !error && <div className="mt-2 text-xs text-neutral-400">{note}</div>}
+
+      {showTimeline && (
+        <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <div className="font-mono text-neutral-500">
+              Window: {Math.max(0, Math.round(timelineEnd - timelineStart))}s
+            </div>
+            {isLiveStream && (
+              <div
+                className={`font-mono ${isAtLiveEdge ? "text-emerald-300" : "text-amber-300"}`}
+                title={isAtLiveEdge ? "At live edge" : "Behind live"}
+              >
+                {isAtLiveEdge ? "LIVE" : `-${Math.round(liveLagSeconds)}s`}
+              </div>
+            )}
+          </div>
+          <input
+            type="range"
+            min={timelineStart}
+            max={timelineEnd}
+            step={0.01}
+            value={clampedTimelinePosition}
+            onChange={(e) => {
+              const video = videoRef.current;
+              if (!video) return;
+              const next = Number(e.target.value);
+              if (!Number.isFinite(next)) return;
+              try {
+                video.currentTime = next;
+                setTimelinePosition(next);
+              } catch {
+                // ignore
+              }
+            }}
+            className="w-full accent-blue-500"
+            aria-label="Playback timeline"
+          />
+          {isLiveStream && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={jumpToLive}
+                disabled={!canJumpToLive}
+                className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50 text-xs"
+              >
+                Back to Live
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 text-xs text-neutral-300">
         <label className="inline-flex items-center gap-2">
@@ -524,6 +781,17 @@ export function Player({ src, whepSrc, p2pSwarm, integrity, onReady, autoplayMut
         >
           {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         </button>
+
+        {isLiveStream && showTimeline && (
+          <button
+            type="button"
+            onClick={jumpToLive}
+            disabled={!canJumpToLive}
+            className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
+          >
+            Back to Live
+          </button>
+        )}
 
         <span className="font-mono text-neutral-500">Quality: {qualityIndicator}</span>
         {captionTrackList.length > 0 && <span className="font-mono text-neutral-500">Captions: {captionTrackList.length}</span>}

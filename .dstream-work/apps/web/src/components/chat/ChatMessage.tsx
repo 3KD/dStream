@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSocial } from "@/context/SocialContext";
 import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
-import { BadgeCheck, Ban, CheckCircle2, Gem, Shield, ShieldCheck, Volume2, VolumeX } from "lucide-react";
+import { BadgeCheck, Ban, CheckCircle2, Flag, Gem, Shield, ShieldCheck, Volume2, VolumeX } from "lucide-react";
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
 
 export function ChatMessage({
@@ -12,6 +12,7 @@ export function ChatMessage({
   isBroadcaster,
   canModerate = false,
   canManageRoles = false,
+  profileName,
   isModerator = false,
   isSubscriber = false,
   isVerified = false,
@@ -22,14 +23,18 @@ export function ChatMessage({
   moderationBusy = false,
   roleBusy = false,
   subscriberRoleBusy = false,
+  reportBusy = false,
   onModerationAction,
   onToggleModerator,
-  onToggleSubscriber
+  onToggleSubscriber,
+  onReportUser,
+  onReportMessage
 }: {
   msg: StreamChatMessage;
   isBroadcaster: boolean;
   canModerate?: boolean;
   canManageRoles?: boolean;
+  profileName?: string | null;
   isModerator?: boolean;
   isSubscriber?: boolean;
   isVerified?: boolean;
@@ -40,9 +45,12 @@ export function ChatMessage({
   moderationBusy?: boolean;
   roleBusy?: boolean;
   subscriberRoleBusy?: boolean;
+  reportBusy?: boolean;
   onModerationAction?: (action: StreamModerationAction) => void;
   onToggleModerator?: () => void;
   onToggleSubscriber?: () => void;
+  onReportUser?: () => void;
+  onReportMessage?: () => void;
 }) {
   const time = new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const social = useSocial();
@@ -54,8 +62,13 @@ export function ChatMessage({
   const blocked = localBlocked || remoteBlocked;
   const npub = pubkeyHexToNpub(msg.pubkey);
   const pubkeyLabel = npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(msg.pubkey, { head: 14, tail: 8 });
+  const normalizedProfileName = (profileName ?? "").trim();
+  const displayLabel = normalizedProfileName || alias || pubkeyLabel;
   const showModeration = canModerate && !isBroadcaster;
   const showRoleControl = canManageRoles && !isBroadcaster;
+  const showReportUser = typeof onReportUser === "function";
+  const showReportMessage = typeof onReportMessage === "function";
+  const showActions = showModeration || showReportUser || showReportMessage;
   const profileHref = `/profile/${npub ?? msg.pubkey}`;
 
   return (
@@ -63,12 +76,16 @@ export function ChatMessage({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <Link href={profileHref} className={`font-medium text-sm truncate hover:underline ${isBroadcaster ? "text-red-400" : "text-neutral-200"}`}>
-            {alias ?? pubkeyLabel}
+            {displayLabel}
           </Link>
-          {alias && <span className="text-[10px] text-neutral-500 font-mono truncate">{pubkeyLabel}</span>}
+          {displayLabel !== pubkeyLabel && <span className="text-[10px] text-neutral-500 font-mono truncate">{pubkeyLabel}</span>}
+          {normalizedProfileName && alias && alias !== normalizedProfileName && (
+            <span className="text-[10px] text-neutral-500 truncate">local: {alias}</span>
+          )}
           {trusted && (
-            <span className="text-[10px] bg-emerald-950/50 border border-emerald-700/30 text-emerald-200 px-1.5 py-0.5 rounded">
-              TRUSTED
+            <span className="text-[10px] bg-emerald-950/50 border border-emerald-700/30 text-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              FRIEND
             </span>
           )}
           {isVerified && (
@@ -96,64 +113,94 @@ export function ChatMessage({
         <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>{msg.content}</p>
       </div>
 
-      {showModeration && (
+      {showActions && (
         <div className="flex items-start gap-1 pt-0.5">
-          <button
-            type="button"
-            onClick={() => onModerationAction?.(remoteMuted ? "clear" : "mute")}
-            className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-              muted ? "bg-neutral-950/60 border-neutral-700 text-neutral-200" : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-            }`}
-            title={remoteMuted ? "Clear mute" : "Mute user"}
-            aria-label={remoteMuted ? "Clear mute" : "Mute user"}
-            disabled={moderationBusy}
-          >
-            {muted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => onModerationAction?.(remoteBlocked ? "clear" : "block")}
-            className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-              blocked
-                ? "bg-red-950/40 border-red-800/40 text-red-200"
-                : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-            }`}
-            title={remoteBlocked ? "Clear block" : "Block user"}
-            aria-label={remoteBlocked ? "Clear block" : "Block user"}
-            disabled={moderationBusy}
-          >
-            {blocked ? <CheckCircle2 className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-          </button>
-          {showRoleControl && (
+          {showReportUser && (
+            <button
+              type="button"
+              onClick={onReportUser}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
+              title="Report user"
+              aria-label="Report user"
+              disabled={reportBusy}
+            >
+              <Flag className="w-4 h-4" />
+            </button>
+          )}
+          {showReportMessage && (
+            <button
+              type="button"
+              onClick={onReportMessage}
+              className="inline-flex items-center justify-center px-2 h-8 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white text-[10px] font-semibold"
+              title="Report message"
+              aria-label="Report message"
+              disabled={reportBusy}
+            >
+              Msg
+            </button>
+          )}
+          {showModeration && (
             <>
               <button
                 type="button"
-                onClick={() => onToggleModerator?.()}
+                onClick={() => onModerationAction?.(remoteMuted ? "clear" : "mute")}
                 className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                  isModerator
-                    ? "bg-blue-950/40 border-blue-800/40 text-blue-200"
+                  muted
+                    ? "bg-neutral-950/60 border-neutral-700 text-neutral-200"
                     : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
                 }`}
-                title={isModerator ? "Remove moderator" : "Make moderator"}
-                aria-label={isModerator ? "Remove moderator" : "Make moderator"}
-                disabled={roleBusy}
+                title={remoteMuted ? "Clear mute" : "Mute user"}
+                aria-label={remoteMuted ? "Clear mute" : "Mute user"}
+                disabled={moderationBusy}
               >
-                {isModerator ? <ShieldCheck className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                {muted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
               <button
                 type="button"
-                onClick={() => onToggleSubscriber?.()}
+                onClick={() => onModerationAction?.(remoteBlocked ? "clear" : "block")}
                 className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                  isSubscriber
-                    ? "bg-amber-950/40 border-amber-800/40 text-amber-200"
+                  blocked
+                    ? "bg-red-950/40 border-red-800/40 text-red-200"
                     : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
                 }`}
-                title={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
-                aria-label={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
-                disabled={subscriberRoleBusy}
+                title={remoteBlocked ? "Clear block" : "Block user"}
+                aria-label={remoteBlocked ? "Clear block" : "Block user"}
+                disabled={moderationBusy}
               >
-                <Gem className="w-4 h-4" />
+                {blocked ? <CheckCircle2 className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
               </button>
+              {showRoleControl && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onToggleModerator?.()}
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
+                      isModerator
+                        ? "bg-blue-950/40 border-blue-800/40 text-blue-200"
+                        : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
+                    }`}
+                    title={isModerator ? "Remove moderator" : "Make moderator"}
+                    aria-label={isModerator ? "Remove moderator" : "Make moderator"}
+                    disabled={roleBusy}
+                  >
+                    {isModerator ? <ShieldCheck className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleSubscriber?.()}
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
+                      isSubscriber
+                        ? "bg-amber-950/40 border-amber-800/40 text-amber-200"
+                        : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
+                    }`}
+                    title={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
+                    aria-label={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
+                    disabled={subscriberRoleBusy}
+                  >
+                    <Gem className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

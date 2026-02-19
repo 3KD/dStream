@@ -8,6 +8,9 @@ import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
+import { useIdentity } from "@/context/IdentityContext";
+import { useQuickPlay } from "@/context/QuickPlayContext";
+import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 
@@ -15,7 +18,16 @@ const HERO_COLLAPSE_STORAGE_KEY = "dstream_home_hero_collapsed_v1";
 
 export default function HomePage() {
   const router = useRouter();
-  const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
+  const { identity } = useIdentity();
+  const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
+  const social = useSocial();
+  const showMatureContent = social.settings.showMatureContent;
+  const { streams: liveStreams, isLoading } = useStreamAnnounces({
+    liveOnly: true,
+    limit: 60,
+    includeMature: showMatureContent,
+    viewerPubkey: identity?.pubkey ?? null
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [heroCollapsed, setHeroCollapsed] = useState(false);
 
@@ -85,30 +97,52 @@ export default function HomePage() {
             }`}
           >
             <LandingHero
-              collapseControl={
+              collapseControl={!heroCollapsed ? (
                 <button
                   type="button"
                   onClick={toggleHeroCollapsed}
                   aria-controls="landing-hero"
                   aria-expanded={!heroCollapsed}
-                  className="inline-flex items-center justify-center rounded-full border border-neutral-700 bg-neutral-900/90 text-neutral-100 hover:text-white hover:border-neutral-500 transition-colors px-4 py-1.5 text-lg leading-none"
-                  title={heroCollapsed ? "Expand hero" : "Collapse hero"}
+                  className="text-2xl leading-none text-neutral-400 hover:text-white transition-colors"
+                  title="Collapse hero"
                 >
-                  {heroCollapsed ? "v" : "^"}
+                  ^
                 </button>
-              }
+              ) : null}
             />
           </div>
         </section>
 
         <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 gap-3">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               Live Now ({visibleStreams.length})
             </h2>
 
+            {heroCollapsed ? (
+              <button
+                type="button"
+                onClick={toggleHeroCollapsed}
+                aria-controls="landing-hero"
+                aria-expanded={!heroCollapsed}
+                className="relative top-0.5 px-2.5 py-1 rounded-full text-lg leading-none text-neutral-500 hover:text-neutral-300 bg-neutral-900/70 border border-neutral-800 transition-colors"
+                title="Expand hero"
+              >
+                v
+              </button>
+            ) : null}
+
             <div className="flex items-center gap-2">
+              <label className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border border-neutral-800 bg-neutral-900 text-neutral-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMatureContent}
+                  onChange={(event) => social.updateSettings({ showMatureContent: event.target.checked })}
+                  className="accent-blue-500"
+                />
+                Mature
+              </label>
               <Link
                 href="/browse"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
@@ -176,6 +210,34 @@ export default function HomePage() {
                       <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
                         Live
                       </div>
+                      {stream.matureContent ? (
+                        <div className="absolute top-2 right-2 bg-amber-900/80 text-amber-100 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-amber-700/40">
+                          Mature
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (quickPlayStream?.streamPubkey === stream.pubkey && quickPlayStream?.streamId === stream.streamId) {
+                            clearQuickPlayStream();
+                            return;
+                          }
+                          setQuickPlayStream({
+                            streamPubkey: stream.pubkey,
+                            streamId: stream.streamId,
+                            title: stream.title || "Untitled Stream"
+                          });
+                        }}
+                        className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-950/70 px-2 py-1 text-[10px] text-neutral-200 hover:text-white"
+                        title="Quick play with PiP controls"
+                        aria-label="Quick play with PiP controls"
+                      >
+                        {quickPlayStream?.streamPubkey === stream.pubkey && quickPlayStream?.streamId === stream.streamId
+                          ? "Close Player"
+                          : "Quick Play"}
+                      </button>
                     </div>
                     <div className="p-4">
                       <h3 className="font-bold text-lg line-clamp-1">{stream.title || "Untitled Stream"}</h3>
@@ -248,10 +310,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="border border-neutral-800 rounded-xl p-4 text-sm text-neutral-300">
-          <p className="font-medium text-white mb-2">Watch route (ADR 0003)</p>
-          <p className="font-mono text-neutral-400">/watch/:npub/:streamId</p>
-        </section>
       </main>
     </div>
   );

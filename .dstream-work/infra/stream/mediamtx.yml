@@ -14,6 +14,8 @@ hlsVariant: fmp4
 hlsSegmentDuration: 2s
 # LL-HLS parts (Hls.js + modern Safari); optional but improves startup/latency.
 hlsPartDuration: 200ms
+# Keep short server buffer by default (decentralized-first, no long server rewind window).
+hlsSegmentCount: 12
 
 # WebRTC / WHIP
 webrtc: yes
@@ -22,6 +24,16 @@ webrtcLocalUDPAddress: :8181
 webrtcLocalTCPAddress: :8189
 webrtcAllowOrigins: [ "*" ]
 webrtcAdditionalHosts: [ "host.docker.internal", "localhost", "127.0.0.1" ]
+
+# Broadcast archive recording (VOD) persisted to /recordings.
+# Disabled by default for decentralized-first behavior.
+pathDefaults:
+  record: no
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 168h
 
 paths:
   all:

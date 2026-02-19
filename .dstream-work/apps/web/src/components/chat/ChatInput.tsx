@@ -28,7 +28,7 @@ export function ChatInput({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-3 border-t border-neutral-700 bg-neutral-900">
+    <form onSubmit={handleSubmit} className="sticky bottom-0 z-10 p-3 border-t border-neutral-700 bg-neutral-900">
       <div className="flex gap-2">
         <input
           type="text"
@@ -49,4 +49,3 @@ export function ChatInput({
     </form>
   );
 }
-

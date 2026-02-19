@@ -17,7 +17,8 @@ const PROXY_ORIGIN = normalizeOrigin(process.env.DSTREAM_HLS_PROXY_ORIGIN, "http
 
 const tamperCountByStream = new Map<string, number>();
 const armedAtByStream = new Map<string, number>();
-const MAX_TAMPERS_PER_STREAM = 8;
+const segmentHitsByStream = new Map<string, number>();
+const MAX_TAMPERS_PER_STREAM = 64;
 
 function isSegmentPath(pathSegments: string[]): boolean {
   const last = (pathSegments[pathSegments.length - 1] || "").toLowerCase();
@@ -63,13 +64,19 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response
       if (!armedAtByStream.has(streamName)) armedAtByStream.set(streamName, Date.now());
     }
 
+    if (streamName && isSegmentPath(pathSegments) && upstream.ok) {
+      segmentHitsByStream.set(streamName, (segmentHitsByStream.get(streamName) ?? 0) + 1);
+    }
+
     const armedAt = streamName ? armedAtByStream.get(streamName) ?? null : null;
+    const segmentHits = streamName ? segmentHitsByStream.get(streamName) ?? 0 : 0;
     const canTamperNow = armedAt !== null && Date.now() - armedAt > 2500;
     const priorTamperCount = streamName ? (tamperCountByStream.get(streamName) ?? 0) : 0;
     const shouldTamper =
       streamName &&
       isSegmentPath(pathSegments) &&
       upstream.ok &&
+      segmentHits >= 3 &&
       canTamperNow &&
       priorTamperCount < MAX_TAMPERS_PER_STREAM;
 

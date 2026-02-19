@@ -12,6 +12,7 @@ import {
 } from "@/lib/monero/server";
 import { evaluateRefundPolicy, type RefundContributionReceipt } from "@/lib/monero/refundPolicy";
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
+import { markStakeSessionSettled } from "@/lib/monero/stakeSessionStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       addressIndex: session.addressIndex,
       address: refundAddress
     });
+    markStakeSessionSettled(token);
 
     return Response.json({
       ok: true,

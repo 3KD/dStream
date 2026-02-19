@@ -83,12 +83,10 @@ export async function publishEvent(relays: string[], event: NostrEvent, options?
     ]);
     return true;
   } catch {
-    for (const relay of relays) {
-      // Fallback path for local relay conditions where pool ACK promises can stall.
-      // If at least one relay explicitly returns OK, treat publish as successful.
-      if (await publishViaRelayWebSocket(relay, event, fallbackTimeoutMs)) return true;
-    }
-    return false;
+    const fallbackResults = await Promise.all(
+      relays.map((relay) => publishViaRelayWebSocket(relay, event, fallbackTimeoutMs))
+    );
+    return fallbackResults.some(Boolean);
   }
 }
 

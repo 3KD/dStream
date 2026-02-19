@@ -10,6 +10,9 @@ import {
   type SocialSettingsV1,
   type SocialStateV1
 } from "@/lib/social/store";
+import { coercePaymentMethods, validatePaymentAddress } from "@/lib/payments/methods";
+import { getWalletIntegrationById } from "@/lib/payments/catalog";
+import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protocol";
 
 interface SocialContextValue {
   state: SocialStateV1;
@@ -111,9 +114,25 @@ function tryMigrateLegacyState(parsed: any): SocialStateV1 | null {
 
   if (parsed.paymentDefaults && typeof parsed.paymentDefaults === "object") {
     const p = parsed.paymentDefaults as any;
-    if (typeof p.xmrAddress === "string") next.settings.paymentDefaults.xmrTipAddress = p.xmrAddress.trim();
+    if (typeof p.xmrAddress === "string") {
+      const value = p.xmrAddress.trim();
+      if (value && !validatePaymentAddress("xmr", value)) next.settings.paymentDefaults.xmrTipAddress = value;
+    }
+    if (typeof p.xmrTipAddress === "string") {
+      const value = p.xmrTipAddress.trim();
+      if (value && !validatePaymentAddress("xmr", value)) next.settings.paymentDefaults.xmrTipAddress = value;
+    }
     if (typeof p.stakeXmr === "string") next.settings.paymentDefaults.stakeXmr = p.stakeXmr.trim();
     if (typeof p.stakeNote === "string") next.settings.paymentDefaults.stakeNote = p.stakeNote.trim();
+    next.settings.paymentDefaults.paymentMethods = coercePaymentMethods(p.paymentMethods);
+    if (p.preferredWalletByAsset && typeof p.preferredWalletByAsset === "object") {
+      for (const [assetRaw, walletRaw] of Object.entries(p.preferredWalletByAsset as Record<string, unknown>)) {
+        const asset = assetRaw.trim().toLowerCase() as StreamPaymentAsset;
+        if (!STREAM_PAYMENT_ASSETS.includes(asset)) continue;
+        const wallet = typeof walletRaw === "string" ? getWalletIntegrationById(walletRaw) : null;
+        if (wallet) next.settings.paymentDefaults.preferredWalletByAsset[asset] = wallet.id;
+      }
+    }
   }
 
   return next;

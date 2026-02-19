@@ -7,12 +7,17 @@ import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
 import { useGuild } from "@/hooks/useGuild";
 import { useGuilds } from "@/hooks/useGuilds";
 import { makeStreamKey } from "@dstream/protocol";
-import { Star } from "lucide-react";
+import { Flag, Star } from "lucide-react";
 import { useSocial } from "@/context/SocialContext";
+import { useIdentity } from "@/context/IdentityContext";
+import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { useEffect, useMemo, useState } from "react";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
+import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
+import { ReportDialog } from "@/components/moderation/ReportDialog";
+import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 
 function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: string } | null {
   const raw = (value ?? "").trim();
@@ -27,13 +32,30 @@ function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: 
 
 export default function BrowseClient() {
   const social = useSocial();
+  const { identity, signEvent } = useIdentity();
+  const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const searchParams = useSearchParams();
   const guildQueryRaw = searchParams.get("guild");
   const guildQuery = useMemo(() => parseGuildQuery(guildQueryRaw), [guildQueryRaw]);
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
-  const { streams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 120 });
+  const showMatureContent = social.settings.showMatureContent;
+  const [liveOnly, setLiveOnly] = useState(false);
+  const { streams, isLoading } = useStreamAnnounces({
+    liveOnly,
+    limit: 120,
+    includeMature: showMatureContent,
+    viewerPubkey: identity?.pubkey ?? null
+  });
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [curatedOnly, setCuratedOnly] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{
+    targetPubkey: string;
+    targetStreamId: string;
+    summary: string;
+  } | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (guildQuery) setCuratedOnly(true);
@@ -60,6 +82,17 @@ export default function BrowseClient() {
     if (!curatedOnly) return favFiltered;
     return favFiltered.filter((s) => curatedKeys.has(makeStreamKey(s.pubkey, s.streamId)));
   }, [curatedKeys, curatedOnly, favoritesOnly, social, streams]);
+  const showLoadingSkeleton = isLoading && visibleStreams.length === 0;
+  const showRefreshingNotice = isLoading && visibleStreams.length > 0;
+
+  useEffect(() => {
+    if (!quickPlayStream) return;
+    const stillLive = streams.some(
+      (stream) =>
+        stream.pubkey === quickPlayStream.streamPubkey && stream.streamId === quickPlayStream.streamId && stream.status === "live"
+    );
+    if (!stillLive) clearQuickPlayStream();
+  }, [clearQuickPlayStream, quickPlayStream, streams]);
 
   const curatedLabel = !guildQuery
     ? "Curated only"
@@ -87,6 +120,39 @@ export default function BrowseClient() {
     return <div className="text-xs text-neutral-500">Curated by {guilds.length} guild(s).</div>;
   }, [curatedOnly, guildQuery, guilds.length, guildsLoading, selectedGuild?.name, selectedGuildLoading]);
 
+  const submitStreamReport = async (input: { reasonCode: ReportReasonCode; note: string }) => {
+    if (!reportTarget) return;
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      const proof = await buildSignedScopeProof(signEvent as any, identity?.pubkey ?? null, "report_submit", [
+        ["stream", `${reportTarget.targetPubkey}--${reportTarget.targetStreamId}`]
+      ]);
+      await submitModerationReport({
+        report: {
+          reasonCode: input.reasonCode,
+          note: input.note,
+          reporterPubkey: identity?.pubkey ?? undefined,
+          targetType: "stream",
+          targetPubkey: reportTarget.targetPubkey,
+          targetStreamId: reportTarget.targetStreamId,
+          contextPage: "browse",
+          contextUrl: typeof window !== "undefined" ? window.location.href : undefined
+        },
+        reporterProofEvent: proof
+      });
+      setReportTarget(null);
+      setReportNotice("Report submitted. Operators can review it in Moderation.");
+      setTimeout(() => {
+        setReportNotice((current) => (current === "Report submitted. Operators can review it in Moderation." ? null : current));
+      }, 3500);
+    } catch (error: any) {
+      setReportError(error?.message ?? "Failed to submit report.");
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
@@ -104,6 +170,10 @@ export default function BrowseClient() {
               Favorites only
             </label>
             <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} className="accent-blue-500" />
+              Live only
+            </label>
+            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={curatedOnly}
@@ -111,6 +181,15 @@ export default function BrowseClient() {
                 className="accent-blue-500"
               />
               {curatedLabel}
+            </label>
+            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showMatureContent}
+                onChange={(e) => social.updateSettings({ showMatureContent: e.target.checked })}
+                className="accent-blue-500"
+              />
+              Mature
             </label>
             <Link className="text-sm text-neutral-300 hover:text-white" href="/guilds">
               Guilds
@@ -121,9 +200,14 @@ export default function BrowseClient() {
           </div>
         </header>
 
-        {curatedInfo}
+        {reportNotice ? (
+          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">{reportNotice}</div>
+        ) : null}
 
-        {isLoading ? (
+        {curatedInfo}
+        {showRefreshingNotice ? <div className="text-xs text-neutral-500">Refreshing stream list…</div> : null}
+
+        {showLoadingSkeleton ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
@@ -132,12 +216,20 @@ export default function BrowseClient() {
         ) : visibleStreams.length === 0 ? (
           <div className="rounded-xl border border-neutral-800 p-8 text-neutral-400 text-center">
             {favoritesOnly && curatedOnly
-              ? "No favorite curated streams are live right now."
+              ? liveOnly
+                ? "No favorite curated streams are live right now."
+                : "No favorite curated channels found."
               : favoritesOnly
-                ? "No favorite streams are live right now."
+                ? liveOnly
+                  ? "No favorite streams are live right now."
+                  : "No favorite channels found."
                 : curatedOnly
-                  ? "No curated streams are live right now."
-                  : "No live streams found."}
+                  ? liveOnly
+                    ? "No curated streams are live right now."
+                    : "No curated channels found."
+                  : liveOnly
+                    ? "No live streams found."
+                    : "No channels found."}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -149,6 +241,7 @@ export default function BrowseClient() {
                 ? shortenText(npub, { head: 14, tail: 8 })
                 : shortenText(s.pubkey, { head: 14, tail: 8 });
               const favorite = social.isFavoriteCreator(s.pubkey) || social.isFavoriteStream(s.pubkey, s.streamId);
+              const isLive = s.status === "live";
 
               return (
                 <Link
@@ -156,19 +249,74 @@ export default function BrowseClient() {
                   key={`${s.pubkey}:${s.streamId}`}
                   className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                 >
-                  <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
-                    <LiveStreamPreview
-                      streamPubkey={s.pubkey}
-                      streamId={s.streamId}
-                      title={s.title || "Live stream preview"}
-                      fallbackImage={s.image}
-                      enabled={index < 16}
-                    />
-                    <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                      Live
-                    </div>
+                    <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
+                      <LiveStreamPreview
+                        streamPubkey={s.pubkey}
+                        streamId={s.streamId}
+                        title={s.title || "Live stream preview"}
+                        fallbackImage={s.image}
+                        enabled={index < 16 && isLive}
+                      />
+                      <div
+                        className={`absolute top-2 left-2 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                          s.status === "live" ? "bg-red-600" : "bg-neutral-700"
+                        }`}
+                      >
+                        {s.status === "live" ? "Live" : "Offline"}
+                      </div>
+                      {s.matureContent ? (
+                        <div className="absolute top-2 left-14 bg-amber-900/80 text-amber-100 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-amber-700/40">
+                          Mature
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (!isLive) return;
+                          if (quickPlayStream?.streamPubkey === s.pubkey && quickPlayStream?.streamId === s.streamId) {
+                            clearQuickPlayStream();
+                            return;
+                          }
+                          setQuickPlayStream({
+                            streamPubkey: s.pubkey,
+                            streamId: s.streamId,
+                            title: s.title || "Untitled Stream"
+                          });
+                        }}
+                        className="absolute bottom-2 left-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-950/70 border border-neutral-700 text-[10px] text-neutral-200 hover:text-white"
+                        title={isLive ? "Quick play with PiP controls" : "Stream is offline"}
+                        aria-label="Quick play with PiP controls"
+                      >
+                        {isLive
+                          ? quickPlayStream?.streamPubkey === s.pubkey && quickPlayStream?.streamId === s.streamId
+                            ? "Close Player"
+                            : "Quick Play"
+                          : "Offline"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          const npub = pubkeyHexToNpub(s.pubkey) ?? s.pubkey;
+                          setReportTarget({
+                            targetPubkey: s.pubkey,
+                            targetStreamId: s.streamId,
+                            summary: `Report stream ${s.title || s.streamId} by ${npub}`
+                          });
+                          setReportError(null);
+                        }}
+                        className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-950/70 border border-neutral-700 text-[10px] text-neutral-200 hover:text-white"
+                        title="Report stream"
+                        aria-label="Report stream"
+                      >
+                        <Flag className="w-3 h-3" />
+                        Report
+                      </button>
                     {s.stakeAmountAtomic && s.stakeAmountAtomic !== "0" && (
-                      <div className="absolute top-2 right-2 bg-neutral-950/70 border border-neutral-700 text-neutral-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
+                      <div className="absolute bottom-2 right-2 bg-neutral-950/70 border border-neutral-700 text-neutral-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
                         Stake
                       </div>
                     )}
@@ -220,6 +368,20 @@ export default function BrowseClient() {
             })}
           </div>
         )}
+
+        <ReportDialog
+          open={!!reportTarget}
+          busy={reportBusy}
+          title="Report Stream"
+          targetSummary={reportTarget?.summary ?? ""}
+          error={reportError}
+          onClose={() => {
+            if (reportBusy) return;
+            setReportTarget(null);
+            setReportError(null);
+          }}
+          onSubmit={submitStreamReport}
+        />
       </main>
     </div>
   );

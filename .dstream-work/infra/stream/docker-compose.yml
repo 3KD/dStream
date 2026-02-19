@@ -14,6 +14,7 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
       - /tmp/dstream_hls:/hls
+      - /tmp/dstream_recordings:/recordings
     restart: unless-stopped
 
   transcoder:

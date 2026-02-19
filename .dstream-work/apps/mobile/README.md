@@ -39,6 +39,20 @@ npm run check:mobile:golden
 npm run check:mobile
 ```
 
+Store-release automation:
+
+```bash
+cd ../..
+npm run mobile:release:setup
+MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:ios:testflight
+MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:android:internal
+```
+
+See:
+
+- `docs/MOBILE_STORE_DEPLOY.md`
+- `docs/MOBILE_RELEASE_CHECKLIST.md`
+
 ## Runtime notes
 
 - Mobile setup stores app config under `dstream_mobile_config_v1`.

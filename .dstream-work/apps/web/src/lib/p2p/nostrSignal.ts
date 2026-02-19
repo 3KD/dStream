@@ -2,7 +2,6 @@ import {
   buildP2PSignalEvent,
   decodeP2PSignalPayload,
   encodeP2PSignalPayload,
-  makeATag,
   NOSTR_KINDS,
   parseP2PSignalEvent,
   type P2PSignalPayloadV1
@@ -41,7 +40,6 @@ export function createP2PSignalClient(opts: {
   pool?: SimplePool;
 }): P2PSignalClient {
   const { identity, relays, streamPubkey, streamId } = opts;
-  const aTag = makeATag(streamPubkey, streamId);
   const since = opts.sinceSec ?? Math.max(0, nowSec() - 5);
   const log = (line: string) => opts.onLog?.(`${opts.label ? `${opts.label}: ` : ""}${line}`);
   const pool = opts.pool ?? getPool();
@@ -88,45 +86,42 @@ export function createP2PSignalClient(opts: {
         readyResolve = resolve;
       });
 
-      const sub: any = (pool as any).subscribeMany(
-        relays,
-        {
-          kinds: [NOSTR_KINDS.P2P_SIGNAL],
-          since,
-          "#p": [identity.pubkey],
-          "#a": [aTag],
-          limit: 200
-        },
-        {
-          onevent: async (event: any) => {
-            const raw = event as any;
-            if (raw?.pubkey && raw?.id) log(`recv event from=${String(raw.pubkey).slice(0, 8)}… id=${String(raw.id).slice(0, 8)}…`);
+      const filter = {
+        kinds: [NOSTR_KINDS.P2P_SIGNAL],
+        since,
+        "#p": [identity.pubkey],
+        limit: 400
+      };
+      const requests = relays.map((url) => ({ url, filter }));
+      const sub: any = (pool as any).subscribeMap(requests, {
+        onevent: async (event: any) => {
+          const raw = event as any;
+          if (raw?.pubkey && raw?.id) log(`recv event from=${String(raw.pubkey).slice(0, 8)}… id=${String(raw.id).slice(0, 8)}…`);
 
-            const parsed = parseP2PSignalEvent(event as any, {
-              streamPubkey,
-              streamId,
-              recipientPubkey: identity.pubkey
-            });
-            if (!parsed) {
-              log("drop: parse failed");
+          const parsed = parseP2PSignalEvent(event as any, {
+            streamPubkey,
+            streamId,
+            recipientPubkey: identity.pubkey
+          });
+          if (!parsed) {
+            log("drop: parse failed");
+            return;
+          }
+
+          try {
+            const decrypted = await identity.nip04.decrypt(parsed.pubkey, parsed.content);
+            const payload = decodeP2PSignalPayload(decrypted);
+            if (!payload) {
+              log("drop: payload decode failed");
               return;
             }
-
-            try {
-              const decrypted = await identity.nip04.decrypt(parsed.pubkey, parsed.content);
-              const payload = decodeP2PSignalPayload(decrypted);
-              if (!payload) {
-                log("drop: payload decode failed");
-                return;
-              }
-              handler({ fromPubkey: parsed.pubkey, payload, eventId: parsed.id });
-            } catch {
-              log("drop: decrypt failed");
-            }
-          },
-          oneose: () => readyResolve?.()
-        }
-      );
+            handler({ fromPubkey: parsed.pubkey, payload, eventId: parsed.id });
+          } catch {
+            log("drop: decrypt failed");
+          }
+        },
+        oneose: () => readyResolve?.()
+      });
 
       return { close: () => sub?.close?.(), ready };
     }

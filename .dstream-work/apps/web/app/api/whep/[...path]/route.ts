@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { authorizePlaybackProxyRequest } from "@/lib/playback-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,9 +25,16 @@ function rewriteLocationHeader(req: NextRequest, upstreamLocation: string, upstr
 }
 
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response> {
+  const authz = authorizePlaybackProxyRequest(pathSegments, req.nextUrl.searchParams.get("access"));
+  if (!authz.ok) {
+    return new Response(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+  }
+
   const base = PROXY_ORIGIN.endsWith("/") ? PROXY_ORIGIN : `${PROXY_ORIGIN}/`;
   const target = new URL(pathSegments.map((s) => encodeURIComponent(s)).join("/"), base);
-  target.search = req.nextUrl.search;
+  const upstreamParams = new URLSearchParams(req.nextUrl.search);
+  upstreamParams.delete("access");
+  target.search = upstreamParams.toString();
 
   const headers = new Headers(req.headers);
   headers.delete("host");
@@ -77,4 +85,3 @@ export async function OPTIONS(req: NextRequest, ctx: { params: Promise<{ path: s
   const { path } = await ctx.params;
   return proxy(req, path ?? []);
 }
-

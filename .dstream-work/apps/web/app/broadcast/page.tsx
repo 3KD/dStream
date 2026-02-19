@@ -10,8 +10,24 @@ import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
-import { buildStreamAnnounceEvent, type StreamCaptionTrack, type StreamHostMode, type StreamRendition } from "@dstream/protocol";
-import { pubkeyHexToNpub } from "@/lib/nostr-ids";
+import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
+import {
+  createPaymentMethodDraft,
+  paymentMethodToDraft,
+  type PaymentMethodDraft,
+  validatePaymentAddress,
+  validatePaymentMethodDrafts
+} from "@/lib/payments/methods";
+import {
+  buildStreamAnnounceEvent,
+  type StreamCaptionTrack,
+  type StreamGuildFeeWaiver,
+  type StreamHostMode,
+  type StreamPaymentAsset,
+  type StreamRendition
+} from "@dstream/protocol";
+import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
+import { shortenText } from "@/lib/encoding";
 import { describeOriginStreamIdRules, makeOriginStreamId } from "@/lib/origin";
 import { toMediaCaptureErrorMessage } from "@/lib/mediaPermissions";
 
@@ -130,15 +146,26 @@ function parseRenditionLines(inputRaw: string): { renditions: StreamRendition[];
   return { renditions, error: null };
 }
 
-function safeDefaultStreamId() {
+function safeDefaultStreamId(pubkeyHex?: string | null) {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `live-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const keyPrefix = pubkeyHex ? pubkeyHex.slice(0, 12) : "anon";
+  return `${keyPrefix}-live-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function normalizeStreamIdParam(input: string | null): string | null {
+  const streamId = (input ?? "").trim();
+  if (!streamId) return null;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(streamId)) return null;
+  return streamId;
 }
 
 type StepStatus = "idle" | "checking" | "ok" | "fail";
 type StoredBroadcastSession = { pubkey: string; streamId: string; originStreamId: string; startedAt: number };
 type LadderProfile = { id: string; width: number; height: number; bandwidth: number };
+type SourceMode = "camera" | "screen" | "camera_screen_pip";
+type CaptureResolutionPreset = "source" | "1080p" | "720p" | "480p";
+type EncoderGuide = "obs" | "streamlabs" | "vmix" | "xsplit" | "prism";
 
 const AUTO_LADDER_PROFILES: LadderProfile[] = [
   { id: "720p", width: 1280, height: 720, bandwidth: 2_500_000 },
@@ -146,20 +173,42 @@ const AUTO_LADDER_PROFILES: LadderProfile[] = [
   { id: "360p", width: 640, height: 360, bandwidth: 700_000 }
 ];
 
+const CAPTURE_RESOLUTION_PRESETS: Record<Exclude<CaptureResolutionPreset, "source">, { width: number; height: number }> = {
+  "1080p": { width: 1920, height: 1080 },
+  "720p": { width: 1280, height: 720 },
+  "480p": { width: 854, height: 480 }
+};
+
+const ENCODER_GUIDE_OPTIONS: Array<{ id: EncoderGuide; label: string }> = [
+  { id: "obs", label: "OBS" },
+  { id: "streamlabs", label: "Streamlabs" },
+  { id: "vmix", label: "vMix" },
+  { id: "xsplit", label: "XSplit" },
+  { id: "prism", label: "PRISM" }
+];
+
 export default function BroadcastPage() {
   const { identity, signEvent } = useIdentity();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
+  const [requestedStreamId, setRequestedStreamId] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const whipRef = useRef<WhipClient | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const statusRef = useRef<"idle" | "preview" | "connecting" | "live" | "error">("idle");
+  const manualStopRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectInFlightRef = useRef(false);
+  const lastWhipOptionsRef = useRef<{ videoMaxBitrateKbps?: number; videoMaxFps?: number }>({});
+  const previewResourceCleanupRef = useRef<(() => void) | null>(null);
 
   const [streamId, setStreamId] = useState("");
   const [title, setTitle] = useState("Untitled Stream");
   const [summary, setSummary] = useState("");
   const [image, setImage] = useState("");
   const [xmr, setXmr] = useState("");
+  const [paymentDrafts, setPaymentDrafts] = useState<PaymentMethodDraft[]>([]);
   const [stakeXmr, setStakeXmr] = useState("");
   const [stakeNote, setStakeNote] = useState("");
   const [captionLines, setCaptionLines] = useState("");
@@ -169,15 +218,34 @@ export default function BroadcastPage() {
   const [topicsCsv, setTopicsCsv] = useState("");
   const [hostMode, setHostMode] = useState<StreamHostMode>("p2p_economy");
   const [rebroadcastThresholdInput, setRebroadcastThresholdInput] = useState("6");
+  const [vodArchiveEnabled, setVodArchiveEnabled] = useState(false);
+  const [feeWaiverGuilds, setFeeWaiverGuilds] = useState<StreamGuildFeeWaiver[]>([]);
+  const [vipPubkeys, setVipPubkeys] = useState<string[]>([]);
+  const [viewerAllowPubkeys, setViewerAllowPubkeys] = useState<string[]>([]);
+  const [waiverGuildPubkeyInput, setWaiverGuildPubkeyInput] = useState("");
+  const [waiverGuildIdInput, setWaiverGuildIdInput] = useState("");
+  const [vipPubkeyInput, setVipPubkeyInput] = useState("");
+  const [viewerAllowInput, setViewerAllowInput] = useState("");
+  const [waiverInputError, setWaiverInputError] = useState<string | null>(null);
+  const [viewerAllowInputError, setViewerAllowInputError] = useState<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDeviceId, setVideoDeviceId] = useState<string>("");
   const [audioDeviceId, setAudioDeviceId] = useState<string>("");
-  const [sourceMode, setSourceMode] = useState<"camera" | "screen">("camera");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("camera");
+  const [captureResolution, setCaptureResolution] = useState<CaptureResolutionPreset>("source");
+  const [bitratePreset, setBitratePreset] = useState<"custom" | "low" | "medium" | "high">("custom");
   const [includeAudio, setIncludeAudio] = useState(true);
   const [videoMaxBitrateKbps, setVideoMaxBitrateKbps] = useState("");
   const [videoMaxFps, setVideoMaxFps] = useState("");
+  const [autoReconnectEnabled, setAutoReconnectEnabled] = useState(true);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [chatSlowModeSecInput, setChatSlowModeSecInput] = useState("");
+  const [chatSubscriberOnly, setChatSubscriberOnly] = useState(false);
+  const [chatFollowerOnly, setChatFollowerOnly] = useState(false);
+  const [discoverable, setDiscoverable] = useState(true);
+  const [matureContent, setMatureContent] = useState(false);
 
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [status, setStatus] = useState<"idle" | "preview" | "connecting" | "live" | "error">("idle");
@@ -192,9 +260,21 @@ export default function BroadcastPage() {
   const [lastAnnounceAt, setLastAnnounceAt] = useState<number | null>(null);
   const [announceReport, setAnnounceReport] = useState<PublishEventReport | null>(null);
   const [storedSession, setStoredSession] = useState<StoredBroadcastSession | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [encoderGuide, setEncoderGuide] = useState<EncoderGuide>("obs");
+  const [encoderCopyStatus, setEncoderCopyStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const streamIdParam = new URLSearchParams(window.location.search).get("streamId");
+      setRequestedStreamId(normalizeStreamIdParam(streamIdParam));
+    } catch {
+      setRequestedStreamId(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -220,6 +300,21 @@ export default function BroadcastPage() {
   useEffect(() => {
     mediaStreamRef.current = mediaStream;
   }, [mediaStream]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      previewResourceCleanupRef.current?.();
+      previewResourceCleanupRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -263,12 +358,26 @@ export default function BroadcastPage() {
     try {
       const raw = localStorage.getItem("dstream_broadcast_draft_v1");
       if (!raw) {
-        setStreamId(safeDefaultStreamId());
+        setStreamId(requestedStreamId ?? safeDefaultStreamId(identity?.pubkey ?? null));
         setXmr(social.settings.paymentDefaults.xmrTipAddress);
+        setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
         setStakeXmr(social.settings.paymentDefaults.stakeXmr);
         setStakeNote(social.settings.paymentDefaults.stakeNote);
         setHostMode(social.settings.broadcastHostMode);
         setRebroadcastThresholdInput(String(social.settings.broadcastRebroadcastThreshold));
+        setCaptureResolution("source");
+        setBitratePreset("custom");
+        setAutoReconnectEnabled(true);
+        setReconnectAttempt(0);
+        setChatSlowModeSecInput("");
+        setChatSubscriberOnly(false);
+        setChatFollowerOnly(false);
+        setDiscoverable(true);
+        setMatureContent(false);
+        setVodArchiveEnabled(false);
+        setFeeWaiverGuilds([]);
+        setVipPubkeys([]);
+        setViewerAllowPubkeys([]);
         setCaptionLines("");
         setRenditionLines("");
         setVideoMaxBitrateKbps("");
@@ -278,31 +387,111 @@ export default function BroadcastPage() {
 
       const parsed = JSON.parse(raw);
 
-      if (typeof parsed.streamId === "string" && parsed.streamId.trim()) setStreamId(parsed.streamId);
-      else setStreamId(safeDefaultStreamId());
+      if (requestedStreamId) setStreamId(requestedStreamId);
+      else if (typeof parsed.streamId === "string" && parsed.streamId.trim()) setStreamId(parsed.streamId.trim());
+      else setStreamId(safeDefaultStreamId(identity?.pubkey ?? null));
 
       if (typeof parsed.title === "string") setTitle(parsed.title);
       if (typeof parsed.summary === "string") setSummary(parsed.summary);
       if (typeof parsed.image === "string") setImage(parsed.image);
       if (typeof parsed.xmr === "string") setXmr(parsed.xmr);
+      if (Array.isArray(parsed.paymentMethods)) {
+        setPaymentDrafts(
+          parsed.paymentMethods
+            .map((row: any) => {
+              if (!row || typeof row !== "object") return null;
+              const asset = PAYMENT_ASSET_ORDER.includes((row.asset ?? "").toString().toLowerCase() as StreamPaymentAsset)
+                ? ((row.asset ?? "").toString().toLowerCase() as StreamPaymentAsset)
+                : null;
+              if (!asset) return null;
+              return {
+                asset,
+                address: typeof row.address === "string" ? row.address : "",
+                network: typeof row.network === "string" ? row.network : "",
+                label: typeof row.label === "string" ? row.label : ""
+              } satisfies PaymentMethodDraft;
+            })
+            .filter((row: PaymentMethodDraft | null): row is PaymentMethodDraft => !!row)
+        );
+      } else {
+        setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+      }
       if (typeof parsed.stakeXmr === "string") setStakeXmr(parsed.stakeXmr);
       if (typeof parsed.stakeNote === "string") setStakeNote(parsed.stakeNote);
       if (parsed.hostMode === "host_only" || parsed.hostMode === "p2p_economy") setHostMode(parsed.hostMode);
       if (typeof parsed.rebroadcastThresholdInput === "string") setRebroadcastThresholdInput(parsed.rebroadcastThresholdInput);
       else if (typeof parsed.rebroadcastThresholdInput === "number") setRebroadcastThresholdInput(String(parsed.rebroadcastThresholdInput));
+      if (typeof parsed.vodArchiveEnabled === "boolean") setVodArchiveEnabled(parsed.vodArchiveEnabled);
+      if (Array.isArray(parsed.feeWaiverGuilds)) {
+        const normalizedGuilds = parsed.feeWaiverGuilds
+          .map((item: any) => {
+            const guildPubkey = pubkeyParamToHex(typeof item?.guildPubkey === "string" ? item.guildPubkey : "") ?? "";
+            const guildId = typeof item?.guildId === "string" ? item.guildId.trim() : "";
+            if (!guildPubkey || !guildId) return null;
+            return { guildPubkey, guildId } satisfies StreamGuildFeeWaiver;
+          })
+          .filter((item: StreamGuildFeeWaiver | null): item is StreamGuildFeeWaiver => !!item);
+        setFeeWaiverGuilds(normalizedGuilds);
+      } else {
+        setFeeWaiverGuilds([]);
+      }
+      if (Array.isArray(parsed.vipPubkeys)) {
+        const normalizedVips = parsed.vipPubkeys
+          .map((item: any) => pubkeyParamToHex(typeof item === "string" ? item : "") ?? "")
+          .filter((item: string) => !!item);
+        setVipPubkeys(Array.from(new Set(normalizedVips)));
+      } else {
+        setVipPubkeys([]);
+      }
+      if (Array.isArray(parsed.viewerAllowPubkeys)) {
+        const normalizedAllow = parsed.viewerAllowPubkeys
+          .map((item: any) => pubkeyParamToHex(typeof item === "string" ? item : "") ?? "")
+          .filter((item: string) => !!item);
+        setViewerAllowPubkeys(Array.from(new Set(normalizedAllow)));
+      } else {
+        setViewerAllowPubkeys([]);
+      }
       if (typeof parsed.captionLines === "string") setCaptionLines(parsed.captionLines);
       if (typeof parsed.renditionLines === "string") setRenditionLines(parsed.renditionLines);
       if (typeof parsed.autoLadder === "boolean") setAutoLadder(parsed.autoLadder);
       if (typeof parsed.topicsCsv === "string") setTopicsCsv(parsed.topicsCsv);
       if (typeof parsed.videoMaxBitrateKbps === "string") setVideoMaxBitrateKbps(parsed.videoMaxBitrateKbps);
       if (typeof parsed.videoMaxFps === "string") setVideoMaxFps(parsed.videoMaxFps);
+      if (parsed.captureResolution === "source" || parsed.captureResolution === "1080p" || parsed.captureResolution === "720p" || parsed.captureResolution === "480p") {
+        setCaptureResolution(parsed.captureResolution);
+      }
+      if (parsed.bitratePreset === "custom" || parsed.bitratePreset === "low" || parsed.bitratePreset === "medium" || parsed.bitratePreset === "high") {
+        setBitratePreset(parsed.bitratePreset);
+      }
+      if (typeof parsed.autoReconnectEnabled === "boolean") setAutoReconnectEnabled(parsed.autoReconnectEnabled);
+      if (typeof parsed.chatSlowModeSecInput === "string") setChatSlowModeSecInput(parsed.chatSlowModeSecInput);
+      if (typeof parsed.chatSubscriberOnly === "boolean") setChatSubscriberOnly(parsed.chatSubscriberOnly);
+      if (typeof parsed.chatFollowerOnly === "boolean") setChatFollowerOnly(parsed.chatFollowerOnly);
+      if (typeof parsed.discoverable === "boolean") setDiscoverable(parsed.discoverable);
+      else setDiscoverable(true);
+      if (typeof parsed.matureContent === "boolean") setMatureContent(parsed.matureContent);
+      else setMatureContent(false);
     } catch {
-      setStreamId(safeDefaultStreamId());
+      setStreamId(requestedStreamId ?? safeDefaultStreamId(identity?.pubkey ?? null));
       setXmr(social.settings.paymentDefaults.xmrTipAddress);
+      setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
       setStakeXmr(social.settings.paymentDefaults.stakeXmr);
       setStakeNote(social.settings.paymentDefaults.stakeNote);
       setHostMode(social.settings.broadcastHostMode);
       setRebroadcastThresholdInput(String(social.settings.broadcastRebroadcastThreshold));
+      setCaptureResolution("source");
+      setBitratePreset("custom");
+      setAutoReconnectEnabled(true);
+      setReconnectAttempt(0);
+      setChatSlowModeSecInput("");
+      setChatSubscriberOnly(false);
+      setChatFollowerOnly(false);
+      setDiscoverable(true);
+      setMatureContent(false);
+      setVodArchiveEnabled(false);
+      setFeeWaiverGuilds([]);
+      setVipPubkeys([]);
+      setViewerAllowPubkeys([]);
       setCaptionLines("");
       setRenditionLines("");
       setVideoMaxBitrateKbps("");
@@ -315,10 +504,18 @@ export default function BroadcastPage() {
     social.isLoading,
     social.settings.broadcastHostMode,
     social.settings.broadcastRebroadcastThreshold,
+    identity?.pubkey,
     social.settings.paymentDefaults.stakeNote,
+    social.settings.paymentDefaults.paymentMethods,
     social.settings.paymentDefaults.stakeXmr,
-    social.settings.paymentDefaults.xmrTipAddress
+    social.settings.paymentDefaults.xmrTipAddress,
+    requestedStreamId
   ]);
+
+  useEffect(() => {
+    if (!requestedStreamId) return;
+    setStreamId(requestedStreamId);
+  }, [requestedStreamId]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -331,15 +528,28 @@ export default function BroadcastPage() {
           summary,
           image,
           xmr,
+          paymentMethods: paymentDrafts,
           stakeXmr,
           stakeNote,
           hostMode,
           rebroadcastThresholdInput,
+          vodArchiveEnabled,
+          feeWaiverGuilds,
+          vipPubkeys,
+          viewerAllowPubkeys,
           captionLines,
           renditionLines,
           autoLadder,
+          captureResolution,
+          bitratePreset,
           videoMaxBitrateKbps,
           videoMaxFps,
+          autoReconnectEnabled,
+          chatSlowModeSecInput,
+          chatSubscriberOnly,
+          chatFollowerOnly,
+          discoverable,
+          matureContent,
           topicsCsv
         })
       );
@@ -352,10 +562,23 @@ export default function BroadcastPage() {
     image,
     renditionLines,
     autoLadder,
+    captureResolution,
+    bitratePreset,
+    autoReconnectEnabled,
+    chatSlowModeSecInput,
+    chatSubscriberOnly,
+    chatFollowerOnly,
+    discoverable,
+    matureContent,
     hostMode,
+    paymentDrafts,
     stakeNote,
     stakeXmr,
     rebroadcastThresholdInput,
+    vodArchiveEnabled,
+    feeWaiverGuilds,
+    vipPubkeys,
+    viewerAllowPubkeys,
     streamId,
     summary,
     title,
@@ -374,6 +597,7 @@ export default function BroadcastPage() {
   }, [stakeAtomic]);
   const videoMaxBitrateParsed = useMemo(() => parsePositiveInt(videoMaxBitrateKbps), [videoMaxBitrateKbps]);
   const videoMaxFpsParsed = useMemo(() => parsePositiveInt(videoMaxFps), [videoMaxFps]);
+  const chatSlowModeSecParsed = useMemo(() => parsePositiveInt(chatSlowModeSecInput), [chatSlowModeSecInput]);
   const rebroadcastThresholdParsed = useMemo(() => parsePositiveInt(rebroadcastThresholdInput), [rebroadcastThresholdInput]);
   const rebroadcastThresholdInvalid = useMemo(
     () => hostMode === "p2p_economy" && rebroadcastThresholdInput.trim() !== "" && rebroadcastThresholdParsed === null,
@@ -384,10 +608,25 @@ export default function BroadcastPage() {
     [videoMaxBitrateKbps, videoMaxBitrateParsed]
   );
   const videoMaxFpsInvalid = useMemo(() => videoMaxFps.trim() !== "" && videoMaxFpsParsed === null, [videoMaxFps, videoMaxFpsParsed]);
+  const chatSlowModeSecInvalid = useMemo(
+    () => chatSlowModeSecInput.trim() !== "" && chatSlowModeSecParsed === null,
+    [chatSlowModeSecInput, chatSlowModeSecParsed]
+  );
   const parsedCaptions = useMemo(() => parseCaptionLines(captionLines), [captionLines]);
   const parsedRenditions = useMemo(() => parseRenditionLines(renditionLines), [renditionLines]);
   const captionInputError = parsedCaptions.error;
   const renditionInputError = parsedRenditions.error;
+  const xmrInputError = useMemo(() => {
+    const value = xmr.trim();
+    if (!value) return null;
+    return validatePaymentAddress("xmr", value);
+  }, [xmr]);
+  const paymentValidation = useMemo(() => validatePaymentMethodDrafts(paymentDrafts), [paymentDrafts]);
+  const paymentInputError = paymentValidation.errors[0] ?? null;
+  const captureResolutionDims = useMemo(() => {
+    if (captureResolution === "source") return null;
+    return CAPTURE_RESOLUTION_PRESETS[captureResolution];
+  }, [captureResolution]);
 
   const originStreamId = useMemo(() => {
     if (!identity) return null;
@@ -423,6 +662,85 @@ export default function BroadcastPage() {
       .slice(0, 24);
   }, [topicsCsv]);
 
+  const addPaymentDraft = useCallback(() => {
+    setPaymentDrafts((prev) => [...prev, createPaymentMethodDraft()]);
+  }, []);
+
+  const removePaymentDraft = useCallback((index: number) => {
+    setPaymentDrafts((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+  }, []);
+
+  const updatePaymentDraft = useCallback((index: number, patch: Partial<PaymentMethodDraft>) => {
+    setPaymentDrafts((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }, []);
+
+  const addWaiverGuild = useCallback(() => {
+    setWaiverInputError(null);
+    const guildPubkey = pubkeyParamToHex(waiverGuildPubkeyInput);
+    const guildId = waiverGuildIdInput.trim();
+    if (!guildPubkey) {
+      setWaiverInputError("Guild owner pubkey must be an `npub…` or 64-hex key.");
+      return;
+    }
+    if (!guildId) {
+      setWaiverInputError("Guild ID is required for guild waivers.");
+      return;
+    }
+    setFeeWaiverGuilds((prev) => {
+      const exists = prev.some((item) => item.guildPubkey === guildPubkey && item.guildId === guildId);
+      if (exists) return prev;
+      return [...prev, { guildPubkey, guildId }];
+    });
+    setWaiverGuildPubkeyInput("");
+    setWaiverGuildIdInput("");
+  }, [waiverGuildIdInput, waiverGuildPubkeyInput]);
+
+  const removeWaiverGuild = useCallback((guildPubkey: string, guildId: string) => {
+    setFeeWaiverGuilds((prev) => prev.filter((item) => !(item.guildPubkey === guildPubkey && item.guildId === guildId)));
+  }, []);
+
+  const addVipPubkey = useCallback(() => {
+    setWaiverInputError(null);
+    const vipPubkey = pubkeyParamToHex(vipPubkeyInput);
+    if (!vipPubkey) {
+      setWaiverInputError("VIP pubkey must be an `npub…` or 64-hex key.");
+      return;
+    }
+    setVipPubkeys((prev) => (prev.includes(vipPubkey) ? prev : [...prev, vipPubkey]));
+    setVipPubkeyInput("");
+  }, [vipPubkeyInput]);
+
+  const removeVipPubkey = useCallback((vipPubkey: string) => {
+    setVipPubkeys((prev) => prev.filter((item) => item !== vipPubkey));
+  }, []);
+
+  const addViewerAllowPubkey = useCallback(() => {
+    setViewerAllowInputError(null);
+    const viewerPubkey = pubkeyParamToHex(viewerAllowInput);
+    if (!viewerPubkey) {
+      setViewerAllowInputError("Viewer pubkey must be an `npub…` or 64-hex key.");
+      return;
+    }
+    if (viewerPubkey === identity?.pubkey?.toLowerCase()) {
+      setViewerAllowInputError("You are always allowed as stream owner.");
+      return;
+    }
+    setViewerAllowPubkeys((prev) => (prev.includes(viewerPubkey) ? prev : [...prev, viewerPubkey]));
+    setViewerAllowInput("");
+  }, [identity?.pubkey, viewerAllowInput]);
+
+  const removeViewerAllowPubkey = useCallback((viewerPubkey: string) => {
+    setViewerAllowPubkeys((prev) => prev.filter((item) => item !== viewerPubkey));
+  }, []);
+
+  const setBitratePresetWithDefaults = useCallback((preset: "custom" | "low" | "medium" | "high") => {
+    setBitratePreset(preset);
+    if (preset === "custom") return;
+    if (preset === "low") setVideoMaxBitrateKbps("1000");
+    if (preset === "medium") setVideoMaxBitrateKbps("2500");
+    if (preset === "high") setVideoMaxBitrateKbps("4500");
+  }, []);
+
   const npub = useMemo(() => (identity ? pubkeyHexToNpub(identity.pubkey) : null), [identity]);
   const watchPath = useMemo(() => {
     if (!identity) return `/watch/npub/${streamId}`;
@@ -443,6 +761,60 @@ export default function BroadcastPage() {
     return `/api/hls/${streamName}/index.m3u8`;
   }, [origin, originStreamId, streamId]);
 
+  const externalStreamKey = useMemo(() => {
+    return originStreamId ?? "";
+  }, [originStreamId]);
+
+  const rtmpServerUrl = useMemo(() => {
+    const configured = process.env.NEXT_PUBLIC_RTMP_INGEST_ORIGIN?.trim();
+    if (configured) return configured.replace(/\/$/, "");
+
+    try {
+      if (origin) {
+        const parsed = new URL(origin);
+        return `rtmp://${parsed.hostname}:1940`;
+      }
+      if (typeof window !== "undefined") return `rtmp://${window.location.hostname}:1940`;
+    } catch {
+      // ignore
+    }
+    return "rtmp://localhost:1940";
+  }, [origin]);
+
+  const rtmpPublishUrl = useMemo(() => {
+    if (!externalStreamKey) return "";
+    return `${rtmpServerUrl}/${externalStreamKey}`;
+  }, [externalStreamKey, rtmpServerUrl]);
+
+  const whipPublishUrl = useMemo(() => {
+    if (!externalStreamKey) return "";
+    if (origin) return `${origin}/api/whip/${externalStreamKey}/whip`;
+    return `/api/whip/${externalStreamKey}/whip`;
+  }, [externalStreamKey, origin]);
+
+  const encoderGuideSteps = useMemo(() => {
+    const streamKeyValue = externalStreamKey || "<connect identity + valid stream id>";
+    const shared = [
+      "Open stream output settings and choose Custom RTMP.",
+      `Server: ${rtmpServerUrl}`,
+      `Stream key: ${streamKeyValue}`,
+      "Start streaming from your encoder, then click “Announce Live (External)” below."
+    ];
+    switch (encoderGuide) {
+      case "streamlabs":
+        return ["Open Settings → Stream in Streamlabs.", ...shared];
+      case "vmix":
+        return ["Open Settings → Outputs/NDI/SRT → Streaming in vMix.", ...shared];
+      case "xsplit":
+        return ["Open Broadcast → Set up a new output → Custom RTMP in XSplit.", ...shared];
+      case "prism":
+        return ["Open Channels → Add Channel → RTMP in PRISM.", ...shared];
+      case "obs":
+      default:
+        return ["Open Settings → Stream in OBS.", ...shared];
+    }
+  }, [encoderGuide, externalStreamKey, rtmpServerUrl]);
+
   const copyWatchLink = useCallback(async () => {
     setCopyStatus("idle");
     try {
@@ -455,6 +827,19 @@ export default function BroadcastPage() {
       setTimeout(() => setCopyStatus("idle"), 1800);
     }
   }, [watchUrl]);
+
+  const copyExternalEncoderValue = useCallback(async (label: string, value: string) => {
+    if (!value) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
+      await navigator.clipboard.writeText(value);
+      setEncoderCopyStatus(`${label} copied`);
+      setTimeout(() => setEncoderCopyStatus(null), 1500);
+    } catch {
+      setEncoderCopyStatus(`Failed to copy ${label.toLowerCase()}`);
+      setTimeout(() => setEncoderCopyStatus(null), 1800);
+    }
+  }, []);
 
   const refreshDevices = async () => {
     try {
@@ -493,6 +878,8 @@ export default function BroadcastPage() {
   }, [mediaStream]);
 
   const stopPreview = () => {
+    previewResourceCleanupRef.current?.();
+    previewResourceCleanupRef.current = null;
     const stream = mediaStreamRef.current;
     stream?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
@@ -500,7 +887,7 @@ export default function BroadcastPage() {
     setStatus((prev) => (prev === "live" ? prev : "idle"));
   };
 
-  const startPreview = async (modeOverride?: "camera" | "screen") => {
+  const startPreview = async (modeOverride?: SourceMode) => {
     setError(null);
     const mode = modeOverride ?? sourceMode;
     setSourceMode(mode);
@@ -508,12 +895,25 @@ export default function BroadcastPage() {
     try {
       stopPreview();
 
+      const applyResolutionConstraints = async (track: MediaStreamTrack | undefined) => {
+        if (!track || !captureResolutionDims || !track.applyConstraints) return;
+        try {
+          await track.applyConstraints({
+            width: { ideal: captureResolutionDims.width, max: captureResolutionDims.width },
+            height: { ideal: captureResolutionDims.height, max: captureResolutionDims.height }
+          });
+        } catch {
+          // Some devices can't satisfy strict capture dimensions.
+        }
+      };
+
       let stream: MediaStream;
       if (mode === "screen") {
         const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
         if (!getDisplayMedia) throw new Error("Screen share is not supported in this browser.");
 
         stream = await getDisplayMedia.call(navigator.mediaDevices, { video: true, audio: false } as any);
+        await applyResolutionConstraints(stream.getVideoTracks()[0]);
         if (videoMaxFpsParsed) {
           const screenTrack = stream.getVideoTracks()[0];
           if (screenTrack?.applyConstraints) {
@@ -535,15 +935,92 @@ export default function BroadcastPage() {
           });
           mic.getAudioTracks().forEach((t) => stream.addTrack(t));
         }
-      } else {
+      } else if (mode === "camera") {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access is not supported in this browser.");
         const videoConstraints: MediaTrackConstraints = {};
         if (videoDeviceId) videoConstraints.deviceId = { exact: videoDeviceId };
         if (videoMaxFpsParsed) videoConstraints.frameRate = { ideal: videoMaxFpsParsed, max: videoMaxFpsParsed };
+        if (captureResolutionDims) {
+          videoConstraints.width = { ideal: captureResolutionDims.width, max: captureResolutionDims.width };
+          videoConstraints.height = { ideal: captureResolutionDims.height, max: captureResolutionDims.height };
+        }
         stream = await navigator.mediaDevices.getUserMedia({
           video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true,
           audio: includeAudio ? (audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true) : false
         });
+      } else {
+        const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
+        if (!getDisplayMedia) throw new Error("Screen share is not supported in this browser.");
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access is not supported in this browser.");
+
+        const screenStream = await getDisplayMedia.call(navigator.mediaDevices, { video: true, audio: false } as any);
+        await applyResolutionConstraints(screenStream.getVideoTracks()[0]);
+
+        const cameraVideoConstraints: MediaTrackConstraints = { width: { ideal: 640 }, height: { ideal: 360 } };
+        if (videoDeviceId) cameraVideoConstraints.deviceId = { exact: videoDeviceId };
+        if (videoMaxFpsParsed) cameraVideoConstraints.frameRate = { ideal: videoMaxFpsParsed, max: videoMaxFpsParsed };
+        const cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: cameraVideoConstraints,
+          audio: includeAudio ? (audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true) : false
+        });
+
+        const screenTrack = screenStream.getVideoTracks()[0];
+        const screenSettings = screenTrack?.getSettings?.() ?? {};
+        const width = captureResolutionDims?.width ?? Math.trunc((screenSettings.width as number | undefined) ?? 1280);
+        const height = captureResolutionDims?.height ?? Math.trunc((screenSettings.height as number | undefined) ?? 720);
+
+        const screenVideo = document.createElement("video");
+        screenVideo.srcObject = screenStream;
+        screenVideo.muted = true;
+        screenVideo.playsInline = true;
+        await screenVideo.play();
+
+        const cameraVideo = document.createElement("video");
+        cameraVideo.srcObject = cameraStream;
+        cameraVideo.muted = true;
+        cameraVideo.playsInline = true;
+        await cameraVideo.play();
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(320, width);
+        canvas.height = Math.max(180, height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Failed to initialize compositing canvas.");
+
+        let rafId = 0;
+        const draw = () => {
+          context.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+          const pipWidth = Math.round(canvas.width * 0.24);
+          const pipHeight = Math.round((pipWidth / 16) * 9);
+          const margin = Math.max(12, Math.round(canvas.width * 0.015));
+          const pipX = canvas.width - pipWidth - margin;
+          const pipY = canvas.height - pipHeight - margin;
+          context.fillStyle = "rgba(0,0,0,0.45)";
+          context.fillRect(pipX - 4, pipY - 4, pipWidth + 8, pipHeight + 8);
+          context.drawImage(cameraVideo, pipX, pipY, pipWidth, pipHeight);
+          rafId = requestAnimationFrame(draw);
+        };
+        draw();
+
+        const composed = canvas.captureStream(videoMaxFpsParsed ?? 30);
+        const micTrack = cameraStream.getAudioTracks()[0] ?? null;
+        if (micTrack) composed.addTrack(micTrack);
+
+        previewResourceCleanupRef.current = () => {
+          if (rafId) cancelAnimationFrame(rafId);
+          try {
+            screenVideo.pause();
+            cameraVideo.pause();
+            screenVideo.srcObject = null;
+            cameraVideo.srcObject = null;
+          } catch {
+            // ignore
+          }
+          screenStream.getTracks().forEach((track) => track.stop());
+          cameraStream.getTracks().forEach((track) => track.stop());
+        };
+
+        stream = composed;
       }
 
       const onEnded = () => stopPreview();
@@ -567,6 +1044,9 @@ export default function BroadcastPage() {
     if (rebroadcastThresholdInvalid) throw new Error("Rebroadcast threshold must be a positive integer.");
     if (captionInputError) throw new Error(captionInputError);
     if (renditionInputError) throw new Error(renditionInputError);
+    if (xmrInputError) throw new Error(xmrInputError);
+    if (paymentInputError) throw new Error(paymentInputError);
+    if (chatSlowModeSecInvalid) throw new Error("Chat slow mode seconds must be a positive integer.");
 
     const originStreamId = makeOriginStreamId(identity.pubkey, streamId);
     if (!originStreamId) throw new Error(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
@@ -621,8 +1101,18 @@ export default function BroadcastPage() {
       streaming: streamingHint,
       image: image.trim() || undefined,
       xmr: xmr.trim() || undefined,
+      payments: paymentValidation.methods,
       hostMode,
       rebroadcastThreshold: hostMode === "p2p_economy" ? rebroadcastThresholdParsed ?? 6 : undefined,
+      streamChatSlowModeSec: chatSlowModeSecParsed ?? undefined,
+      streamChatSubscriberOnly: chatSubscriberOnly,
+      streamChatFollowerOnly: chatFollowerOnly,
+      discoverable,
+      matureContent,
+      viewerAllowPubkeys,
+      vodArchiveEnabled,
+      feeWaiverGuilds,
+      feeWaiverVipPubkeys: vipPubkeys,
       stakeAmountAtomic,
       stakeNote: stakeAmountAtomic ? (stakeNote.trim() || undefined) : undefined,
       captions: parsedCaptions.tracks,
@@ -632,6 +1122,16 @@ export default function BroadcastPage() {
     });
 
     const signed = await signEvent(unsigned);
+    try {
+      await fetch("/api/playback-access/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ announceEvent: signed }),
+        cache: "no-store"
+      });
+    } catch {
+      // ignore (playback policy registration is best-effort)
+    }
     const report = await publishEventDetailed(relays, signed);
     setAnnounceReport(report);
     return report.ok;
@@ -643,9 +1143,22 @@ export default function BroadcastPage() {
     hostMode,
     manifestSignerPubkey,
     parsedCaptions.tracks,
+    paymentInputError,
+    xmrInputError,
+    paymentValidation.methods,
     parsedRenditions.renditions,
     rebroadcastThresholdInvalid,
     rebroadcastThresholdParsed,
+    chatSlowModeSecInvalid,
+    chatSlowModeSecParsed,
+    chatSubscriberOnly,
+    chatFollowerOnly,
+    discoverable,
+    matureContent,
+    viewerAllowPubkeys,
+    vodArchiveEnabled,
+    feeWaiverGuilds,
+    vipPubkeys,
     relays,
     renditionInputError,
     signEvent,
@@ -719,6 +1232,76 @@ export default function BroadcastPage() {
     return () => clearInterval(interval);
   }, [announce, autoAnnounce, identity, status]);
 
+  const reconnectPublish = useCallback(
+    async (reason: string) => {
+      if (reconnectInFlightRef.current) return;
+      if (!identity) return;
+      const stream = mediaStreamRef.current;
+      if (!stream) return;
+
+      reconnectInFlightRef.current = true;
+      setReconnectAttempt((value) => value + 1);
+      setStatus("connecting");
+      try {
+        whipRef.current?.close();
+      } catch {
+        // ignore
+      }
+
+      try {
+        const originStreamId = makeOriginStreamId(identity.pubkey, streamId);
+        if (!originStreamId) throw new Error(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
+        const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip`;
+        const client = new WhipClient(endpoint);
+        whipRef.current = client;
+        await client.publish(stream, {
+          ...lastWhipOptionsRef.current,
+          onConnectionStateChange: (state) => {
+            if (manualStopRef.current) return;
+            if (state === "failed" || state === "disconnected") {
+              setError(`WHIP connection ${state}. Reconnecting…`);
+              if (reconnectTimerRef.current) return;
+              reconnectTimerRef.current = setTimeout(() => {
+                reconnectTimerRef.current = null;
+                void reconnectPublish(state);
+              }, 1600);
+            }
+          }
+        });
+        setStatus("live");
+        setError(`Recovered from ${reason}; stream reconnected.`);
+        try {
+          setAnnounceStep("checking");
+          const ok = await announce("live");
+          setLastAnnounceAt(Date.now());
+          setAnnounceStep(ok ? "ok" : "fail");
+        } catch {
+          setAnnounceStep("fail");
+        }
+      } catch (err: any) {
+        setStatus("error");
+        setError(err?.message ?? `Failed to reconnect after ${reason}.`);
+      } finally {
+        reconnectInFlightRef.current = false;
+      }
+    },
+    [announce, identity, streamId]
+  );
+
+  const scheduleReconnect = useCallback(
+    (reason: string) => {
+      if (!autoReconnectEnabled || manualStopRef.current) return;
+      if (statusRef.current !== "live" && statusRef.current !== "connecting") return;
+      if (reconnectTimerRef.current) return;
+      setError(`WHIP connection ${reason}. Reconnecting…`);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        void reconnectPublish(reason);
+      }, 1600);
+    },
+    [autoReconnectEnabled, reconnectPublish]
+  );
+
   const goLive = async () => {
     setError(null);
     if (!identity) {
@@ -741,6 +1324,10 @@ export default function BroadcastPage() {
       setError("Rebroadcast threshold must be a positive integer.");
       return;
     }
+    if (chatSlowModeSecInvalid) {
+      setError("Chat slow mode seconds must be a positive integer.");
+      return;
+    }
     if (captionInputError) {
       setError(captionInputError);
       return;
@@ -752,6 +1339,11 @@ export default function BroadcastPage() {
 
     setStatus("connecting");
     try {
+      manualStopRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       const originStreamId = makeOriginStreamId(identity.pubkey, streamId);
       if (!originStreamId) {
         setError(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
@@ -762,12 +1354,21 @@ export default function BroadcastPage() {
       const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip`;
       const client = new WhipClient(endpoint);
       whipRef.current = client;
-
-      await client.publish(mediaStream, {
+      lastWhipOptionsRef.current = {
         videoMaxBitrateKbps: videoMaxBitrateParsed ?? undefined,
         videoMaxFps: videoMaxFpsParsed ?? undefined
+      };
+      await client.publish(mediaStream, {
+        videoMaxBitrateKbps: videoMaxBitrateParsed ?? undefined,
+        videoMaxFps: videoMaxFpsParsed ?? undefined,
+        onConnectionStateChange: (connectionState) => {
+          if (connectionState === "failed" || connectionState === "disconnected") {
+            scheduleReconnect(connectionState);
+          }
+        }
       });
       setStatus("live");
+      setReconnectAttempt(0);
 
       try {
         const nextSession: StoredBroadcastSession = {
@@ -802,6 +1403,11 @@ export default function BroadcastPage() {
 
   const endStream = async () => {
     setError(null);
+    manualStopRef.current = true;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     try {
       whipRef.current?.close();
       whipRef.current = null;
@@ -822,10 +1428,67 @@ export default function BroadcastPage() {
     }
   };
 
+  const announceExternal = useCallback(
+    async (nextStatus: "live" | "ended") => {
+      if (!identity) {
+        setError("Connect an identity first (NIP-07 preferred).");
+        return;
+      }
+      if (!originStreamId) {
+        setError(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
+        return;
+      }
+
+      setError(null);
+      try {
+        setAnnounceStep("checking");
+        const ok = await announce(nextStatus);
+        setLastAnnounceAt(Date.now());
+        setAnnounceStep(ok ? "ok" : "fail");
+
+        if (nextStatus === "live") {
+          try {
+            const nextSession: StoredBroadcastSession = {
+              pubkey: identity.pubkey,
+              streamId,
+              originStreamId,
+              startedAt: Date.now()
+            };
+            localStorage.setItem("dstream_broadcast_session_v1", JSON.stringify(nextSession));
+            setStoredSession(nextSession);
+          } catch {
+            // ignore
+          }
+          if (!ok) setError("External stream is live, but announce failed on relays.");
+        } else {
+          clearStoredSession();
+          if (!ok) setError("External stream ended locally, but end announce failed on relays.");
+        }
+      } catch (e: any) {
+        setAnnounceStep("fail");
+        setError(e?.message ?? `Failed to announce external stream (${nextStatus}).`);
+      }
+    },
+    [announce, clearStoredSession, identity, originStreamId, streamId]
+  );
+
+  const checkExternalIngest = useCallback(async () => {
+    setHlsStep("checking");
+    setHlsLastCode(null);
+    try {
+      const res = await fetch(hlsLocalUrl, { cache: "no-store" });
+      setHlsLastCode(res.status);
+      setHlsStep(res.ok ? "ok" : "fail");
+    } catch {
+      setHlsLastCode(null);
+      setHlsStep("fail");
+    }
+  }, [hlsLocalUrl]);
+
   return (
       <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-7xl mx-auto p-6">
+      <main className="max-w-[1720px] mx-auto px-6 pb-10 pt-6">
         <header className="flex flex-wrap items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-3">
@@ -891,9 +1554,9 @@ export default function BroadcastPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-800">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
+          <div className="space-y-6 min-w-0">
+            <div className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800 min-h-[52vh] lg:min-h-[60vh] xl:min-h-[64vh] max-h-[80vh]">
               {mediaStream ? (
                 <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               ) : (
@@ -920,16 +1583,175 @@ export default function BroadcastPage() {
                     >
                       Screen
                     </button>
+                    <button
+                      onClick={() => {
+                        void startPreview("camera_screen_pip");
+                      }}
+                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                    >
+                      Camera + Screen
+                    </button>
                   </div>
                   <div className="text-xs text-neutral-500">Your browser will ask for permission after you click.</div>
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-5">
+              <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">Source</label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setSourceMode("camera")}
+                        className={`px-3 py-2 rounded-xl border text-sm ${
+                          sourceMode === "camera"
+                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        }`}
+                        disabled={status === "connecting" || status === "live"}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Camera className="w-4 h-4" /> Camera
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSourceMode("screen")}
+                        className={`px-3 py-2 rounded-xl border text-sm ${
+                          sourceMode === "screen"
+                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        }`}
+                        disabled={status === "connecting" || status === "live"}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <MonitorUp className="w-4 h-4" /> Screen
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSourceMode("camera_screen_pip")}
+                        className={`px-3 py-2 rounded-xl border text-sm ${
+                          sourceMode === "camera_screen_pip"
+                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        }`}
+                        disabled={status === "connecting" || status === "live"}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Camera className="w-4 h-4" />
+                          <MonitorUp className="w-4 h-4" />
+                          Camera + Screen
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:justify-self-end">
+                    <label className="text-xs text-neutral-400">Audio</label>
+                    <label className="flex items-center gap-2 text-sm text-neutral-300 select-none cursor-pointer whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={includeAudio}
+                        onChange={(e) => setIncludeAudio(e.target.checked)}
+                        className="accent-blue-500"
+                        disabled={status === "connecting" || status === "live"}
+                      />
+                      Include microphone
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3 pt-1">
+                  {mediaStream ? (
+                    <button
+                      onClick={stopPreview}
+                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                      disabled={status === "connecting" || status === "live"}
+                    >
+                      Stop Preview
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        void startPreview();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                    >
+                      {sourceMode === "screen" ? "Share Screen" : sourceMode === "camera_screen_pip" ? "Share + Camera PiP" : "Start Preview"}
+                    </button>
+                  )}
+
+                  {status === "live" ? (
+                    <button onClick={endStream} className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold flex items-center gap-2">
+                      <Square className="w-4 h-4" /> End Stream
+                    </button>
+                  ) : (
+                    <button
+                      onClick={goLive}
+                      className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                      disabled={!mediaStream || status === "connecting"}
+                    >
+                      <Radio className="w-4 h-4" /> Start Stream
+                    </button>
+                  )}
+
+                  {status === "live" && identity && (
+                    <button
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            setAnnounceStep("checking");
+                            const ok = await announce("live");
+                            setLastAnnounceAt(Date.now());
+                            setAnnounceStep(ok ? "ok" : "fail");
+                          } catch {
+                            setAnnounceStep("fail");
+                          }
+                        })();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                      title="Republish the stream announce event (kind 30311)"
+                      disabled={announceStep === "checking"}
+                    >
+                      Update Announce
+                    </button>
+                  )}
+
+                  <Link
+                    href={`/watch/${identity ? pubkeyHexToNpub(identity.pubkey) ?? identity.pubkey : "npub"}/${streamId}`}
+                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2"
+                    title="Open watch page for this stream"
+                  >
+                    Watch <ExternalLink className="w-4 h-4" />
+                  </Link>
+
+                  <button
+                    onClick={copyWatchLink}
+                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                    title="Copy watch link"
+                  >
+                    {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Stream ID (Nostr d-tag)</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs text-neutral-400">Stream ID (Nostr d-tag)</label>
+                    <button
+                      type="button"
+                      onClick={() => setStreamId(safeDefaultStreamId(identity?.pubkey ?? null))}
+                      disabled={status === "connecting" || status === "live"}
+                      className="px-2 py-1 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-[11px] text-neutral-300 disabled:opacity-50"
+                      title="Generate from identity pubkey + timestamp"
+                    >
+                      Auto from pubkey
+                    </button>
+                  </div>
                   <input
                     value={streamId}
                     onChange={(e) => setStreamId(e.target.value)}
@@ -958,382 +1780,857 @@ export default function BroadcastPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Thumbnail URL (optional)</label>
-                  <input
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={status === "connecting"}
-                    placeholder="https://…"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Topics (comma separated)</label>
-                  <input
-                    value={topicsCsv}
-                    onChange={(e) => setTopicsCsv(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={status === "connecting"}
-                    placeholder="music, gaming, rust…"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="text-xs text-neutral-400">Monero tip address (optional)</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setXmr(social.settings.paymentDefaults.xmrTipAddress);
-                      setStakeXmr(social.settings.paymentDefaults.stakeXmr);
-                      setStakeNote(social.settings.paymentDefaults.stakeNote);
-                      setHostMode(social.settings.broadcastHostMode);
-                      setRebroadcastThresholdInput(String(social.settings.broadcastRebroadcastThreshold));
-                    }}
-                    disabled={status === "connecting" || status === "live"}
-                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                    title="Apply payment defaults from Settings"
-                  >
-                    Apply defaults
-                  </button>
-                </div>
-                <input
-                  value={xmr}
-                  onChange={(e) => setXmr(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
-                  disabled={status === "connecting"}
-                  placeholder="4…"
-                />
-                <div className="text-xs text-neutral-500">Shown on the watch page if set.</div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Stake required for P2P assist (XMR, optional)</label>
-                  <input
-                    value={stakeXmr}
-                    onChange={(e) => setStakeXmr(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
-                    disabled={status === "connecting"}
-                    placeholder="0.05"
-                  />
-                  {stakeInvalid ? (
-                    <div className="text-xs text-red-300">Invalid amount (use a number with up to 12 decimals).</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">If set, viewers must stake this amount (confirmed) to enable P2P assist.</div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Stake note (optional)</label>
-                  <input
-                    value={stakeNote}
-                    onChange={(e) => setStakeNote(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={status === "connecting"}
-                    placeholder="anti-leech bond…"
-                  />
-                  <div className="text-xs text-neutral-500">Shown on the watch page if set.</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Host mode</label>
-                  <select
-                    value={hostMode}
-                    onChange={(e) => setHostMode(e.target.value === "host_only" ? "host_only" : "p2p_economy")}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={status === "connecting"}
-                  >
-                    <option value="p2p_economy">P2P Economy (rebroadcast queue + fee waivers)</option>
-                    <option value="host_only">Host-Only (no rebroadcast waivers)</option>
-                  </select>
-                  <div className="text-xs text-neutral-500">
-                    Advertised in the stream announce so viewers can apply the same policy.
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Rebroadcast active set threshold (T)</label>
-                  <input
-                    value={rebroadcastThresholdInput}
-                    onChange={(e) => setRebroadcastThresholdInput(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono disabled:opacity-60"
-                    disabled={status === "connecting" || hostMode === "host_only"}
-                    placeholder="6"
-                  />
-                  {rebroadcastThresholdInvalid ? (
-                    <div className="text-xs text-red-300">Use a positive integer.</div>
-                  ) : hostMode === "host_only" ? (
-                    <div className="text-xs text-neutral-500">Not used in Host-Only mode.</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">First-come viewers fill active set up to T; others remain queued.</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Caption tracks (optional, one per line)</label>
-                  <textarea
-                    value={captionLines}
-                    onChange={(e) => setCaptionLines(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none min-h-24 font-mono"
-                    disabled={status === "connecting"}
-                    placeholder={"en|English|/api/hls/stream/subs-en.vtt|default\nes|Espanol|https://cdn.example.com/subs-es.vtt"}
-                  />
-                  {captionInputError ? (
-                    <div className="text-xs text-red-300">{captionInputError}</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">Format: `lang|label|url|default(optional)`.</div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Rendition playlists (optional, one per line)</label>
-                  <textarea
-                    value={renditionLines}
-                    onChange={(e) => setRenditionLines(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none min-h-24 font-mono"
-                    disabled={status === "connecting"}
-                    placeholder={"1080p|/api/hls/stream/1080.m3u8|6000000|1920|1080|avc1.640028,mp4a.40.2\n720p|/api/hls/stream/720.m3u8|3000000|1280|720|avc1.4d401f,mp4a.40.2"}
-                  />
-                  {renditionInputError ? (
-                    <div className="text-xs text-red-300">{renditionInputError}</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">
-                      Format: `id|url|bandwidth|width|height|codecs`. If two or more are present, watch auto-builds a master playlist.
-                    </div>
-                  )}
-                  <label className="flex items-center gap-2 text-xs text-neutral-300 select-none cursor-pointer pt-1">
-                    <input
-                      type="checkbox"
-                      checked={autoLadder}
-                      onChange={(e) => setAutoLadder(e.target.checked)}
-                      className="accent-blue-500"
-                      disabled={status === "connecting"}
-                    />
-                    Auto-generate ladder hints (source + 720p/480p/360p derived renditions)
-                  </label>
-                  {autoLadderRenditionPreview.length > 0 && (
-                    <div className="text-[11px] text-neutral-500 font-mono break-all">
-                      {autoLadderRenditionPreview.map((entry) => `${entry.id}:${entry.url}`).join(" | ")}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Source</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSourceMode("camera")}
-                      className={`px-3 py-2 rounded-xl border text-sm ${
-                        sourceMode === "camera"
-                          ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                          : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                      }`}
-                      disabled={status === "connecting" || status === "live"}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <Camera className="w-4 h-4" /> Camera
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSourceMode("screen")}
-                      className={`px-3 py-2 rounded-xl border text-sm ${
-                        sourceMode === "screen"
-                          ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                          : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                      }`}
-                      disabled={status === "connecting" || status === "live"}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <MonitorUp className="w-4 h-4" /> Screen
-                      </span>
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Audio</label>
-                  <label className="flex items-center gap-2 text-sm text-neutral-300 select-none cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={includeAudio}
-                      onChange={(e) => setIncludeAudio(e.target.checked)}
-                      className="accent-blue-500"
-                      disabled={status === "connecting" || status === "live"}
-                    />
-                    Include microphone
-                  </label>
-                  <div className="text-xs text-neutral-500">
-                    Tip: if playback looks blank in Safari, try disabling mic audio.
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Video max bitrate (kbps, optional)</label>
-                  <input
-                    value={videoMaxBitrateKbps}
-                    onChange={(e) => setVideoMaxBitrateKbps(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
-                    disabled={status === "connecting" || status === "live"}
-                    placeholder="2500"
-                  />
-                  {videoMaxBitrateInvalid ? (
-                    <div className="text-xs text-red-300">Use a positive integer.</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">Applied to video RTP sender (`maxBitrate`).</div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Video max FPS (optional)</label>
-                  <input
-                    value={videoMaxFps}
-                    onChange={(e) => setVideoMaxFps(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
-                    disabled={status === "connecting" || status === "live"}
-                    placeholder="30"
-                  />
-                  {videoMaxFpsInvalid ? (
-                    <div className="text-xs text-red-300">Use a positive integer.</div>
-                  ) : (
-                    <div className="text-xs text-neutral-500">Applied to camera/screen constraints and RTP sender (`maxFramerate`).</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400 flex items-center gap-2">
-                    <Camera className="w-4 h-4" /> Camera
-                  </label>
-                  <select
-                    value={videoDeviceId}
-                    onChange={(e) => setVideoDeviceId(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none truncate"
-                    disabled={status === "connecting" || status === "live" || sourceMode !== "camera"}
-                  >
-                    <option value="">Default Camera</option>
-                    {devices
-                      .filter((d) => d.kind === "videoinput")
-                      .map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `Camera ${d.deviceId.slice(0, 6)}…`}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400 flex items-center gap-2">
-                    <Mic className="w-4 h-4" /> Microphone
-                  </label>
-                  <select
-                    value={audioDeviceId}
-                    onChange={(e) => setAudioDeviceId(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none truncate"
-                    disabled={status === "connecting" || status === "live" || !includeAudio}
-                  >
-                    <option value="">Default Mic</option>
-                    {devices
-                      .filter((d) => d.kind === "audioinput")
-                      .map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `Mic ${d.deviceId.slice(0, 6)}…`}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3 pt-2">
-                {mediaStream ? (
-                  <button
-                    onClick={stopPreview}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    disabled={status === "connecting" || status === "live"}
-                  >
-                    Stop Preview
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      void startPreview();
-                    }}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                  >
-                    {sourceMode === "screen" ? "Share Screen" : "Start Preview"}
-                  </button>
-                )}
-
-                {status === "live" ? (
-                  <button onClick={endStream} className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold flex items-center gap-2">
-                    <Square className="w-4 h-4" /> End Stream
-                  </button>
-                ) : (
-                  <button
-                    onClick={goLive}
-                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                    disabled={!mediaStream || status === "connecting"}
-                  >
-                    <Radio className="w-4 h-4" /> Go Live
-                  </button>
-                )}
-
-                {status === "live" && identity && (
-                  <button
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          setAnnounceStep("checking");
-                          const ok = await announce("live");
-                          setLastAnnounceAt(Date.now());
-                          setAnnounceStep(ok ? "ok" : "fail");
-                        } catch {
-                          setAnnounceStep("fail");
-                        }
-                      })();
-                    }}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    title="Republish the stream announce event (kind 30311)"
-                    disabled={announceStep === "checking"}
-                  >
-                    Update Announce
-                  </button>
-                )}
-
-                <Link
-                  href={`/watch/${identity ? pubkeyHexToNpub(identity.pubkey) ?? identity.pubkey : "npub"}/${streamId}`}
-                  className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2"
-                  title="Open watch page for this stream"
-                >
-                  Watch <ExternalLink className="w-4 h-4" />
-                </Link>
-
-                <button
-                  onClick={copyWatchLink}
-                  className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                  title="Copy watch link"
-                >
-                  {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
-                </button>
-              </div>
-
               <div className="text-xs text-neutral-500">
                 Announce streaming hint: <span className="font-mono break-all">{hlsHintUrl}</span>
               </div>
+
+              <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold text-neutral-100">External Encoder (OBS / Streamlabs / vMix / XSplit / PRISM)</div>
+                    <p className="text-xs text-neutral-500">
+                      Use custom RTMP from desktop software. Keep this page open to publish announce events.
+                    </p>
+                  </div>
+                  {encoderCopyStatus ? (
+                    <span className="px-2 py-1 rounded-lg border border-blue-500/40 bg-blue-600/20 text-[11px] text-blue-200">{encoderCopyStatus}</span>
+                  ) : null}
+                </div>
+
+                {!identity || !originStreamId ? (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    Connect identity and keep a valid Stream ID to generate a stable external stream key.
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">RTMP server</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={rtmpServerUrl}
+                        readOnly
+                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyExternalEncoderValue("RTMP server", rtmpServerUrl);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">Stream key</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={externalStreamKey || ""}
+                        readOnly
+                        placeholder="Connect identity first"
+                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyExternalEncoderValue("Stream key", externalStreamKey);
+                        }}
+                        disabled={!externalStreamKey}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">RTMP publish URL (reference)</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={rtmpPublishUrl}
+                        readOnly
+                        placeholder="Generated from server + key"
+                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyExternalEncoderValue("RTMP URL", rtmpPublishUrl);
+                        }}
+                        disabled={!rtmpPublishUrl}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">WHIP endpoint (optional, WHIP-capable encoders)</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={whipPublishUrl}
+                        readOnly
+                        placeholder="Generated from stream key"
+                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyExternalEncoderValue("WHIP endpoint", whipPublishUrl);
+                        }}
+                        disabled={!whipPublishUrl}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs text-neutral-400">Quick setup</label>
+                  <div className="flex flex-wrap gap-2">
+                    {ENCODER_GUIDE_OPTIONS.map((guide) => (
+                      <button
+                        key={guide.id}
+                        type="button"
+                        onClick={() => setEncoderGuide(guide.id)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs ${
+                          encoderGuide === guide.id
+                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        {guide.label}
+                      </button>
+                    ))}
+                  </div>
+                  <ol className="list-decimal pl-5 space-y-1 text-xs text-neutral-300">
+                    {encoderGuideSteps.map((step, index) => (
+                      <li key={`encoder-guide-${index}`}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="flex flex-wrap gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void announceExternal("live");
+                    }}
+                    disabled={!identity || !originStreamId || announceStep === "checking"}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold disabled:opacity-50"
+                  >
+                    Announce Live (External)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void announceExternal("ended");
+                    }}
+                    disabled={!identity || !originStreamId || announceStep === "checking"}
+                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
+                  >
+                    Announce Ended
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void checkExternalIngest();
+                    }}
+                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                  >
+                    Check External Feed
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setAdvancedOpen((prev) => !prev)}
+                  className="text-sm text-neutral-300 hover:text-white transition-colors inline-flex items-center gap-2"
+                  aria-expanded={advancedOpen}
+                  aria-controls="broadcast-advanced-settings"
+                >
+                  <span className="text-lg leading-none">{advancedOpen ? "^" : "v"}</span>
+                  <span>{advancedOpen ? "Hide advanced settings" : "Show advanced settings"}</span>
+                </button>
+              </div>
+
+              {advancedOpen ? (
+                <div id="broadcast-advanced-settings" className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Thumbnail URL (optional)</label>
+                      <input
+                        value={image}
+                        onChange={(e) => setImage(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        disabled={status === "connecting"}
+                        placeholder="https://…"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Topics (comma separated)</label>
+                      <input
+                        value={topicsCsv}
+                        onChange={(e) => setTopicsCsv(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        disabled={status === "connecting"}
+                        placeholder="music, gaming, rust…"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-xs text-neutral-400">Monero tip address (optional)</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setXmr(social.settings.paymentDefaults.xmrTipAddress);
+                          setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+                          setStakeXmr(social.settings.paymentDefaults.stakeXmr);
+                          setStakeNote(social.settings.paymentDefaults.stakeNote);
+                          setHostMode(social.settings.broadcastHostMode);
+                          setRebroadcastThresholdInput(String(social.settings.broadcastRebroadcastThreshold));
+                          setCaptureResolution("source");
+                          setBitratePreset("custom");
+                          setAutoReconnectEnabled(true);
+                          setReconnectAttempt(0);
+                          setChatSlowModeSecInput("");
+                          setChatSubscriberOnly(false);
+                          setChatFollowerOnly(false);
+                          setMatureContent(false);
+                          setVodArchiveEnabled(false);
+                          setFeeWaiverGuilds([]);
+                          setVipPubkeys([]);
+                          setViewerAllowPubkeys([]);
+                          setWaiverGuildPubkeyInput("");
+                          setWaiverGuildIdInput("");
+                          setVipPubkeyInput("");
+                          setViewerAllowInput("");
+                          setWaiverInputError(null);
+                          setViewerAllowInputError(null);
+                        }}
+                        disabled={status === "connecting" || status === "live"}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                        title="Apply payment defaults from Settings"
+                      >
+                        Apply defaults
+                      </button>
+                    </div>
+                    <input
+                      value={xmr}
+                      onChange={(e) => setXmr(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                      disabled={status === "connecting"}
+                      placeholder="4…"
+                    />
+                    {xmrInputError && <div className="text-xs text-red-300">{xmrInputError}</div>}
+                    <div className="text-xs text-neutral-500">Shown on the watch page if set.</div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-xs text-neutral-400">Additional payout methods (optional)</label>
+                      <button
+                        type="button"
+                        onClick={addPaymentDraft}
+                        disabled={status === "connecting"}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                      >
+                        Add method
+                      </button>
+                    </div>
+
+                    {paymentDrafts.length === 0 ? (
+                      <div className="text-xs text-neutral-500">No additional payout methods configured.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {paymentDrafts.map((row, index) => (
+                          <div key={`broadcast-payment-${index}`} className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
+                            <select
+                              value={row.asset}
+                              onChange={(e) => updatePaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
+                              disabled={status === "connecting"}
+                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-2 text-xs"
+                            >
+                              {PAYMENT_ASSET_ORDER.map((asset) => (
+                                <option key={asset} value={asset}>
+                                  {PAYMENT_ASSET_META[asset].symbol}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={row.address}
+                              onChange={(e) => updatePaymentDraft(index, { address: e.target.value })}
+                              disabled={status === "connecting"}
+                              placeholder={PAYMENT_ASSET_META[row.asset].placeholder}
+                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
+                            />
+                            <input
+                              value={row.network}
+                              onChange={(e) => updatePaymentDraft(index, { network: e.target.value })}
+                              disabled={status === "connecting"}
+                              placeholder="network"
+                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                            />
+                            <input
+                              value={row.label}
+                              onChange={(e) => updatePaymentDraft(index, { label: e.target.value })}
+                              disabled={status === "connecting"}
+                              placeholder="label"
+                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removePaymentDraft(index)}
+                              disabled={status === "connecting"}
+                              className="px-3 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {paymentInputError ? (
+                      <div className="text-xs text-red-300">{paymentInputError}</div>
+                    ) : (
+                      <div className="text-xs text-neutral-500">
+                        Supported assets: XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Stake required for P2P assist (XMR, optional)</label>
+                      <input
+                        value={stakeXmr}
+                        onChange={(e) => setStakeXmr(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        disabled={status === "connecting"}
+                        placeholder="0.05"
+                      />
+                      {stakeInvalid ? (
+                        <div className="text-xs text-red-300">Invalid amount (use a number with up to 12 decimals).</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">If set, viewers must stake this amount (confirmed) to enable P2P assist.</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Stake note (optional)</label>
+                      <input
+                        value={stakeNote}
+                        onChange={(e) => setStakeNote(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        disabled={status === "connecting"}
+                        placeholder="anti-leech bond…"
+                      />
+                      <div className="text-xs text-neutral-500">Shown on the watch page if set.</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3">
+                    <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vodArchiveEnabled}
+                        onChange={(e) => setVodArchiveEnabled(e.target.checked)}
+                        className="mt-0.5 accent-blue-500"
+                        disabled={status === "connecting" || status === "live"}
+                      />
+                      <span className="space-y-1">
+                        <span className="font-medium text-neutral-200">Enable VOD archive and DVR controls</span>
+                        <span className="block text-xs text-neutral-500">
+                          Default is off for decentralized mode. Turn on only if you explicitly want server-side recording and viewer rewind/archive playback.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Host mode</label>
+                      <select
+                        value={hostMode}
+                        onChange={(e) => setHostMode(e.target.value === "host_only" ? "host_only" : "p2p_economy")}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        disabled={status === "connecting"}
+                      >
+                        <option value="p2p_economy">P2P Economy (rebroadcast queue + fee waivers)</option>
+                        <option value="host_only">Host-Only (no rebroadcast waivers)</option>
+                      </select>
+                      <div className="text-xs text-neutral-500">
+                        Advertised in the stream announce so viewers can apply the same policy.
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Rebroadcast active set threshold (T)</label>
+                      <input
+                        value={rebroadcastThresholdInput}
+                        onChange={(e) => setRebroadcastThresholdInput(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono disabled:opacity-60"
+                        disabled={status === "connecting" || hostMode === "host_only"}
+                        placeholder="6"
+                      />
+                      {rebroadcastThresholdInvalid ? (
+                        <div className="text-xs text-red-300">Use a positive integer.</div>
+                      ) : hostMode === "host_only" ? (
+                        <div className="text-xs text-neutral-500">Not used in Host-Only mode.</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">First-come viewers fill active set up to T; others remain queued.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3">
+                    <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discoverable}
+                        onChange={(e) => setDiscoverable(e.target.checked)}
+                        className="mt-0.5 accent-blue-500"
+                        disabled={status === "connecting"}
+                      />
+                      <span className="space-y-1">
+                        <span className="font-medium text-neutral-200">List this stream in public discovery</span>
+                        <span className="block text-xs text-neutral-500">
+                          When off, your stream is hidden from dStream home/browse discovery surfaces but still reachable by direct watch link.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3">
+                    <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={matureContent}
+                        onChange={(e) => setMatureContent(e.target.checked)}
+                        className="mt-0.5 accent-blue-500"
+                        disabled={status === "connecting"}
+                      />
+                      <span className="space-y-1">
+                        <span className="font-medium text-neutral-200">Mark stream as mature content</span>
+                        <span className="block text-xs text-neutral-500">
+                          Adds a mature-content label in stream metadata. Viewers can filter these streams in discovery.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">
+                    <div className="text-sm font-semibold text-neutral-200">Fee waivers (guild + VIP)</div>
+                    <div className="text-xs text-neutral-500">
+                      Let specific guild members or specific pubkeys access your stream without stake/pay requirement.
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <input
+                        value={waiverGuildPubkeyInput}
+                        onChange={(e) => setWaiverGuildPubkeyInput(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        placeholder="Guild owner npub… or hex"
+                        disabled={status === "connecting"}
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          value={waiverGuildIdInput}
+                          onChange={(e) => setWaiverGuildIdInput(e.target.value)}
+                          className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                          placeholder="guildId"
+                          disabled={status === "connecting"}
+                        />
+                        <button
+                          type="button"
+                          onClick={addWaiverGuild}
+                          disabled={status === "connecting"}
+                          className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
+                        >
+                          Add Guild
+                        </button>
+                      </div>
+                    </div>
+
+                    {feeWaiverGuilds.length > 0 ? (
+                      <div className="space-y-2">
+                        {feeWaiverGuilds.map((entry) => (
+                          <div
+                            key={`${entry.guildPubkey}:${entry.guildId}`}
+                            className="flex items-center justify-between gap-3 text-xs bg-neutral-900/60 border border-neutral-800 rounded-xl px-3 py-2"
+                          >
+                            <span className="font-mono text-neutral-300 truncate">
+                              {pubkeyHexToNpub(entry.guildPubkey) ?? shortenText(entry.guildPubkey, { head: 18, tail: 8 })} / {entry.guildId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeWaiverGuild(entry.guildPubkey, entry.guildId)}
+                              className="text-neutral-400 hover:text-white"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-500">No guild waivers configured.</div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                      <input
+                        value={vipPubkeyInput}
+                        onChange={(e) => setVipPubkeyInput(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        placeholder="VIP npub… or hex"
+                        disabled={status === "connecting"}
+                      />
+                      <button
+                        type="button"
+                        onClick={addVipPubkey}
+                        disabled={status === "connecting"}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
+                      >
+                        Add VIP
+                      </button>
+                    </div>
+
+                    {vipPubkeys.length > 0 ? (
+                      <div className="space-y-2">
+                        {vipPubkeys.map((vip) => (
+                          <div
+                            key={vip}
+                            className="flex items-center justify-between gap-3 text-xs bg-neutral-900/60 border border-neutral-800 rounded-xl px-3 py-2"
+                          >
+                            <span className="font-mono text-neutral-300 truncate">{pubkeyHexToNpub(vip) ?? shortenText(vip, { head: 18, tail: 8 })}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeVipPubkey(vip)}
+                              className="text-neutral-400 hover:text-white"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-500">No VIP users configured.</div>
+                    )}
+
+                    {waiverInputError && <div className="text-xs text-red-300">{waiverInputError}</div>}
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">
+                    <div className="text-sm font-semibold text-neutral-200">Private stream allowlist (optional)</div>
+                    <div className="text-xs text-neutral-500">
+                      If one or more viewers are listed here, playback is restricted to these pubkeys plus the stream owner.
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                      <input
+                        value={viewerAllowInput}
+                        onChange={(e) => setViewerAllowInput(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        placeholder="Viewer npub… or hex"
+                        disabled={status === "connecting"}
+                      />
+                      <button
+                        type="button"
+                        onClick={addViewerAllowPubkey}
+                        disabled={status === "connecting"}
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
+                      >
+                        Add Viewer
+                      </button>
+                    </div>
+
+                    {viewerAllowPubkeys.length > 0 ? (
+                      <div className="space-y-2">
+                        {viewerAllowPubkeys.map((viewerPubkey) => (
+                          <div
+                            key={viewerPubkey}
+                            className="flex items-center justify-between gap-3 text-xs bg-neutral-900/60 border border-neutral-800 rounded-xl px-3 py-2"
+                          >
+                            <span className="font-mono text-neutral-300 truncate">
+                              {pubkeyHexToNpub(viewerPubkey) ?? shortenText(viewerPubkey, { head: 18, tail: 8 })}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeViewerAllowPubkey(viewerPubkey)}
+                              className="text-neutral-400 hover:text-white"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-500">No private viewer allowlist. Stream is open to everyone.</div>
+                    )}
+
+                    {viewerAllowInputError ? <div className="text-xs text-red-300">{viewerAllowInputError}</div> : null}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Caption tracks (optional, one per line)</label>
+                      <textarea
+                        value={captionLines}
+                        onChange={(e) => setCaptionLines(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none min-h-24 font-mono"
+                        disabled={status === "connecting"}
+                        placeholder={"en|English|/api/hls/stream/subs-en.vtt|default\nes|Espanol|https://cdn.example.com/subs-es.vtt"}
+                      />
+                      {captionInputError ? (
+                        <div className="text-xs text-red-300">{captionInputError}</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">Format: `lang|label|url|default(optional)`.</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Rendition playlists (optional, one per line)</label>
+                      <textarea
+                        value={renditionLines}
+                        onChange={(e) => setRenditionLines(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none min-h-24 font-mono"
+                        disabled={status === "connecting"}
+                        placeholder={"1080p|/api/hls/stream/1080.m3u8|6000000|1920|1080|avc1.640028,mp4a.40.2\n720p|/api/hls/stream/720.m3u8|3000000|1280|720|avc1.4d401f,mp4a.40.2"}
+                      />
+                      {renditionInputError ? (
+                        <div className="text-xs text-red-300">{renditionInputError}</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">
+                          Format: `id|url|bandwidth|width|height|codecs`. If two or more are present, watch auto-builds a master playlist.
+                        </div>
+                      )}
+                      <label className="flex items-center gap-2 text-xs text-neutral-300 select-none cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={autoLadder}
+                          onChange={(e) => setAutoLadder(e.target.checked)}
+                          className="accent-blue-500"
+                          disabled={status === "connecting"}
+                        />
+                        Auto-generate ladder hints (source + 720p/480p/360p derived renditions)
+                      </label>
+                      {autoLadderRenditionPreview.length > 0 && (
+                        <div className="text-[11px] text-neutral-500 font-mono break-all">
+                          {autoLadderRenditionPreview.map((entry) => `${entry.id}:${entry.url}`).join(" | ")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Capture resolution preset</label>
+                      <select
+                        value={captureResolution}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === "source" || next === "1080p" || next === "720p" || next === "480p") {
+                            setCaptureResolution(next);
+                          }
+                        }}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        disabled={status === "connecting" || status === "live"}
+                      >
+                        <option value="source">Source native</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                      </select>
+                      <div className="text-xs text-neutral-500">
+                        Applied at capture constraints time (camera/screen/PiP canvas output).
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Video max bitrate (kbps, optional)</label>
+                      <input
+                        value={videoMaxBitrateKbps}
+                        onChange={(e) => {
+                          setVideoMaxBitrateKbps(e.target.value);
+                          setBitratePreset("custom");
+                        }}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        disabled={status === "connecting" || status === "live"}
+                        placeholder="2500"
+                      />
+                      {videoMaxBitrateInvalid ? (
+                        <div className="text-xs text-red-300">Use a positive integer.</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">Applied to video RTP sender (`maxBitrate`).</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-400">Bitrate preset</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { value: "low", label: "Low" },
+                        { value: "medium", label: "Medium" },
+                        { value: "high", label: "High" },
+                        { value: "custom", label: "Custom" }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setBitratePresetWithDefaults(option.value as "custom" | "low" | "medium" | "high")}
+                          disabled={status === "connecting" || status === "live"}
+                          className={`px-3 py-1.5 rounded-lg border text-xs disabled:opacity-50 ${
+                            bitratePreset === option.value
+                              ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                              : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      Presets set `video max bitrate` to 1000 / 2500 / 4500 kbps. Custom leaves manual input unchanged.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400">Video max FPS (optional)</label>
+                      <input
+                        value={videoMaxFps}
+                        onChange={(e) => setVideoMaxFps(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
+                        disabled={status === "connecting" || status === "live"}
+                        placeholder="30"
+                      />
+                      {videoMaxFpsInvalid ? (
+                        <div className="text-xs text-red-300">Use a positive integer.</div>
+                      ) : (
+                        <div className="text-xs text-neutral-500">Applied to camera/screen constraints and RTP sender (`maxFramerate`).</div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3 space-y-2">
+                      <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoReconnectEnabled}
+                          onChange={(e) => setAutoReconnectEnabled(e.target.checked)}
+                          className="mt-0.5 accent-blue-500"
+                          disabled={status === "connecting"}
+                        />
+                        <span className="space-y-1">
+                          <span className="font-medium text-neutral-200">Auto reconnect on WHIP disconnect</span>
+                          <span className="block text-xs text-neutral-500">When enabled, publish restarts automatically after transient failures.</span>
+                        </span>
+                      </label>
+                      <div className="text-[11px] text-neutral-500 font-mono">Reconnect attempts this session: {reconnectAttempt}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">
+                    <div className="text-sm font-semibold text-neutral-200">Chat policy (viewer-side enforcement)</div>
+                    <div className="text-xs text-neutral-500">
+                      These policy tags are included in your live announce and enforced by dStream watch chat.
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label className="flex items-center gap-2 text-xs text-neutral-300 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={chatSubscriberOnly}
+                          onChange={(e) => setChatSubscriberOnly(e.target.checked)}
+                          className="accent-blue-500"
+                          disabled={status === "connecting"}
+                        />
+                        Subscriber-only chat
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-neutral-300 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={chatFollowerOnly}
+                          onChange={(e) => setChatFollowerOnly(e.target.checked)}
+                          className="accent-blue-500"
+                          disabled={status === "connecting"}
+                        />
+                        Follower-only chat
+                      </label>
+                      <div className="space-y-1">
+                        <label className="text-xs text-neutral-400">Slow mode seconds (optional)</label>
+                        <input
+                          value={chatSlowModeSecInput}
+                          onChange={(e) => setChatSlowModeSecInput(e.target.value)}
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:border-blue-500 focus:outline-none font-mono"
+                          disabled={status === "connecting"}
+                          placeholder="10"
+                        />
+                        {chatSlowModeSecInvalid ? (
+                          <div className="text-[11px] text-red-300">Use a positive integer.</div>
+                        ) : (
+                          <div className="text-[11px] text-neutral-500">Enforced per sender on supported clients.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400 flex items-center gap-2">
+                        <Camera className="w-4 h-4" /> Camera
+                      </label>
+                      <select
+                        value={videoDeviceId}
+                        onChange={(e) => setVideoDeviceId(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none truncate"
+                        disabled={status === "connecting" || status === "live" || sourceMode === "screen"}
+                      >
+                        <option value="">Default Camera</option>
+                        {devices
+                          .filter((d) => d.kind === "videoinput")
+                          .map((d) => (
+                            <option key={d.deviceId} value={d.deviceId}>
+                              {d.label || `Camera ${d.deviceId.slice(0, 6)}…`}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-neutral-400 flex items-center gap-2">
+                        <Mic className="w-4 h-4" /> Microphone
+                      </label>
+                      <select
+                        value={audioDeviceId}
+                        onChange={(e) => setAudioDeviceId(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none truncate"
+                        disabled={status === "connecting" || status === "live" || !includeAudio}
+                      >
+                        <option value="">Default Mic</option>
+                        {devices
+                          .filter((d) => d.kind === "audioinput")
+                          .map((d) => (
+                            <option key={d.deviceId} value={d.deviceId}>
+                              {d.label || `Mic ${d.deviceId.slice(0, 6)}…`}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="h-[520px]">
-              <ChatBox streamPubkey={identity?.pubkey ?? ""} streamId={streamId} />
+          <div className="space-y-6 xl:sticky xl:top-24">
+            <div className="h-[68vh] min-h-[620px] max-h-[82vh] xl:h-[calc(100vh-7rem)] xl:max-h-[calc(100vh-7rem)] xl:min-h-[720px]">
+              <ChatBox
+                streamPubkey={identity?.pubkey ?? ""}
+                streamId={streamId}
+                slowModeSec={chatSlowModeSecParsed ?? undefined}
+                subscriberOnly={chatSubscriberOnly}
+                followerOnly={chatFollowerOnly}
+              />
             </div>
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3 text-sm text-neutral-300">

@@ -1,5 +1,8 @@
 import { pubkeyParamToHex } from "../nostr-ids";
 import { makeOriginStreamId } from "../origin";
+import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset, type StreamPaymentMethod } from "@dstream/protocol";
+import { getWalletIntegrationById, type WalletIntegrationId } from "../payments/catalog";
+import { coercePaymentMethods, validatePaymentAddress } from "../payments/methods";
 
 export type P2PPeerMode = "any" | "trusted_only";
 export type BroadcastHostMode = "p2p_economy" | "host_only";
@@ -9,12 +12,15 @@ export interface SocialSettingsV1 {
   p2pAssistEnabled: boolean;
   p2pPeerMode: P2PPeerMode;
   playbackAutoplayMuted: boolean;
+  showMatureContent: boolean;
   broadcastHostMode: BroadcastHostMode;
   broadcastRebroadcastThreshold: number;
   paymentDefaults: {
     xmrTipAddress: string;
     stakeXmr: string;
     stakeNote: string;
+    paymentMethods: StreamPaymentMethod[];
+    preferredWalletByAsset: Partial<Record<StreamPaymentAsset, WalletIntegrationId>>;
   };
 }
 
@@ -111,10 +117,24 @@ function normalizeSettings(input: unknown): SocialSettingsV1 {
   if (!input || typeof input !== "object") return defaults;
 
   const payment = (input as any).paymentDefaults;
+  const preferredWalletRaw = payment?.preferredWalletByAsset;
+  const preferredWalletByAsset: Partial<Record<StreamPaymentAsset, WalletIntegrationId>> = {};
+  if (preferredWalletRaw && typeof preferredWalletRaw === "object") {
+    for (const [assetRaw, walletRaw] of Object.entries(preferredWalletRaw)) {
+      const asset = assetRaw.trim().toLowerCase() as StreamPaymentAsset;
+      if (!asset || !STREAM_PAYMENT_ASSETS.includes(asset)) continue;
+      const wallet = typeof walletRaw === "string" ? getWalletIntegrationById(walletRaw) : null;
+      if (wallet) preferredWalletByAsset[asset] = wallet.id;
+    }
+  }
+  const xmrTipAddressRaw = typeof payment?.xmrTipAddress === "string" ? payment.xmrTipAddress.trim() : defaults.paymentDefaults.xmrTipAddress;
+  const xmrTipAddress = xmrTipAddressRaw && !validatePaymentAddress("xmr", xmrTipAddressRaw) ? xmrTipAddressRaw : "";
   const paymentDefaults = {
-    xmrTipAddress: typeof payment?.xmrTipAddress === "string" ? payment.xmrTipAddress.trim() : defaults.paymentDefaults.xmrTipAddress,
+    xmrTipAddress,
     stakeXmr: typeof payment?.stakeXmr === "string" ? payment.stakeXmr.trim() : defaults.paymentDefaults.stakeXmr,
-    stakeNote: typeof payment?.stakeNote === "string" ? payment.stakeNote.trim() : defaults.paymentDefaults.stakeNote
+    stakeNote: typeof payment?.stakeNote === "string" ? payment.stakeNote.trim() : defaults.paymentDefaults.stakeNote,
+    paymentMethods: coercePaymentMethods(payment?.paymentMethods),
+    preferredWalletByAsset
   };
 
   const modeRaw = (input as any).p2pPeerMode;
@@ -137,6 +157,8 @@ function normalizeSettings(input: unknown): SocialSettingsV1 {
       typeof (input as any).playbackAutoplayMuted === "boolean"
         ? (input as any).playbackAutoplayMuted
         : defaults.playbackAutoplayMuted,
+    showMatureContent:
+      typeof (input as any).showMatureContent === "boolean" ? (input as any).showMatureContent : defaults.showMatureContent,
     broadcastHostMode,
     broadcastRebroadcastThreshold,
     paymentDefaults
@@ -159,12 +181,15 @@ export function createDefaultSocialState(): SocialStateV1 {
       p2pAssistEnabled: true,
       p2pPeerMode: "any",
       playbackAutoplayMuted: true,
+      showMatureContent: false,
       broadcastHostMode: "p2p_economy",
       broadcastRebroadcastThreshold: 6,
       paymentDefaults: {
         xmrTipAddress: "",
         stakeXmr: "",
-        stakeNote: ""
+        stakeNote: "",
+        paymentMethods: [],
+        preferredWalletByAsset: {}
       }
     }
   };

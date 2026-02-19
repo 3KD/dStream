@@ -1,7 +1,8 @@
-type CaptureMode = "camera" | "screen";
+type CaptureMode = "camera" | "screen" | "camera_screen_pip";
 
 function modeLabel(mode: CaptureMode, includeAudio: boolean): string {
   if (mode === "screen") return includeAudio ? "screen and microphone" : "screen";
+  if (mode === "camera_screen_pip") return includeAudio ? "screen, camera, and microphone" : "screen and camera";
   return includeAudio ? "camera and microphone" : "camera";
 }
 

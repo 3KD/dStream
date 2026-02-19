@@ -1,15 +1,29 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { ExternalLink, PlugZap, Trash2 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
+import { useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { hexToBytes, shortenText } from "@/lib/encoding";
 import { parseStreamFavoriteKey } from "@/lib/social/store";
+import {
+  getWalletIntegrationsForAsset,
+  PAYMENT_ASSET_META,
+  PAYMENT_ASSET_ORDER,
+  WALLET_INTEGRATIONS,
+  type WalletIntegrationId
+} from "@/lib/payments/catalog";
+import { createPaymentMethodDraft, paymentMethodToDraft, type PaymentMethodDraft, validatePaymentMethodDrafts } from "@/lib/payments/methods";
+import { type StreamPaymentAsset } from "@dstream/protocol";
+
+const IDENTITY_STORE_STORAGE_KEY = "dstream_identity_store_v2";
+const SOCIAL_STORE_STORAGE_KEY = "dstream_social_v1";
+const PROFILE_DRAFTS_STORAGE_KEY = "dstream_profile_drafts_v1";
 
 function formatPubkeyLabel(pubkeyHex: string, alias?: string | null) {
   const npub = pubkeyHexToNpub(pubkeyHex);
@@ -43,10 +57,89 @@ function parseStorageSnapshot(value: unknown): Record<string, string> | null {
   return Object.fromEntries(entries);
 }
 
-function parseLocalBackupPayload(input: unknown): { exportedAt: string | null; localStorage: Record<string, string>; sessionStorage: Record<string, string> } | null {
+function isHex64(input: string): boolean {
+  return /^[a-f0-9]{64}$/i.test((input ?? "").trim());
+}
+
+interface IdentityStoreBackupSnapshot {
+  active: { kind: "extension" | "local"; pubkey: string } | null;
+  localIdentities: Array<{
+    pubkey: string;
+    label: string | null;
+    createdAt: number;
+    secretKeyHex: string;
+    nsec: string | null;
+  }>;
+}
+
+function parseIdentityStoreBackupSnapshot(raw: string | null | undefined): IdentityStoreBackupSnapshot | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isPlainRecord(parsed)) return null;
+    if (parsed.version !== 2) return null;
+
+    const activeRaw = parsed.active;
+    let active: IdentityStoreBackupSnapshot["active"] = null;
+    if (isPlainRecord(activeRaw)) {
+      const kind = activeRaw.kind;
+      const pubkey = typeof activeRaw.pubkey === "string" ? activeRaw.pubkey.trim().toLowerCase() : "";
+      if ((kind === "extension" || kind === "local") && isHex64(pubkey)) {
+        active = { kind, pubkey };
+      }
+    }
+
+    const localsRaw = parsed.locals;
+    if (!isPlainRecord(localsRaw)) return { active, localIdentities: [] };
+    const localIdentities = Object.entries(localsRaw)
+      .map(([pubkeyRaw, value]) => {
+        const pubkey = (pubkeyRaw ?? "").trim().toLowerCase();
+        if (!isHex64(pubkey)) return null;
+        if (!isPlainRecord(value)) return null;
+        const secretKeyHex = typeof value.secretKeyHex === "string" ? value.secretKeyHex.trim().toLowerCase() : "";
+        if (!isHex64(secretKeyHex)) return null;
+        const createdAt = typeof value.createdAt === "number" && Number.isFinite(value.createdAt) ? Math.floor(value.createdAt) : 0;
+        const label = typeof value.label === "string" ? value.label : null;
+        let nsec: string | null = null;
+        try {
+          nsec = nip19.nsecEncode(hexToBytes(secretKeyHex));
+        } catch {
+          nsec = null;
+        }
+        return { pubkey, label, createdAt, secretKeyHex, nsec };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => !!entry)
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    return { active, localIdentities };
+  } catch {
+    return null;
+  }
+}
+
+function countProfileDraftEntries(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isPlainRecord(parsed)) return 0;
+    return Object.keys(parsed).filter((key) => isHex64(key)).length;
+  } catch {
+    return 0;
+  }
+}
+
+function parseLocalBackupPayload(input: unknown): {
+  exportedAt: string | null;
+  localStorage: Record<string, string>;
+  sessionStorage: Record<string, string>;
+  version: number;
+  localIdentityCount: number;
+  profileSnapshotCount: number;
+  profileDraftCount: number;
+} | null {
   if (!isPlainRecord(input)) return null;
   const version = input.version;
-  if (version !== 1) return null;
+  if (version !== 1 && version !== 2) return null;
   const storage = input.storage;
   if (!isPlainRecord(storage)) return null;
 
@@ -55,12 +148,45 @@ function parseLocalBackupPayload(input: unknown): { exportedAt: string | null; l
 
   const sessionStorageSnapshot = parseStorageSnapshot(storage.sessionStorage) ?? {};
   const exportedAt = typeof input.exportedAt === "string" ? input.exportedAt : null;
+  const identitySnapshot = parseIdentityStoreBackupSnapshot(localStorageSnapshot[IDENTITY_STORE_STORAGE_KEY] ?? null);
+  const summary = isPlainRecord(input.summary) ? input.summary : null;
+  const snapshot = isPlainRecord(input.snapshot) ? input.snapshot : null;
+  const profilesByPubkey =
+    snapshot && isPlainRecord(snapshot.profilesByPubkey) ? Object.keys(snapshot.profilesByPubkey).filter((pubkey) => isHex64(pubkey)) : [];
+  const localIdentityCount =
+    summary && typeof summary.localIdentityCount === "number" && Number.isFinite(summary.localIdentityCount)
+      ? Math.max(0, Math.floor(summary.localIdentityCount))
+      : identitySnapshot?.localIdentities.length ?? 0;
+  const profileSnapshotCount =
+    summary && typeof summary.profileSnapshotCount === "number" && Number.isFinite(summary.profileSnapshotCount)
+      ? Math.max(0, Math.floor(summary.profileSnapshotCount))
+      : profilesByPubkey.length;
+  const profileDraftCount =
+    summary && typeof summary.profileDraftCount === "number" && Number.isFinite(summary.profileDraftCount)
+      ? Math.max(0, Math.floor(summary.profileDraftCount))
+      : countProfileDraftEntries(localStorageSnapshot[PROFILE_DRAFTS_STORAGE_KEY] ?? null);
 
   return {
     exportedAt,
     localStorage: localStorageSnapshot,
-    sessionStorage: sessionStorageSnapshot
+    sessionStorage: sessionStorageSnapshot,
+    version,
+    localIdentityCount,
+    profileSnapshotCount,
+    profileDraftCount
   };
+}
+
+function walletModeLabel(mode: "native_app" | "browser_extension" | "external_cli") {
+  if (mode === "browser_extension") return "Browser extension";
+  if (mode === "external_cli") return "CLI / RPC";
+  return "Native app";
+}
+
+function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli") {
+  if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
+  if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
+  return "Open the native wallet app and send to the copied address or wallet URI target.";
 }
 
 export default function SettingsPage() {
@@ -75,6 +201,7 @@ export default function SettingsPage() {
     switchLocalIdentity,
     removeLocalIdentity,
     setLocalIdentityLabel,
+    exportIdentityStore,
     logout
   } = useIdentity();
   const social = useSocial();
@@ -108,12 +235,19 @@ export default function SettingsPage() {
   const [restorePending, setRestorePending] = useState<{
     fileName: string;
     exportedAt: string | null;
+    version: number;
     localStorage: Record<string, string>;
     sessionStorage: Record<string, string>;
     dstreamKeyCount: number;
+    localIdentityCount: number;
+    profileSnapshotCount: number;
+    profileDraftCount: number;
   } | null>(null);
   const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [defaultPaymentDrafts, setDefaultPaymentDrafts] = useState<PaymentMethodDraft[]>([]);
+  const [defaultPaymentsError, setDefaultPaymentsError] = useState<string | null>(null);
+  const [defaultPaymentsNotice, setDefaultPaymentsNotice] = useState<string | null>(null);
 
   const settings = social.settings;
   const activeSecretHex = useMemo(() => (identity?.kind === "local" ? exportLocalSecret() : null), [exportLocalSecret, identity?.kind]);
@@ -126,11 +260,35 @@ export default function SettingsPage() {
     }
   }, [activeSecretHex]);
 
+  const backupIdentityPubkeys = useMemo(() => {
+    const set = new Set<string>();
+    if (identity?.pubkey) set.add(identity.pubkey.toLowerCase());
+    for (const entry of localIdentities) {
+      const pubkey = (entry.pubkey ?? "").trim().toLowerCase();
+      if (isHex64(pubkey)) set.add(pubkey);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [identity?.pubkey, localIdentities]);
+
+  const backupProfilesByPubkey = useNostrProfiles(backupIdentityPubkeys);
+
   const favoriteStreams = useMemo(() => {
     return social.state.favorites.streams
       .map((k) => ({ k, parsed: parseStreamFavoriteKey(k) }))
       .filter((v) => !!v.parsed) as Array<{ k: string; parsed: { streamPubkeyHex: string; streamId: string } }>;
   }, [social.state.favorites.streams]);
+
+  const walletIntegrationsByMode = useMemo(() => {
+    const modes: Array<"native_app" | "browser_extension" | "external_cli"> = ["native_app", "browser_extension", "external_cli"];
+    return modes.map((mode) => ({
+      mode,
+      wallets: WALLET_INTEGRATIONS.filter((wallet) => wallet.mode === mode)
+    }));
+  }, []);
+
+  useEffect(() => {
+    setDefaultPaymentDrafts(settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+  }, [settings.paymentDefaults.paymentMethods]);
 
   const downloadLocalBackup = useCallback(() => {
     try {
@@ -148,6 +306,9 @@ export default function SettingsPage() {
           .map((key) => [key, localEntries[key]])
       );
 
+      localStorageData[SOCIAL_STORE_STORAGE_KEY] = JSON.stringify(social.state);
+      localStorageData[IDENTITY_STORE_STORAGE_KEY] = JSON.stringify(exportIdentityStore());
+
       const sessionEntries: Record<string, string> = {};
       for (let i = 0; i < sessionStorage.length; i += 1) {
         const key = sessionStorage.key(i);
@@ -163,8 +324,20 @@ export default function SettingsPage() {
       );
 
       const dstreamKeys = Object.keys(localStorageData).filter((key) => key.startsWith("dstream_"));
+      const identitySnapshot = parseIdentityStoreBackupSnapshot(localStorageData[IDENTITY_STORE_STORAGE_KEY] ?? null);
+      const profileSnapshots: Record<string, { createdAt: number; nip05Verified: boolean | null; profile: unknown }> = {};
+      for (const pubkey of backupIdentityPubkeys) {
+        const profileRecord = backupProfilesByPubkey[pubkey];
+        if (!profileRecord) continue;
+        profileSnapshots[pubkey] = {
+          createdAt: profileRecord.createdAt,
+          nip05Verified: profileRecord.nip05Verified,
+          profile: profileRecord.profile
+        };
+      }
+      const profileDraftCount = countProfileDraftEntries(localStorageData[PROFILE_DRAFTS_STORAGE_KEY] ?? null);
       const payload = {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         origin: window.location.origin,
         pathname: window.location.pathname,
@@ -172,11 +345,19 @@ export default function SettingsPage() {
           localStorage: localStorageData,
           sessionStorage: sessionStorageData
         },
+        snapshot: {
+          activeIdentity: identity ? { kind: identity.kind, pubkey: identity.pubkey } : null,
+          identity: identitySnapshot,
+          profilesByPubkey: profileSnapshots
+        },
         summary: {
           localStorageKeys: Object.keys(localStorageData).length,
           sessionStorageKeys: Object.keys(sessionStorageData).length,
           dstreamKeyCount: dstreamKeys.length,
-          dstreamKeys
+          dstreamKeys,
+          localIdentityCount: identitySnapshot?.localIdentities.length ?? 0,
+          profileSnapshotCount: Object.keys(profileSnapshots).length,
+          profileDraftCount
         }
       };
 
@@ -196,7 +377,7 @@ export default function SettingsPage() {
     } catch (error: any) {
       return { ok: false as const, error: error?.message ?? "Failed to create backup file." };
     }
-  }, []);
+  }, [backupIdentityPubkeys, backupProfilesByPubkey, exportIdentityStore, identity, social.state]);
 
   const runLocalReset = useCallback(() => {
     try {
@@ -291,9 +472,13 @@ export default function SettingsPage() {
         setRestorePending({
           fileName: file.name,
           exportedAt: parsed.exportedAt,
+          version: parsed.version,
           localStorage: parsed.localStorage,
           sessionStorage: parsed.sessionStorage,
-          dstreamKeyCount
+          dstreamKeyCount,
+          localIdentityCount: parsed.localIdentityCount,
+          profileSnapshotCount: parsed.profileSnapshotCount,
+          profileDraftCount: parsed.profileDraftCount
         });
       } catch {
         setRestoreError("Invalid backup JSON file.");
@@ -353,6 +538,53 @@ export default function SettingsPage() {
       setRestoreError(error?.message ?? "Failed to restore backup.");
     }
   }, [restorePending]);
+
+  const updateDefaultPaymentDraft = useCallback((index: number, patch: Partial<PaymentMethodDraft>) => {
+    setDefaultPaymentDrafts((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }, []);
+
+  const removeDefaultPaymentDraft = useCallback((index: number) => {
+    setDefaultPaymentDrafts((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+  }, []);
+
+  const addDefaultPaymentDraft = useCallback(() => {
+    setDefaultPaymentDrafts((prev) => [...prev, createPaymentMethodDraft()]);
+  }, []);
+
+  const saveDefaultPaymentMethods = useCallback(() => {
+    const result = validatePaymentMethodDrafts(defaultPaymentDrafts);
+    if (result.errors.length > 0) {
+      setDefaultPaymentsError(result.errors[0] ?? "Invalid payment methods.");
+      setDefaultPaymentsNotice(null);
+      return;
+    }
+    social.updateSettings({
+      paymentDefaults: {
+        ...settings.paymentDefaults,
+        paymentMethods: result.methods
+      }
+    });
+    setDefaultPaymentsError(null);
+    setDefaultPaymentsNotice(`Saved ${result.methods.length} payment method${result.methods.length === 1 ? "" : "s"}.`);
+  }, [defaultPaymentDrafts, settings.paymentDefaults, social]);
+
+  const updatePreferredWallet = useCallback(
+    (asset: StreamPaymentAsset, walletIdRaw: string) => {
+      const next = { ...(settings.paymentDefaults.preferredWalletByAsset ?? {}) };
+      if (!walletIdRaw) {
+        delete next[asset];
+      } else {
+        next[asset] = walletIdRaw as WalletIntegrationId;
+      }
+      social.updateSettings({
+        paymentDefaults: {
+          ...settings.paymentDefaults,
+          preferredWalletByAsset: next
+        }
+      });
+    },
+    [settings.paymentDefaults, social]
+  );
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
@@ -598,6 +830,16 @@ export default function SettingsPage() {
                   Autoplay muted
                 </label>
 
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={settings.showMatureContent}
+                    onChange={(e) => social.updateSettings({ showMatureContent: e.target.checked })}
+                    className="accent-blue-500"
+                  />
+                  Show mature streams
+                </label>
+
                 <label className="flex items-center gap-2 select-none">
                   <span className="text-neutral-400">P2P peers</span>
                   <select
@@ -692,7 +934,160 @@ export default function SettingsPage() {
                   </label>
                 </div>
               </div>
-              <div className="text-xs text-neutral-500">Applied to new broadcasts (and can be re-applied from the broadcast page).</div>
+
+              <div className="pt-3 border-t border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-neutral-500">Default additional payout methods (for non-XMR assets)</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addDefaultPaymentDraft}
+                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
+                    >
+                      Add method
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveDefaultPaymentMethods}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium"
+                    >
+                      Save methods
+                    </button>
+                  </div>
+                </div>
+
+                {defaultPaymentDrafts.length === 0 ? (
+                  <div className="text-xs text-neutral-500">No extra payout methods configured.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {defaultPaymentDrafts.map((row, index) => (
+                      <div key={`payment-default-${index}`} className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
+                        <select
+                          value={row.asset}
+                          onChange={(e) => updateDefaultPaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
+                          className="bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-2 text-xs"
+                        >
+                          {PAYMENT_ASSET_ORDER.map((asset) => (
+                            <option key={asset} value={asset}>
+                              {PAYMENT_ASSET_META[asset].symbol}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={row.address}
+                          onChange={(e) => updateDefaultPaymentDraft(index, { address: e.target.value })}
+                          placeholder={PAYMENT_ASSET_META[row.asset].placeholder}
+                          className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
+                        />
+                        <input
+                          value={row.network}
+                          onChange={(e) => updateDefaultPaymentDraft(index, { network: e.target.value })}
+                          placeholder="network"
+                          className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                        />
+                        <input
+                          value={row.label}
+                          onChange={(e) => updateDefaultPaymentDraft(index, { label: e.target.value })}
+                          placeholder="label"
+                          className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeDefaultPaymentDraft(index)}
+                          className="px-3 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {defaultPaymentsNotice && <div className="text-xs text-green-300">{defaultPaymentsNotice}</div>}
+                {defaultPaymentsError && <div className="text-xs text-red-300">{defaultPaymentsError}</div>}
+              </div>
+
+              <div className="pt-3 border-t border-neutral-800 space-y-2">
+                <div className="text-xs text-neutral-500">Preferred wallet per asset</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {PAYMENT_ASSET_ORDER.map((asset) => {
+                    const supported = getWalletIntegrationsForAsset(asset);
+                    return (
+                      <label key={`wallet-pref-${asset}`} className="rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 space-y-1">
+                        <div className="text-xs text-neutral-400">{PAYMENT_ASSET_META[asset].symbol}</div>
+                        <select
+                          value={settings.paymentDefaults.preferredWalletByAsset[asset] ?? ""}
+                          onChange={(e) => updatePreferredWallet(asset, e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs"
+                        >
+                          <option value="">No preference</option>
+                          {supported.map((wallet) => (
+                            <option key={`${asset}-${wallet.id}`} value={wallet.id}>
+                              {wallet.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="text-xs text-neutral-500">Applied to new broadcasts and available for wallet actions on watch pages.</div>
+            </section>
+
+            <section id="wallet-integrations" className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4 scroll-mt-24">
+              <h2 className="text-sm font-semibold text-neutral-200 inline-flex items-center gap-2">
+                <PlugZap className="w-4 h-4" />
+                Wallet Integrations
+              </h2>
+
+              <div className="text-sm text-neutral-300 space-y-2">
+                <p>
+                  This panel defines how wallet actions are surfaced in watch pages. dStream never stores private keys; it only prepares addresses, URI links,
+                  and preferred-wallet hints.
+                </p>
+                <ol className="list-decimal pl-5 text-xs text-neutral-400 space-y-1">
+                  <li>Set preferred wallet per asset above in Payment Defaults.</li>
+                  <li>Configure payout methods in Broadcast (core + advanced panel).</li>
+                  <li>On watch page, viewers use Copy / Wallet URI / Preferred wallet links for settlement.</li>
+                </ol>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {walletIntegrationsByMode.map(({ mode, wallets }) => (
+                  <article key={mode} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wider text-neutral-500">{walletModeLabel(mode)}</div>
+                      <div className="text-xs text-neutral-500 mt-1">{walletModeHint(mode)}</div>
+                    </div>
+                    <div className="space-y-2">
+                      {wallets.map((wallet) => (
+                        <div key={wallet.id} className="rounded-lg border border-neutral-800 bg-neutral-950/70 px-3 py-2 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-semibold text-neutral-200">{wallet.name}</div>
+                            <a
+                              href={wallet.website}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-blue-300 hover:text-blue-200 inline-flex items-center gap-1"
+                            >
+                              Site <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                          <div className="text-[11px] text-neutral-500">
+                            Assets: {wallet.assets.map((asset) => PAYMENT_ASSET_META[asset].symbol).join(", ")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="text-xs text-neutral-500">
+                Prefer a CLI wallet workflow? Set preferred wallet to Monero CLI / Bitcoin Core, then use Copy on watch page to pay from your terminal wallet.
+              </div>
             </section>
 
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
@@ -981,7 +1376,7 @@ export default function SettingsPage() {
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-3">
               <h2 className="text-sm font-semibold text-neutral-200">Danger Zone</h2>
               <div className="text-sm text-neutral-500">
-                Clears aliases, trust lists, favorites, and settings from this browser.
+                Clears aliases, trust lists, favorites, profile drafts, identities, and settings from this browser.
               </div>
               <button
                 type="button"
@@ -1016,11 +1411,18 @@ export default function SettingsPage() {
                       <span className="font-medium">Selected:</span> {restorePending.fileName}
                     </div>
                     <div className="text-xs text-neutral-400">
+                      Backup format: v{restorePending.version}
+                    </div>
+                    <div className="text-xs text-neutral-400">
                       {restorePending.exportedAt ? `Exported: ${new Date(restorePending.exportedAt).toLocaleString()}` : "Exported: unknown"}
                     </div>
                     <div className="text-xs text-neutral-400">
                       Keys: {Object.keys(restorePending.localStorage).length} local / {Object.keys(restorePending.sessionStorage).length} session /{" "}
                       {restorePending.dstreamKeyCount} dStream-local
+                    </div>
+                    <div className="text-xs text-neutral-400">
+                      Identity keys: {restorePending.localIdentityCount} local / Profile snapshots: {restorePending.profileSnapshotCount} / Profile drafts:{" "}
+                      {restorePending.profileDraftCount}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -1056,7 +1458,8 @@ export default function SettingsPage() {
               <>
                 <h3 className="text-lg font-semibold text-neutral-100">Do you want to back up your settings first?</h3>
                 <p className="text-sm text-neutral-400">
-                  Backup includes all current browser data for this site, including stored stream/session records and settings.
+                  Backup includes all current browser data for this site, including identity keys, profile drafts/snapshots, stream/session records, and
+                  settings.
                 </p>
                 {resetError && <div className="text-xs text-red-300">{resetError}</div>}
                 <div className="flex flex-wrap gap-2">

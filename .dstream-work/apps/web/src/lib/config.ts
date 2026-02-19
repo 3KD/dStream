@@ -1,5 +1,14 @@
 const DEFAULT_NOSTR_RELAYS_DEV = ["ws://localhost:8081"];
-const DEFAULT_NOSTR_RELAYS_PROD = ["wss://relay.damus.io", "wss://nos.lol"];
+const DEFAULT_NOSTR_RELAYS_PROD = [
+  "wss://relay.damus.io",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+  "wss://relay.snort.social",
+  "wss://nostr.mom",
+  "wss://offchain.pub",
+  "wss://purplepag.es",
+  "wss://relay.nostr.wirednet.jp"
+];
 const DEFAULT_NIP05_POLICY = "badge";
 export const NOSTR_RELAY_OVERRIDE_STORAGE_KEY = "dstream_nostr_relays_override_v1";
 
@@ -19,6 +28,10 @@ function isValidRelayUrl(url: string): boolean {
 
 function uniq(strings: string[]): string[] {
   return Array.from(new Set(strings));
+}
+
+function isHex64(input: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(input.trim());
 }
 
 export function parseRelayList(raw: string | null | undefined): string[] {
@@ -59,13 +72,25 @@ export function getNostrRelays(): string[] {
   const override = getRelayOverrideFromStorage();
   if (override.length > 0) return override;
 
-  const relays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
+  const configuredRelays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
+  if (configuredRelays.length === 0) return DEFAULT_NOSTR_RELAYS;
 
-  return relays.length > 0 ? relays : DEFAULT_NOSTR_RELAYS;
+  return uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
 }
 
 export function getNip05Policy(): Nip05Policy {
   const raw = (process.env.NEXT_PUBLIC_NIP05_POLICY || "").trim().toLowerCase();
   if (raw === "off" || raw === "badge" || raw === "require") return raw;
   return DEFAULT_NIP05_POLICY;
+}
+
+export function getDiscoveryOperatorPubkeys(): string[] {
+  const raw = (process.env.NEXT_PUBLIC_DISCOVERY_OPERATOR_PUBKEYS ?? "").trim();
+  if (!raw) return [];
+  return uniq(
+    raw
+      .split(/[\n,]+/g)
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => isHex64(value))
+  );
 }

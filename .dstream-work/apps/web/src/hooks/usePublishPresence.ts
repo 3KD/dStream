@@ -27,7 +27,7 @@ export function usePublishPresence(scope: {
     const { streamPubkey, streamId } = scope;
     if (!streamPubkey || !streamId) return false;
 
-    setStatus("sending");
+    setStatus((previous) => (previous === "ok" ? "ok" : "sending"));
     try {
       const createdAt = Math.floor(Date.now() / 1000);
       const unsigned = buildStreamPresenceEvent({
@@ -65,4 +65,3 @@ export function usePublishPresence(scope: {
     sendOnce
   };
 }
-
