@@ -13,6 +13,7 @@ import {
 } from "@dstream/protocol";
 import { NOSTR_KINDS } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
+import { isStreamChatClearReason } from "@/lib/chatModeration";
 import { subscribeMany } from "@/lib/nostr";
 import { publishEvent } from "@/lib/publish";
 
@@ -170,6 +171,20 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
     return set;
   }, [effectiveActionsByTarget]);
 
+  const streamChatClearedAt = useMemo(() => {
+    let latest: number | null = null;
+    for (const record of Object.values(actionsByAuthorTarget)) {
+      const issuer = record.pubkey;
+      const issuerAuthorized = issuer === streamPubkey || moderators.has(issuer);
+      if (!issuerAuthorized) continue;
+      if (record.action !== "clear") continue;
+      if (record.targetPubkey !== streamPubkey) continue;
+      if (!isStreamChatClearReason(record.reason)) continue;
+      if (latest === null || record.createdAt > latest) latest = record.createdAt;
+    }
+    return latest;
+  }, [actionsByAuthorTarget, moderators, streamPubkey]);
+
   const isOwner = identityPubkey !== "" && identityPubkey === streamPubkey;
   const canModerate = isOwner || (identityPubkey !== "" && moderators.has(identityPubkey));
 
@@ -248,6 +263,7 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
     effectiveActionsByTarget,
     remoteMuted,
     remoteBlocked,
+    streamChatClearedAt,
     publishModerationAction,
     publishModeratorRole
   };

@@ -7,6 +7,7 @@ import { useStreamModeration } from "@/hooks/useStreamModeration";
 import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
 import { parseChatCommand } from "@/lib/chatCommands";
+import { STREAM_CHAT_CLEAR_REASON } from "@/lib/chatModeration";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import { useNostrProfile, useNostrProfiles } from "@/hooks/useNostrProfiles";
@@ -31,6 +32,8 @@ export function ChatBox({
   slowModeSec,
   subscriberOnly,
   followerOnly,
+  clearWindowRequestNonce,
+  onClearWindowRequestHandled,
   onMessageCountChange,
   className
 }: {
@@ -39,6 +42,8 @@ export function ChatBox({
   slowModeSec?: number;
   subscriberOnly?: boolean;
   followerOnly?: boolean;
+  clearWindowRequestNonce?: number;
+  onClearWindowRequestHandled?: (ok: boolean) => void;
   onMessageCountChange?: (count: number) => void;
   className?: string;
 }) {
@@ -56,8 +61,10 @@ export function ChatBox({
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
+  const [localChatClearedAt, setLocalChatClearedAt] = useState<number | null>(null);
 
   const lastMessageSentAtRef = useRef<number>(0);
+  const clearRequestSeenRef = useRef<number>(0);
 
   const moderation = useStreamModeration({
     streamPubkey,
@@ -88,17 +95,22 @@ export function ChatBox({
   const nip05GateSatisfied = nip05Policy !== "require" || selfProfile?.nip05Verified === true;
   const canModerate = moderation.canModerate && nip05GateSatisfied;
   const canManageRoles = isOwner && nip05GateSatisfied;
+  const effectiveChatClearedAt = useMemo(
+    () => Math.max(localChatClearedAt ?? 0, moderation.streamChatClearedAt ?? 0),
+    [localChatClearedAt, moderation.streamChatClearedAt]
+  );
 
   const visibleMessages = useMemo(
     () =>
       messages.filter(
         (message) =>
+          message.createdAt > effectiveChatClearedAt &&
           !social.isMuted(message.pubkey) &&
           !social.isBlocked(message.pubkey) &&
           !moderation.remoteMuted.has(message.pubkey) &&
           !moderation.remoteBlocked.has(message.pubkey)
       ),
-    [messages, moderation.remoteBlocked, moderation.remoteMuted, social]
+    [effectiveChatClearedAt, messages, moderation.remoteBlocked, moderation.remoteMuted, social]
   );
 
   const hiddenCount = messages.length - visibleMessages.length;
@@ -194,6 +206,35 @@ export function ChatBox({
       setCommandNotice((current) => (current === value ? null : current));
     }, 3000);
   }, []);
+
+  const clearChatWindow = useCallback(async (): Promise<boolean> => {
+    if (!canModerate) return false;
+    setModerationError(null);
+    const ok = await moderation.publishModerationAction(streamPubkey, "clear", STREAM_CHAT_CLEAR_REASON);
+    if (!ok) {
+      setModerationError("Failed to clear chat on relays.");
+      return false;
+    }
+    setLocalChatClearedAt(Math.floor(Date.now() / 1000));
+    showNotice("Chat window cleared.");
+    return true;
+  }, [canModerate, moderation, showNotice, streamPubkey]);
+
+  useEffect(() => {
+    if (!moderation.streamChatClearedAt) return;
+    setLocalChatClearedAt((prev) => Math.max(prev ?? 0, moderation.streamChatClearedAt ?? 0));
+  }, [moderation.streamChatClearedAt]);
+
+  useEffect(() => {
+    const requestNonce = clearWindowRequestNonce ?? 0;
+    if (requestNonce <= 0) return;
+    if (requestNonce === clearRequestSeenRef.current) return;
+    clearRequestSeenRef.current = requestNonce;
+    void (async () => {
+      const ok = await clearChatWindow();
+      onClearWindowRequestHandled?.(ok);
+    })();
+  }, [clearWindowRequestNonce, clearChatWindow, onClearWindowRequestHandled]);
 
   const closeReportDialog = useCallback(() => {
     if (reportBusy) return;

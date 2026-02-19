@@ -244,6 +244,8 @@ export default function BroadcastPage() {
   const [chatSlowModeSecInput, setChatSlowModeSecInput] = useState("");
   const [chatSubscriberOnly, setChatSubscriberOnly] = useState(false);
   const [chatFollowerOnly, setChatFollowerOnly] = useState(false);
+  const [chatClearRequestNonce, setChatClearRequestNonce] = useState(0);
+  const [chatClearRequestState, setChatClearRequestState] = useState<"idle" | "pending" | "ok" | "error">("idle");
   const [discoverable, setDiscoverable] = useState(true);
   const [matureContent, setMatureContent] = useState(false);
 
@@ -342,6 +344,12 @@ export default function BroadcastPage() {
     }
   }, [includeAudio]);
 
+  useEffect(() => {
+    if (chatClearRequestState !== "ok" && chatClearRequestState !== "error") return;
+    const timeout = setTimeout(() => setChatClearRequestState("idle"), 3500);
+    return () => clearTimeout(timeout);
+  }, [chatClearRequestState]);
+
   const clearStoredSession = useCallback(() => {
     try {
       localStorage.removeItem("dstream_broadcast_session_v1");
@@ -349,6 +357,15 @@ export default function BroadcastPage() {
       // ignore
     }
     setStoredSession(null);
+  }, []);
+
+  const requestChatWindowClear = useCallback(() => {
+    setChatClearRequestState("pending");
+    setChatClearRequestNonce((prev) => prev + 1);
+  }, []);
+
+  const handleChatClearRequestHandled = useCallback((ok: boolean) => {
+    setChatClearRequestState(ok ? "ok" : "error");
   }, []);
 
   // Restore draft stream metadata (best-effort).
@@ -2573,6 +2590,22 @@ export default function BroadcastPage() {
                         )}
                       </div>
                     </div>
+                    <div className="pt-2 border-t border-neutral-800 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={requestChatWindowClear}
+                        disabled={!identity || status === "connecting" || chatClearRequestState === "pending"}
+                        className="px-3 py-2 rounded-lg border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                      >
+                        {chatClearRequestState === "pending" ? "Clearing Chat…" : "Clear Chat Window"}
+                      </button>
+                      {chatClearRequestState === "ok" ? (
+                        <span className="text-[11px] text-emerald-300">Chat cleared for connected viewers.</span>
+                      ) : null}
+                      {chatClearRequestState === "error" ? (
+                        <span className="text-[11px] text-red-300">Failed to clear chat on relays.</span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2630,6 +2663,8 @@ export default function BroadcastPage() {
                 slowModeSec={chatSlowModeSecParsed ?? undefined}
                 subscriberOnly={chatSubscriberOnly}
                 followerOnly={chatFollowerOnly}
+                clearWindowRequestNonce={chatClearRequestNonce}
+                onClearWindowRequestHandled={handleChatClearRequestHandled}
               />
             </div>
 
