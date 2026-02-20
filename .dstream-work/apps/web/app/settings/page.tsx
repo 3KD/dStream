@@ -11,6 +11,7 @@ import { useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { hexToBytes, shortenText } from "@/lib/encoding";
 import { parseStreamFavoriteKey } from "@/lib/social/store";
+import { ProfileMetadataEditor } from "@/components/settings/ProfileMetadataEditor";
 import {
   getWalletIntegrationsForAsset,
   PAYMENT_ASSET_META,
@@ -664,6 +665,8 @@ export default function SettingsPage() {
                   <span className="text-neutral-400">None</span>
                 )}
               </div>
+
+              <ProfileMetadataEditor />
 
               <div className="space-y-2">
                 <div className="text-xs text-neutral-500">Import local key (nsec… or 64-hex)</div>

@@ -19,7 +19,6 @@ const buildLinks = [
   { href: "/broadcast", label: "Broadcast" },
   { href: "/browse", label: "Browse" },
   { href: "/settings", label: "Settings" },
-  { href: "/profile", label: "Profile" },
   { href: "/mobile/bootstrap", label: "Mobile Bootstrap" }
 ];
 
