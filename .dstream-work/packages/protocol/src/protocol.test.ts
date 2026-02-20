@@ -63,6 +63,7 @@ test("stream announce: build + parse roundtrip", () => {
     matureContent: true,
     viewerAllowPubkeys: ["f".repeat(64)],
     vodArchiveEnabled: false,
+    vodVisibility: "private",
     feeWaiverGuilds: [{ guildPubkey: "c".repeat(64), guildId: "builders" }],
     feeWaiverVipPubkeys: ["d".repeat(64)],
     manifestSignerPubkey: "b".repeat(64),
@@ -120,6 +121,7 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(parsed.matureContent, true);
   assert.deepEqual(parsed.viewerAllowPubkeys, ["f".repeat(64)]);
   assert.equal(parsed.vodArchiveEnabled, false);
+  assert.equal(parsed.vodVisibility, "private");
   assert.deepEqual(parsed.feeWaiverGuilds, [{ guildPubkey: "c".repeat(64), guildId: "builders" }]);
   assert.deepEqual(parsed.feeWaiverVipPubkeys, ["d".repeat(64)]);
   assert.equal(parsed.manifestSignerPubkey, "b".repeat(64));
@@ -180,6 +182,7 @@ test("stream announce: legacy xmr tag maps into payments", () => {
   assert.equal(parsed.discoverable, true);
   assert.equal(parsed.matureContent, false);
   assert.deepEqual(parsed.viewerAllowPubkeys, []);
+  assert.equal(parsed.vodVisibility, "public");
   assert.deepEqual(parsed.payments, [{ asset: "xmr", address: "4".repeat(95), network: undefined, label: undefined }]);
 });
 

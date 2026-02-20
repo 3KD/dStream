@@ -15,10 +15,12 @@ import { useStreamIntegrity } from "@/hooks/useStreamIntegrity";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
 import { usePublishPresence } from "@/hooks/usePublishPresence";
 import { useIdentity } from "@/context/IdentityContext";
+import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { makeOriginStreamId } from "@/lib/origin";
+import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
@@ -30,6 +32,7 @@ import {
   getWalletIntegrationById,
   getWalletIntegrationsForAsset
 } from "@/lib/payments/catalog";
+import { getPaymentRailForAsset, groupPaymentMethodsByRail } from "@/lib/payments/rails";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
 import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
@@ -150,6 +153,7 @@ export default function WatchPage() {
   })();
   const e2eSentRef = useRef({ loaded: false, player: false, chat: false, integrityVerified: false, integrityTamper: false });
   const { identity, signEvent, nip04 } = useIdentity();
+  const { setQuickPlayStream } = useQuickPlay();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
   const pubkey = useMemo(() => pubkeyParamToHex(pubkeyParam), [pubkeyParam]);
@@ -157,7 +161,10 @@ export default function WatchPage() {
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
 
   const { announce } = useStreamAnnounce(pubkey ?? "", streamId);
+
   const vodArchiveEnabled = announce?.vodArchiveEnabled === true;
+  const vodVisibility = announce?.vodVisibility === "private" ? "private" : "public";
+  const privateVodEnabled = vodArchiveEnabled && vodVisibility === "private";
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const integrityFallbackManifestUrl = e2e ? "/api/manifest/latest" : null;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId, windowSec: 180 });
@@ -208,6 +215,7 @@ export default function WatchPage() {
     });
   }, [payoutAssets, social.settings.paymentDefaults.preferredWalletByAsset]);
   const autoSelectedPayoutAsset = orderedPayoutAssets[0] ?? null;
+  const autoSelectedPayoutRail = autoSelectedPayoutAsset ? getPaymentRailForAsset(autoSelectedPayoutAsset) : null;
   const orderedNonXmrPayments = useMemo(() => {
     const assetRank = new Map<StreamPaymentAsset, number>(orderedPayoutAssets.map((asset, index) => [asset, index]));
     return nonXmrPayments
@@ -224,6 +232,7 @@ export default function WatchPage() {
       })
       .map((row) => row.method);
   }, [nonXmrPayments, orderedPayoutAssets]);
+  const nonXmrPaymentsByRail = useMemo(() => groupPaymentMethodsByRail(orderedNonXmrPayments), [orderedNonXmrPayments]);
   const preferredWalletsForPayoutAssets = useMemo(() => {
     return orderedPayoutAssets
       .map((asset) => {
@@ -246,6 +255,14 @@ export default function WatchPage() {
     if (viewerPubkey === pubkey.toLowerCase()) return true;
     return privateViewerAllowPubkeys.includes(viewerPubkey);
   }, [privateStreamEnabled, privateViewerAllowPubkeys, pubkey, viewerPubkey]);
+  const viewerVodAllowed = useMemo(() => {
+    if (!privateVodEnabled || !pubkey) return true;
+    if (!viewerPubkey) return false;
+    if (viewerPubkey === pubkey.toLowerCase()) return true;
+    return privateViewerAllowPubkeys.includes(viewerPubkey);
+  }, [privateViewerAllowPubkeys, privateVodEnabled, pubkey, viewerPubkey]);
+  const accessTokenRequired = privateStreamEnabled || vodArchiveEnabled;
+  const viewerProofRequired = privateStreamEnabled || privateVodEnabled;
   const [playbackAccessState, setPlaybackAccessState] = useState<"idle" | "issuing" | "ready" | "denied" | "error">("idle");
   const [playbackAccessToken, setPlaybackAccessToken] = useState<string | null>(null);
   const [playbackAccessError, setPlaybackAccessError] = useState<string | null>(null);
@@ -374,20 +391,30 @@ export default function WatchPage() {
       return;
     }
 
-    if (!privateStreamEnabled) {
+    if (!accessTokenRequired) {
       setPlaybackAccessState("ready");
       return;
     }
 
-    if (!viewerPubkey) {
+    if (viewerProofRequired && !viewerPubkey) {
       setPlaybackAccessState("denied");
-      setPlaybackAccessError("This stream is private. Connect your Nostr identity to request access.");
+      setPlaybackAccessError(
+        privateStreamEnabled
+          ? "This stream is private. Connect your Nostr identity to request access."
+          : "Archived recordings are private. Connect your Nostr identity to access VOD."
+      );
       return;
     }
 
-    if (!viewerPrivateAllowed) {
+    if (privateStreamEnabled && !viewerPrivateAllowed) {
       setPlaybackAccessState("denied");
       setPlaybackAccessError("This stream is private and your pubkey is not on the viewer allowlist.");
+      return;
+    }
+
+    if (privateVodEnabled && !viewerVodAllowed) {
+      setPlaybackAccessState("denied");
+      setPlaybackAccessError("Archived recordings are private and your pubkey is not on the allowlist.");
       return;
     }
 
@@ -396,18 +423,21 @@ export default function WatchPage() {
 
     void (async () => {
       try {
-        const proofExpirySec = nowSec() + 15 * 60;
-        const proofUnsigned = {
-          kind: 27236,
-          created_at: nowSec(),
-          tags: [
-            ["dstream", "watch_access"],
-            ["stream", originStreamId],
-            ["exp", String(proofExpirySec)]
-          ],
-          content: ""
-        };
-        const viewerProofEvent = await signEvent(proofUnsigned as any);
+        let viewerProofEvent: unknown = undefined;
+        if (viewerProofRequired) {
+          const proofExpirySec = nowSec() + 15 * 60;
+          const proofUnsigned = {
+            kind: 27236,
+            created_at: nowSec(),
+            tags: [
+              ["dstream", "watch_access"],
+              ["stream", originStreamId],
+              ["exp", String(proofExpirySec)]
+            ],
+            content: ""
+          };
+          viewerProofEvent = await signEvent(proofUnsigned as any);
+        }
 
         const res = await fetch("/api/playback-access/issue", {
           method: "POST",
@@ -436,14 +466,33 @@ export default function WatchPage() {
       } catch (err: any) {
         if (cancelled) return;
         setPlaybackAccessState("error");
-        setPlaybackAccessError(err?.message ?? "Failed to request playback access for this private stream.");
+        setPlaybackAccessError(
+          err?.message ??
+            (privateStreamEnabled
+              ? "Failed to request playback access for this private stream."
+              : "Failed to request archive access token.")
+        );
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [announce?.raw, originStreamId, playbackAccessRetryTick, privateStreamEnabled, pubkey, signEvent, streamId, viewerPrivateAllowed, viewerPubkey]);
+  }, [
+    accessTokenRequired,
+    announce?.raw,
+    originStreamId,
+    playbackAccessRetryTick,
+    privateStreamEnabled,
+    privateVodEnabled,
+    pubkey,
+    signEvent,
+    streamId,
+    viewerPrivateAllowed,
+    viewerProofRequired,
+    viewerPubkey,
+    viewerVodAllowed
+  ]);
 
   const presenceEnabled = social.settings.presenceEnabled;
 
@@ -695,6 +744,17 @@ export default function WatchPage() {
       setVodError(null);
       return;
     }
+    if (!playbackAccessToken) {
+      setVodRecordings([]);
+      if (privateVodEnabled && (playbackAccessState === "denied" || playbackAccessState === "error")) {
+        setVodError(playbackAccessError ?? "Archived recordings are private for this stream.");
+        setVodLoading(false);
+        return;
+      }
+      setVodError(null);
+      setVodLoading(playbackAccessState === "issuing" || playbackAccessState === "idle");
+      return;
+    }
 
     let cancelled = false;
     setVodLoading(true);
@@ -702,17 +762,27 @@ export default function WatchPage() {
 
     void (async () => {
       try {
-        const res = await fetch(`/api/vod/list/${encodeURIComponent(originStreamId)}`, { cache: "no-store" });
+        const listUrl = appendPlaybackAccessToken(`/api/vod/list/${encodeURIComponent(originStreamId)}`, playbackAccessToken);
+        const res = await fetch(listUrl, { cache: "no-store" });
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           throw new Error(text || `VOD list failed (${res.status})`);
         }
         const data = (await res.json().catch(() => null)) as { ok?: boolean; files?: VodRecordingEntry[] } | null;
         const files = Array.isArray(data?.files)
-          ? data.files.filter((entry) => !!entry && typeof entry.url === "string" && typeof entry.relativePath === "string")
+          ? data.files
+              .filter((entry) => !!entry && typeof entry.url === "string" && typeof entry.relativePath === "string")
+              .map((entry) => ({
+                ...entry,
+                url: appendPlaybackAccessToken(entry.url, playbackAccessToken)
+              }))
           : [];
         if (cancelled) return;
         setVodRecordings(files);
+        setSelectedVod((previous) => {
+          if (!previous) return null;
+          return files.find((entry) => entry.relativePath === previous.relativePath) ?? null;
+        });
       } catch (err: any) {
         if (cancelled) return;
         setVodRecordings([]);
@@ -725,14 +795,28 @@ export default function WatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [originStreamId, vodArchiveEnabled]);
+  }, [originStreamId, playbackAccessError, playbackAccessState, playbackAccessToken, privateVodEnabled, vodArchiveEnabled]);
 
   const streamUrl = selectedVod?.url ?? liveStreamUrl;
   const isPlaybackLive = !selectedVod;
+  const playbackStateKey = useMemo(() => {
+    if (!pubkey || !streamId) return undefined;
+    return deriveQuickPlayPlaybackStateKey({ pubkey, streamId, hlsUrl: streamUrl });
+  }, [pubkey, streamId, streamUrl]);
   const whepUrl = useMemo(() => {
     if (!isPlaybackLive || !originStreamId) return null;
     return appendPlaybackAccessToken(`/api/whep/${encodeURIComponent(originStreamId)}/whep`, playbackAccessToken);
   }, [isPlaybackLive, originStreamId, playbackAccessToken]);
+  useEffect(() => {
+    if (!pubkey || !streamId) return;
+    setQuickPlayStream({
+      streamPubkey: pubkey,
+      streamId,
+      title: (announce?.title ?? "").trim() || `Live ${streamId}`,
+      hlsUrl: streamUrl,
+      whepUrl: whepUrl ?? undefined
+    });
+  }, [announce?.title, pubkey, setQuickPlayStream, streamId, streamUrl, whepUrl]);
   const playbackBlocked = privateStreamEnabled && playbackAccessState !== "ready";
   const playbackBlockedMessage = useMemo(() => {
     if (!privateStreamEnabled) return null;
@@ -1514,6 +1598,7 @@ export default function WatchPage() {
                 showTimelineControls={vodArchiveEnabled}
                 captionTracks={captionTracks}
                 autoplayMuted={e2e ? true : social.settings.playbackAutoplayMuted}
+                playbackStateKey={playbackStateKey}
                 onReady={() => {
                   if (!e2e || e2eSentRef.current.player) return;
                   e2eSentRef.current.player = true;
@@ -1560,6 +1645,12 @@ export default function WatchPage() {
                     Back to live
                   </button>
                 )}
+              </div>
+              <div className="text-xs text-neutral-500">
+                Visibility:{" "}
+                <span className={vodVisibility === "private" ? "text-amber-300" : "text-emerald-300"}>
+                  {vodVisibility === "private" ? "Private (owner + allowlist)" : "Public"}
+                </span>
               </div>
 
               {!vodArchiveEnabled ? (
@@ -1628,7 +1719,9 @@ export default function WatchPage() {
                 {autoSelectedPayoutAsset && (
                   <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-3 text-xs text-neutral-400">
                     Default payment rail for this stream:{" "}
-                    <span className="text-neutral-200 font-semibold">{PAYMENT_ASSET_META[autoSelectedPayoutAsset].symbol}</span>
+                    <span className="text-neutral-200 font-semibold">
+                      {autoSelectedPayoutRail ? `${autoSelectedPayoutRail.name} (${PAYMENT_ASSET_META[autoSelectedPayoutAsset].symbol})` : PAYMENT_ASSET_META[autoSelectedPayoutAsset].symbol}
+                    </span>
                   </div>
                 )}
                 {preferredWalletsForPayoutAssets.length > 0 && (
@@ -1891,53 +1984,67 @@ export default function WatchPage() {
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
                 <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Additional payment methods (streamer-configured)</div>
                 <div className="space-y-3">
-                  {orderedNonXmrPayments.map((method, index) => {
-                    const key = `${method.asset}:${method.address}:${method.network ?? ""}:${index}`;
-                    const uri = buildPaymentUri(method);
-                    const preferredWalletId = social.settings.paymentDefaults.preferredWalletByAsset[method.asset];
-                    const preferredWallet = getWalletIntegrationById(preferredWalletId);
-                    const wallets = getWalletIntegrationsForAsset(method.asset);
-                    return (
-                      <div key={key} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs text-neutral-400 uppercase font-bold tracking-wider">{assetLabel(method.asset)}</div>
-                          <button
-                            type="button"
-                            onClick={() => void copyPaymentAddress(key, method.address)}
-                            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 inline-flex items-center gap-2"
-                          >
-                            <Copy className="w-4 h-4" />
-                            {paymentCopyKey === key ? "Copied" : paymentCopyErrorKey === key ? "Error" : "Copy"}
-                          </button>
+                  {nonXmrPaymentsByRail.map(({ rail, methods }) => (
+                    <div key={rail.id} className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[11px] text-neutral-300 uppercase tracking-wider font-bold">
+                          {rail.name} rail
                         </div>
-                        <div className="text-sm text-neutral-200 font-mono break-all">{method.address}</div>
-                        <div className="text-xs text-neutral-500">
-                          {method.network ? `Network: ${method.network}` : "Network: default"} {method.label ? `· ${method.label}` : ""}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {uri ? (
-                            <a
-                              href={uri}
-                              className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200 inline-flex items-center gap-2"
-                            >
-                              Open Wallet URI <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          ) : (
-                            <span className="text-neutral-500">Wallet URI unavailable for this asset.</span>
-                          )}
-                          {preferredWallet ? (
-                            <a href={preferredWallet.website} target="_blank" rel="noreferrer" className="text-blue-300 hover:text-blue-200">
-                              Preferred wallet: {preferredWallet.name}
-                            </a>
-                          ) : wallets.length > 0 ? (
-                            <span className="text-neutral-500">
-                              Compatible: {wallets.slice(0, 3).map((wallet) => wallet.name).join(", ")}
-                            </span>
-                          ) : null}
+                        <div className="text-[11px] text-neutral-500">
+                          {rail.execution === "verified_backend" ? "Verified backend" : "Wallet URI / copy"}
                         </div>
                       </div>
-                    );
-                  })}
+                      <div className="space-y-3">
+                        {methods.map((method, index) => {
+                          const key = `${rail.id}:${method.asset}:${method.address}:${method.network ?? ""}:${index}`;
+                          const uri = buildPaymentUri(method);
+                          const preferredWalletId = social.settings.paymentDefaults.preferredWalletByAsset[method.asset];
+                          const preferredWallet = getWalletIntegrationById(preferredWalletId);
+                          const wallets = getWalletIntegrationsForAsset(method.asset);
+                          return (
+                            <div key={key} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-neutral-400 uppercase font-bold tracking-wider">{assetLabel(method.asset)}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => void copyPaymentAddress(key, method.address)}
+                                  className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 inline-flex items-center gap-2"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                  {paymentCopyKey === key ? "Copied" : paymentCopyErrorKey === key ? "Error" : "Copy"}
+                                </button>
+                              </div>
+                              <div className="text-sm text-neutral-200 font-mono break-all">{method.address}</div>
+                              <div className="text-xs text-neutral-500">
+                                {method.network ? `Network: ${method.network}` : "Network: default"} {method.label ? `· ${method.label}` : ""}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                {uri ? (
+                                  <a
+                                    href={uri}
+                                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200 inline-flex items-center gap-2"
+                                  >
+                                    Open Wallet URI <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                ) : (
+                                  <span className="text-neutral-500">Wallet URI unavailable for this asset.</span>
+                                )}
+                                {preferredWallet ? (
+                                  <a href={preferredWallet.website} target="_blank" rel="noreferrer" className="text-blue-300 hover:text-blue-200">
+                                    Preferred wallet: {preferredWallet.name}
+                                  </a>
+                                ) : wallets.length > 0 ? (
+                                  <span className="text-neutral-500">
+                                    Compatible: {wallets.slice(0, 3).map((wallet) => wallet.name).join(", ")}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

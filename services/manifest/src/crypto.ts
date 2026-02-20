@@ -88,7 +88,8 @@ export function getOrCreateIdentity(): KeyPair {
                 privateKey: Buffer.from(data.privateKey, 'hex')
             };
         } catch (e) {
-            console.error('Error reading keys.json:', e);
+            console.error('Error reading keys.json (deleting it):', e);
+            try { fs.unlinkSync(KEY_FILE); } catch (delErr) { }
         }
     }
 

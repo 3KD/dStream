@@ -23,10 +23,41 @@ const STREAM_ANNOUNCE_MIN_LIMIT_ALL = 320;
 const STREAM_ANNOUNCE_LIMIT_MULTIPLIER_LIVE = 4;
 const STREAM_ANNOUNCE_LIMIT_MULTIPLIER_ALL = 8;
 
+interface StreamOrderMeta {
+  firstSeenAt: number;
+  seq: number;
+}
+
 function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number): StreamAnnounce {
   if (stream.status !== "live") return stream;
   if (stream.createdAt >= staleCutoffSec) return stream;
   return { ...stream, status: "ended" };
+}
+
+function sortStreamsStable(
+  streams: StreamAnnounce[],
+  staleCutoffSec: number,
+  orderMeta: Map<string, StreamOrderMeta>
+) {
+  return streams.slice().sort((a, b) => {
+    const aLive = a.status === "live" && a.createdAt >= staleCutoffSec;
+    const bLive = b.status === "live" && b.createdAt >= staleCutoffSec;
+    if (aLive !== bLive) return aLive ? -1 : 1;
+
+    const keyA = makeStreamKey(a.pubkey, a.streamId);
+    const keyB = makeStreamKey(b.pubkey, b.streamId);
+    const aMeta = orderMeta.get(keyA);
+    const bMeta = orderMeta.get(keyB);
+    const rankA = aMeta?.firstSeenAt ?? a.createdAt;
+    const rankB = bMeta?.firstSeenAt ?? b.createdAt;
+    if (rankA !== rankB) return rankB - rankA;
+
+    const seqA = aMeta?.seq ?? Number.MAX_SAFE_INTEGER;
+    const seqB = bMeta?.seq ?? Number.MAX_SAFE_INTEGER;
+    if (seqA !== seqB) return seqA - seqB;
+
+    return keyA.localeCompare(keyB);
+  });
 }
 
 export function useStreamAnnounces({
@@ -41,6 +72,8 @@ export function useStreamAnnounces({
   const [hiddenPubkeyPolicies, setHiddenPubkeyPolicies] = useState<Map<string, { hidden: boolean; createdAt: number }>>(new Map());
   const [hiddenStreamPolicies, setHiddenStreamPolicies] = useState<Map<string, { hidden: boolean; createdAt: number }>>(new Map());
   const seen = useRef<Map<string, number>>(new Map());
+  const orderMetaRef = useRef<Map<string, StreamOrderMeta>>(new Map());
+  const orderSeqRef = useRef(0);
   const discoveryPolicyPubkeys = useRef<Map<string, { hidden: boolean; createdAt: number }>>(new Map());
   const discoveryPolicyStreams = useRef<Map<string, { hidden: boolean; createdAt: number }>>(new Map());
 
@@ -102,6 +135,12 @@ export function useStreamAnnounces({
         const prevCreatedAt = seen.current.get(key);
         if (prevCreatedAt && prevCreatedAt >= parsed.createdAt) return;
         seen.current.set(key, parsed.createdAt);
+        if (!orderMetaRef.current.has(key)) {
+          orderMetaRef.current.set(key, {
+            firstSeenAt: parsed.createdAt,
+            seq: orderSeqRef.current++
+          });
+        }
 
         setAllStreams((prev) => {
           const now = Math.floor(Date.now() / 1000);
@@ -119,6 +158,8 @@ export function useStreamAnnounces({
             }
           } else if (liveOnly) {
             map.delete(key);
+            orderMetaRef.current.delete(key);
+            seen.current.delete(key);
           } else {
             map.set(key, normalizedParsed);
           }
@@ -127,11 +168,13 @@ export function useStreamAnnounces({
             for (const [streamKey, stream] of map) {
               if (stream.status !== "live" || stream.createdAt < staleCutoff) {
                 map.delete(streamKey);
+                orderMetaRef.current.delete(streamKey);
+                seen.current.delete(streamKey);
               }
             }
           }
 
-          const next = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+          const next = sortStreamsStable(Array.from(map.values()), staleCutoff, orderMetaRef.current);
           return next.slice(0, limit * 4);
         });
       },
@@ -143,9 +186,17 @@ export function useStreamAnnounces({
       setAllStreams((prev) => {
         const normalized = prev.map((stream) => normalizeStaleLiveStatus(stream, staleCutoff));
         if (liveOnly) {
-          return normalized.filter((stream) => stream.status === "live" && stream.createdAt >= staleCutoff).slice(0, limit * 4);
+          const filtered = normalized.filter((stream) => stream.status === "live" && stream.createdAt >= staleCutoff);
+          const activeKeys = new Set(filtered.map((stream) => makeStreamKey(stream.pubkey, stream.streamId)));
+          for (const key of Array.from(orderMetaRef.current.keys())) {
+            if (!activeKeys.has(key)) {
+              orderMetaRef.current.delete(key);
+              seen.current.delete(key);
+            }
+          }
+          return sortStreamsStable(filtered, staleCutoff, orderMetaRef.current).slice(0, limit * 4);
         }
-        return normalized.slice(0, limit * 4);
+        return sortStreamsStable(normalized, staleCutoff, orderMetaRef.current).slice(0, limit * 4);
       });
     }, LIVE_PRUNE_INTERVAL_MS);
 

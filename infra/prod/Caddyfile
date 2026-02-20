@@ -2,12 +2,31 @@
     email admin@dstream.stream
 }
 
-dstream.stream, www.dstream.stream {
-    # Next.js Web App
+# HTTP (No Redirect)
+http://dstream.stream, http://www.dstream.stream {
     reverse_proxy web:3000
 
-    # HLS Streaming (MediaMTX)
     handle_path /stream/* {
         reverse_proxy mediamtx:8888
     }
+
+    handle_path /whip/* {
+        reverse_proxy mediamtx:8890
+    }
 }
+
+# HTTPS (Default)
+# HTTPS (Default)
+dstream.stream, www.dstream.stream {
+    reverse_proxy web:3000
+
+    handle_path /stream/* {
+        reverse_proxy mediamtx:8880
+    }
+
+    handle_path /whip/* {
+        reverse_proxy mediamtx:8881
+    }
+}
+
+

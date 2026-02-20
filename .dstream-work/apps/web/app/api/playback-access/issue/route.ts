@@ -54,16 +54,28 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   let viewerPubkey: string | null = null;
-  if (policy.privateStream) {
+  const privateVod = policy.vodArchiveEnabled && policy.vodVisibility === "private";
+  if (policy.privateStream || privateVod) {
     const proof = verifyViewerProofEvent(viewerProofEvent, { originStreamId: expectedOriginStreamId });
     if (!proof.ok) {
-      return Response.json({ ok: false, error: proof.error }, { status: proof.status });
+      return Response.json(
+        { ok: false, error: policy.privateStream ? proof.error : `Private archive access requires identity proof: ${proof.error}` },
+        { status: proof.status }
+      );
     }
 
     viewerPubkey = proof.viewerPubkey;
     const allowlisted = viewerPubkey === policy.streamPubkey || policy.viewerAllowPubkeys.includes(viewerPubkey);
     if (!allowlisted) {
-      return Response.json({ ok: false, error: "viewer is not allowlisted for this private stream" }, { status: 403 });
+      return Response.json(
+        {
+          ok: false,
+          error: policy.privateStream
+            ? "viewer is not allowlisted for this private stream"
+            : "viewer is not allowlisted for this private archive"
+        },
+        { status: 403 }
+      );
     }
   } else if (viewerProofEvent) {
     const proof = verifyViewerProofEvent(viewerProofEvent, { originStreamId: expectedOriginStreamId });
@@ -81,7 +93,8 @@ export async function POST(req: Request): Promise<Response> {
     token: issued.token,
     expiresAtSec: issued.expiresAtSec,
     originStreamId: expectedOriginStreamId,
-    privateStream: policy.privateStream
+    privateStream: policy.privateStream,
+    privateVod,
+    vodVisibility: policy.vodVisibility
   });
 }
-

@@ -1,59 +1,37 @@
 # MediaMTX Configuration for dStream
-
-# Log level
 logLevel: info
-
-# API for debugging (optional)
 api: yes
 apiAddress: :9990
 
-# Authentication (Webhook to Next.js API)
-# Uses host.docker.internal to reach the web app running on the host (outside docker)
-authMethod: http
-authHTTPAddress: http://host.docker.internal:5655/api/auth/publish
+# Timeouts
+readTimeout: 30s
+writeTimeout: 30s
+writeQueueSize: 1024
 
-# Encryption (RTMPS / HLS / WebRTC)
-# Encryption (Offloaded to Caddy/Reverse Proxy)
-# Encryption (Offloaded to Caddy/Reverse Proxy)
-rtmpEncryption: "no"
-# rtmpServerKey: /certs/server.key
-# rtmpServerCert: /certs/server.crt
+# Auth
+# authMethod: http
+# authHTTPAddress: http://host.docker.internal:5655/api/auth/publish
 
-hlsEncryption: no
-# hlsServerKey: /certs/server.key
-# hlsServerCert: /certs/server.crt
-
-webrtcEncryption: no
-# webrtcServerKey: /certs/server.key
-# webrtcServerCert: /certs/server.crt
-
-# HLS settings
+# HLS
 hls: yes
 hlsAddress: :8880
 hlsDirectory: /hls
-hlsSegmentDuration: 4s
-hlsPartDuration: 1s
-hlsSegmentCount: 7
 hlsAlwaysRemux: yes
-hlsAllowOrigin: "*"
+hlsAllowOrigins: [ "*" ]
+hlsVariant: fmp4
 
-# WebRTC/WHIP settings
+# WebRTC
 webrtc: yes
-webrtcAddress: :8881
-webrtcICEUDPMuxAddress: :8181
-# webrtcAllowOrigin: "*"   # DEVELOPMENT ONLY - uncomment for local testing
-webrtcAllowOrigin: "*"  # PRODUCTION: Allowing all for initial launch stability. Restrict to https://dstream.stream later.
-webrtcAdditionalHosts: [ "dstream.stream" ]
-webrtcICEHostNAT1To1IPs: [ "127.0.0.1" ]
-webrtcICEServers2: []
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8181
+webrtcLocalTCPAddress: :8189
+webrtcAllowOrigins: [ "*" ]
+webrtcAdditionalHosts: [ "dstream.stream", "www.dstream.stream", "localhost", "127.0.0.1" ]
 
-# Paths - accept all publishers
+
+
 paths:
-  # Unauthenticated test path for ffsim generator (bypass handled in auth route)
-  test:
-    source: publisher
-  # All other paths require authentication
+
+  # Catch-all
   all:
     source: publisher
-    readUser: ""
-    readPass: ""

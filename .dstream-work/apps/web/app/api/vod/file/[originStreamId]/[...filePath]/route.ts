@@ -3,9 +3,20 @@ import { stat as statFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { getVodFileContentType, isValidOriginStreamId, resolveVodFile } from "@/lib/vod";
+import { authorizeVodProxyRequest } from "@/lib/playback-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function getAccessToken(req: Request): string | null {
+  const url = new URL(req.url);
+  const fromQuery = url.searchParams.get("access");
+  if (fromQuery?.trim()) return fromQuery.trim();
+
+  const authHeader = req.headers.get("authorization") ?? "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
 
 function parseRangeHeader(rangeHeader: string, totalSize: number): { start: number; end: number } | null {
   const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/i);
@@ -93,6 +104,10 @@ export async function GET(
   const { originStreamId, filePath } = await ctx.params;
   const normalized = decodeURIComponent(String(originStreamId ?? "")).trim();
   if (!isValidOriginStreamId(normalized)) return new NextResponse("Invalid stream id", { status: 400 });
+  const authz = authorizeVodProxyRequest(normalized, getAccessToken(req));
+  if (!authz.ok) {
+    return new NextResponse(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+  }
   return streamFile(req, normalized, filePath ?? []);
 }
 

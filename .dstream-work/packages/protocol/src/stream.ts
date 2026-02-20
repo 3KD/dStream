@@ -7,7 +7,8 @@ import type {
   StreamPaymentMethod,
   StreamHostMode,
   StreamRendition,
-  StreamStatus
+  StreamStatus,
+  StreamVodVisibility
 } from "./types";
 import { NOSTR_KINDS, STREAM_PAYMENT_ASSETS } from "./types";
 import {
@@ -106,6 +107,13 @@ function normalizeHostMode(input: string | undefined): StreamHostMode | undefine
   if (!input) return undefined;
   const value = input.trim().toLowerCase();
   if (value === "p2p_economy" || value === "host_only") return value;
+  return undefined;
+}
+
+function normalizeVodVisibility(input: string | undefined): StreamVodVisibility | undefined {
+  if (!input) return undefined;
+  const value = input.trim().toLowerCase();
+  if (value === "public" || value === "private") return value;
   return undefined;
 }
 
@@ -234,6 +242,7 @@ export interface BuildStreamAnnounceInput {
   matureContent?: boolean;
   viewerAllowPubkeys?: string[];
   vodArchiveEnabled?: boolean;
+  vodVisibility?: StreamVodVisibility;
   feeWaiverGuilds?: StreamGuildFeeWaiver[];
   feeWaiverVipPubkeys?: string[];
   manifestSignerPubkey?: string;
@@ -294,6 +303,9 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   }
   if (typeof input.vodArchiveEnabled === "boolean") {
     tags.push(["vod_archive", input.vodArchiveEnabled ? "1" : "0"]);
+  }
+  if (input.vodArchiveEnabled || input.vodVisibility) {
+    tags.push(["vod_visibility", input.vodVisibility === "private" ? "private" : "public"]);
   }
 
   const feeWaiverGuilds = normalizeGuildFeeWaivers(input.feeWaiverGuilds ?? []);
@@ -369,6 +381,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   const matureContent = parseBooleanFlag(getFirstTagValue(event.tags, "mature")) ?? false;
   const viewerAllowPubkeys = normalizeVipPubkeys(getAllTagValues(event.tags, "viewer_allow"));
   const vodArchiveEnabled = parseBooleanFlag(getFirstTagValue(event.tags, "vod_archive"));
+  const vodVisibility = normalizeVodVisibility(getFirstTagValue(event.tags, "vod_visibility")) ?? "public";
   const feeWaiverGuilds = (() => {
     const refs: StreamGuildFeeWaiver[] = [];
     for (const tag of event.tags) {
@@ -411,6 +424,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     matureContent,
     viewerAllowPubkeys,
     vodArchiveEnabled,
+    vodVisibility,
     feeWaiverGuilds,
     feeWaiverVipPubkeys,
     manifestSignerPubkey,

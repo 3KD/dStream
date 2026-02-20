@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Camera Diagnostic</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        .box {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .success {
+            border-color: #2f2;
+            color: #2f2;
+        }
+
+        .error {
+            border-color: #f22;
+            color: #f22;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Camera Diagnostic (Raw JS)</h1>
+    <p>This test bypasses all App logic/React components.</p>
+
+    <div class="box">
+        <h3>Step 1: Check Secure Context</h3>
+        <div id="secure-status">Checking...</div>
+    </div>
+
+    <div class="box">
+        <h3>Step 2: Enumerate Devices (Pre-Auth)</h3>
+        <pre id="enum-pre">Checking...</pre>
+    </div>
+
+    <div class="box">
+        <h3>Step 3: Request Components</h3>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="requestCamera('video')">Test Video Only</button>
+            <button onclick="requestCamera('audio')">Test Mic Only</button>
+            <button onclick="requestCamera(null)">Test Both</button>
+        </div>
+        <div id="camera-status" style="margin-top: 10px;">Waiting...</div>
+        <video id="preview" autoplay playsinline style="width: 320px; background: #000; margin-top: 10px;"></video>
+    </div>
+
+    <div class="box">
+        <h3>Step 4: Enumerate Devices (Post-Auth)</h3>
+        <pre id="enum-post">Waiting for auth...</pre>
+    </div>
+
+    <script>
+        // Step 1
+        const isSecure = window.isSecureContext;
+        document.getElementById('secure-status').innerText = `Secure Context: ${isSecure} (Protocol: ${window.location.protocol})`;
+        if (!isSecure) document.getElementById('secure-status').className = 'error';
+
+        // Step 2
+        async function checkDevices(targetId) {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                    document.getElementById(targetId).innerText = "navigator.mediaDevices not supported!";
+                    return;
+                }
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                document.getElementById(targetId).innerText = devices.map(d =>
+                    `[${d.kind}] ${d.label || '(empty label)'} (ID: ${d.deviceId.slice(0, 5)}...)`
+                ).join('\n');
+            } catch (e) {
+                document.getElementById(targetId).innerText = "Error: " + e.message;
+            }
+        }
+        checkDevices('enum-pre');
+
+        // Step 3
+        async function requestCamera(type) {
+            const statusFn = (msg, type) => {
+                const el = document.getElementById('camera-status');
+                el.innerText = msg;
+                el.className = type ? type : '';
+            };
+
+            const constraints = type === 'video' ? { video: true } :
+                type === 'audio' ? { audio: true } :
+                    { video: true, audio: true };
+
+            statusFn(`Requesting { ${type || 'video+audio'} }...`, "");
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                statusFn(`SUCCESS: ${type || 'Combined'} Stream acquired.`, "success");
+                if (type !== 'audio') {
+                    document.getElementById('preview').srcObject = stream;
+                }
+                checkDevices('enum-post');
+            } catch (e) {
+                console.error(e);
+                statusFn(`FAILED (${type || 'Combined'}): ${e.name}: ${e.message}`, "error");
+            }
+        }
+    </script>
+</body>
+
+</html>

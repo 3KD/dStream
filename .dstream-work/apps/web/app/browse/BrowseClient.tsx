@@ -13,6 +13,7 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
+import { deriveQuickPlaySources } from "@/lib/quickplay";
 import { useEffect, useMemo, useState } from "react";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
@@ -46,8 +47,21 @@ export default function BrowseClient() {
     includeMature: showMatureContent,
     viewerPubkey: identity?.pubkey ?? null
   });
+
+  const dedupedStreams = useMemo(() => {
+    const byCanonicalKey = new Map<string, (typeof streams)[number]>();
+    for (const stream of streams) {
+      const canonicalKey = makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId.toLowerCase());
+      const existing = byCanonicalKey.get(canonicalKey);
+      if (!existing || stream.createdAt >= existing.createdAt) {
+        byCanonicalKey.set(canonicalKey, stream);
+      }
+    }
+    return Array.from(byCanonicalKey.values());
+  }, [streams]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [curatedOnly, setCuratedOnly] = useState(false);
+  const [hasSettledOnce, setHasSettledOnce] = useState(false);
   const [reportTarget, setReportTarget] = useState<{
     targetPubkey: string;
     targetStreamId: string;
@@ -75,32 +89,25 @@ export default function BrowseClient() {
   }, [guilds, selectedGuild]);
 
   const visibleStreams = useMemo(() => {
-    const base = streams.filter((s) => !social.isBlocked(s.pubkey));
+    const base = dedupedStreams.filter((s) => !social.isBlocked(s.pubkey));
     const favFiltered = favoritesOnly
       ? base.filter((s) => social.isFavoriteCreator(s.pubkey) || social.isFavoriteStream(s.pubkey, s.streamId))
       : base;
-    if (!curatedOnly) return favFiltered;
-    return favFiltered.filter((s) => curatedKeys.has(makeStreamKey(s.pubkey, s.streamId)));
-  }, [curatedKeys, curatedOnly, favoritesOnly, social, streams]);
-  const showLoadingSkeleton = isLoading && visibleStreams.length === 0;
+    const liveFirst = favFiltered.slice().sort((a, b) => {
+      const aLive = a.status === "live";
+      const bLive = b.status === "live";
+      if (aLive === bLive) return 0;
+      return aLive ? -1 : 1;
+    });
+    if (!curatedOnly) return liveFirst;
+    return liveFirst.filter((s) => curatedKeys.has(makeStreamKey(s.pubkey, s.streamId)));
+  }, [curatedKeys, curatedOnly, dedupedStreams, favoritesOnly, social]);
+  const showLoadingSkeleton = isLoading && !hasSettledOnce;
   const showRefreshingNotice = isLoading && visibleStreams.length > 0;
 
   useEffect(() => {
-    if (!quickPlayStream) return;
-    const stillLive = streams.some(
-      (stream) =>
-        stream.pubkey === quickPlayStream.streamPubkey && stream.streamId === quickPlayStream.streamId && stream.status === "live"
-    );
-    if (!stillLive) clearQuickPlayStream();
-  }, [clearQuickPlayStream, quickPlayStream, streams]);
-
-  const curatedLabel = !guildQuery
-    ? "Curated only"
-    : selectedGuild?.name
-      ? `Curated: ${selectedGuild.name}`
-      : guildQuery.guildId
-        ? `Curated: ${guildQuery.guildId}`
-        : "Curated only";
+    if (!isLoading) setHasSettledOnce(true);
+  }, [isLoading]);
 
   const curatedInfo = useMemo(() => {
     if (!curatedOnly) return null;
@@ -156,47 +163,37 @@ export default function BrowseClient() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-4xl mx-auto p-8 space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Browse</h1>
-          <div className="flex items-center gap-4">
-            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={favoritesOnly}
-                onChange={(e) => setFavoritesOnly(e.target.checked)}
-                className="accent-blue-500"
-              />
-              Favorites only
-            </label>
-            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} className="accent-blue-500" />
-              Live only
-            </label>
-            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={curatedOnly}
-                onChange={(e) => setCuratedOnly(e.target.checked)}
-                className="accent-blue-500"
-              />
-              {curatedLabel}
-            </label>
-            <label className="text-xs text-neutral-400 inline-flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showMatureContent}
-                onChange={(e) => social.updateSettings({ showMatureContent: e.target.checked })}
-                className="accent-blue-500"
-              />
-              Mature
-            </label>
-            <Link className="text-sm text-neutral-300 hover:text-white" href="/guilds">
+      <main className="max-w-6xl mx-auto p-6 md:p-8 space-y-6">
+        <header className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold">Browse</h1>
+              <div className="text-xs text-neutral-500">
+                {visibleStreams.length} stream{visibleStreams.length === 1 ? "" : "s"}
+              </div>
+            </div>
+            <Link className="ui-pill" href="/guilds">
               Guilds
             </Link>
-            <Link className="text-sm text-neutral-300 hover:text-white" href="/">
-              Home
-            </Link>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className="ui-pill" data-active={favoritesOnly} onClick={() => setFavoritesOnly((prev) => !prev)}>
+              Favorites
+            </button>
+            <button type="button" className="ui-pill" data-active={liveOnly} onClick={() => setLiveOnly((prev) => !prev)}>
+              Live Only
+            </button>
+            <button type="button" className="ui-pill" data-active={curatedOnly} onClick={() => setCuratedOnly((prev) => !prev)}>
+              {guildQuery ? "Guild Curated" : "Curated"}
+            </button>
+            <button
+              type="button"
+              className="ui-pill"
+              data-active={showMatureContent}
+              onClick={() => social.updateSettings({ showMatureContent: !showMatureContent })}
+            >
+              Mature
+            </button>
           </div>
         </header>
 
@@ -208,9 +205,16 @@ export default function BrowseClient() {
         {showRefreshingNotice ? <div className="text-xs text-neutral-500">Refreshing stream list…</div> : null}
 
         {showLoadingSkeleton ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
+              <div key={i} className="ui-surface overflow-hidden animate-pulse min-h-[280px]">
+                <div className="aspect-video bg-neutral-800" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 w-3/4 rounded bg-neutral-800" />
+                  <div className="h-3 w-2/3 rounded bg-neutral-800" />
+                  <div className="h-3 w-1/2 rounded bg-neutral-800" />
+                </div>
+              </div>
             ))}
           </div>
         ) : visibleStreams.length === 0 ? (
@@ -232,7 +236,7 @@ export default function BrowseClient() {
                     : "No channels found."}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {visibleStreams.map((s, index) => {
               const alias = social.getAlias(s.pubkey);
               const npub = pubkeyHexToNpub(s.pubkey);
@@ -247,9 +251,9 @@ export default function BrowseClient() {
                 <Link
                   href={`/watch/${pubkeyParam}/${s.streamId}`}
                   key={`${s.pubkey}:${s.streamId}`}
-                  className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
+                  className="group ui-surface block overflow-hidden hover:border-blue-500/50 transition min-h-[280px] flex flex-col"
                 >
-                    <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
+                  <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
                       <LiveStreamPreview
                         streamPubkey={s.pubkey}
                         streamId={s.streamId}
@@ -279,10 +283,18 @@ export default function BrowseClient() {
                             clearQuickPlayStream();
                             return;
                           }
+                          const quickPlaySources = deriveQuickPlaySources({
+                            pubkey: s.pubkey,
+                            streamId: s.streamId,
+                            streaming: s.streaming,
+                            renditions: s.renditions
+                          });
                           setQuickPlayStream({
                             streamPubkey: s.pubkey,
                             streamId: s.streamId,
-                            title: s.title || "Untitled Stream"
+                            title: s.title || "Untitled Stream",
+                            hlsUrl: quickPlaySources.hlsUrl,
+                            whepUrl: quickPlaySources.whepUrl
                           });
                         }}
                         className="absolute bottom-2 left-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-950/70 border border-neutral-700 text-[10px] text-neutral-200 hover:text-white"
@@ -321,7 +333,7 @@ export default function BrowseClient() {
                       </div>
                     )}
                   </div>
-                  <div className="p-4 space-y-1">
+                  <div className="p-4 space-y-1 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-bold text-base line-clamp-1 min-w-0">{s.title || "Untitled Stream"}</h3>
                       <button

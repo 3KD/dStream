@@ -190,6 +190,32 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
+    if (store.active) return;
+    if (Object.keys(store.locals).length > 0) return;
+
+    const secretKey = generateSecretKey();
+    const pubkey = getPublicKey(secretKey);
+    const secretKeyHex = bytesToHex(secretKey).toLowerCase();
+
+    setStore((prev) => {
+      if (prev.active || Object.keys(prev.locals).length > 0) return prev;
+      return {
+        ...prev,
+        active: { kind: "local", pubkey },
+        locals: {
+          ...prev.locals,
+          [pubkey]: {
+            pubkey,
+            secretKeyHex,
+            createdAt: Date.now()
+          }
+        }
+      };
+    });
+  }, [isLoading, store.active, store.locals]);
+
+  useEffect(() => {
+    if (isLoading) return;
     try {
       localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(store));
       localStorage.removeItem(STORAGE_KEY_V1);

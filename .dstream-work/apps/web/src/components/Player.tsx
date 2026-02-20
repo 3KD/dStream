@@ -18,6 +18,9 @@ interface PlayerProps {
   autoplayMuted?: boolean;
   isLiveStream?: boolean;
   showTimelineControls?: boolean;
+  showAuxControls?: boolean;
+  showNativeControls?: boolean;
+  playbackStateKey?: string;
   captionTracks?: Array<{
     src: string;
     lang: string;
@@ -29,6 +32,40 @@ interface PlayerProps {
 interface QualityOption {
   value: number;
   label: string;
+}
+
+interface PersistedPlaybackState {
+  volume?: number;
+  muted?: boolean;
+  currentTime?: number;
+  updatedAt?: number;
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
+}
+
+function readPersistedPlaybackState(storageKey: string | undefined): PersistedPlaybackState | null {
+  if (!storageKey || typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedPlaybackState | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedPlaybackState(storageKey: string | undefined, next: PersistedPlaybackState): void {
+  if (!storageKey || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
 }
 
 function isLikelyMobilePlaybackDevice(): boolean {
@@ -65,11 +102,15 @@ export function Player({
   autoplayMuted,
   isLiveStream = true,
   showTimelineControls = true,
+  showAuxControls = true,
+  showNativeControls = true,
+  playbackStateKey,
   captionTracks
 }: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const whepRef = useRef<WhepClient | null>(null);
+  const playbackModeRef = useRef<"hls" | "whep">("hls");
   const onReadyRef = useRef(onReady);
   const selectedQualityRef = useRef(-1);
   const [status, setStatus] = useState<string>("Loading…");
@@ -79,7 +120,7 @@ export function Player({
   const [note, setNote] = useState<string | null>(null);
   const isMobilePlayback = useMemo(() => isLikelyMobilePlaybackDevice(), []);
   const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
-  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(() => !isLikelyMobilePlaybackDevice());
+  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
@@ -105,12 +146,23 @@ export function Player({
   }, [onReady]);
 
   useEffect(() => {
+    const persisted = readPersistedPlaybackState(playbackStateKey);
+    if (persisted) {
+      const persistedMuted = persisted.muted === true;
+      const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
+      setVolume(persistedMuted ? 0 : persistedVolume);
+      return;
+    }
     setVolume(effectiveAutoplayMuted ? 0 : 1);
-  }, [effectiveAutoplayMuted]);
+  }, [effectiveAutoplayMuted, playbackStateKey]);
 
   useEffect(() => {
     selectedQualityRef.current = selectedQuality;
   }, [selectedQuality]);
+
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
 
   useEffect(() => {
     const hls = hlsRef.current;
@@ -155,6 +207,39 @@ export function Player({
       video.removeEventListener("volumechange", onVolumeChange);
     };
   }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !playbackStateKey) return;
+
+    let lastWriteAt = 0;
+    const persist = () => {
+      const currentTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+      const volumeLevel = Number.isFinite(video.volume) ? clampUnit(video.volume) : 0;
+      writePersistedPlaybackState(playbackStateKey, {
+        volume: volumeLevel,
+        muted: video.muted || volumeLevel === 0,
+        currentTime,
+        updatedAt: Date.now()
+      });
+    };
+    const onTimeUpdate = () => {
+      const now = Date.now();
+      if (now - lastWriteAt < 800) return;
+      lastWriteAt = now;
+      persist();
+    };
+    const onVolumePersist = () => persist();
+
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("volumechange", onVolumePersist);
+    persist();
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("volumechange", onVolumePersist);
+      persist();
+    };
+  }, [playbackStateKey, src, whepSrc]);
 
   useEffect(() => {
     const onFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
@@ -205,6 +290,24 @@ export function Player({
 
     const video = videoRef.current;
     let cancelled = false;
+    const persistedPlayback = readPersistedPlaybackState(playbackStateKey);
+    const persistedResumeTime =
+      persistedPlayback && typeof persistedPlayback.currentTime === "number" && Number.isFinite(persistedPlayback.currentTime)
+        ? Math.max(0, persistedPlayback.currentTime)
+        : null;
+    const applyPersistedSeek = () => {
+      if (persistedResumeTime === null) return;
+      try {
+        const targetTime = Math.max(0, persistedResumeTime);
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          video.currentTime = Math.min(Math.max(0, video.duration - 0.35), targetTime);
+          return;
+        }
+        video.currentTime = targetTime;
+      } catch {
+        // ignore
+      }
+    };
     try {
       (video as any).srcObject = null;
     } catch {
@@ -232,6 +335,13 @@ export function Player({
       }
     };
     let removeNativeListener: (() => void) | null = null;
+    let whepFallbackInProgress = false;
+    let whepStallTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearWhepStallTimer = () => {
+      if (!whepStallTimer) return;
+      clearTimeout(whepStallTimer);
+      whepStallTimer = null;
+    };
     const tryHlsBackup = (reason: string, beforeStart?: () => void): boolean => {
       if (!canUseBackup || backupTried || cancelled) return false;
       backupTried = true;
@@ -248,15 +358,54 @@ export function Player({
       }
       return startHls(backupSrc);
     };
+    const fallbackFromWhepToHls = (reason: string) => {
+      if (cancelled) return;
+      if (playbackModeRef.current !== "whep") return;
+      if (whepFallbackInProgress) return;
+      whepFallbackInProgress = true;
+      clearWhepStallTimer();
+      setNote(reason);
+      setError(null);
+      setStatus("Switching to HLS…");
+      try {
+        (video as any).srcObject = null;
+      } catch {
+        // ignore
+      }
+      if (whepRef.current) {
+        void whepRef.current.close();
+        whepRef.current = null;
+      }
+      startHls(primarySrc);
+    };
     const onPlaying = () => {
+      clearWhepStallTimer();
       setNeedsClick(false);
       setStatus("Playing");
     };
     const onWaiting = () => {
       setStatus((prev) => (prev === "Click to play" ? prev : "Buffering…"));
+      if (playbackModeRef.current !== "whep") return;
+      clearWhepStallTimer();
+      whepStallTimer = setTimeout(() => {
+        fallbackFromWhepToHls("Low-latency stream became unstable. Switched to HLS for stability.");
+      }, 3500);
+    };
+    const onStalled = () => {
+      if (playbackModeRef.current !== "whep") return;
+      clearWhepStallTimer();
+      whepStallTimer = setTimeout(() => {
+        fallbackFromWhepToHls("Low-latency stream stalled. Switched to HLS for stability.");
+      }, 1200);
+    };
+    const onErrorFallback = () => {
+      if (playbackModeRef.current !== "whep") return;
+      fallbackFromWhepToHls("Low-latency stream error. Switched to HLS for stability.");
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onStalled);
+    video.addEventListener("error", onErrorFallback);
 
     const integrityEnabled = !!integrity?.enabled;
 
@@ -267,6 +416,7 @@ export function Player({
       // unless integrity verification is enabled (we need byte access).
       if (!integrityEnabled && video.canPlayType("application/vnd.apple.mpegurl")) {
         const onLoaded = () => {
+          applyPersistedSeek();
           setStatus("Ready");
           sendReady();
         };
@@ -319,6 +469,9 @@ export function Player({
         fragLoadingMaxRetry: 30,
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetryTimeout: 8000,
+        maxBufferLength: lowLatencyEnabled ? 30 : 90,
+        backBufferLength: lowLatencyEnabled ? 30 : 90,
+        liveSyncDurationCount: lowLatencyEnabled ? 3 : 5,
         fLoader: P2PFragmentLoader,
         lowLatencyMode: lowLatencyEnabled,
         dstreamP2PSwarm: p2pSwarm ?? null,
@@ -331,6 +484,7 @@ export function Player({
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
         setQualityOptions(options);
         try {
@@ -427,6 +581,7 @@ export function Player({
         } catch {
           // ignore
         }
+        applyPersistedSeek();
 
         void video.play().catch(() => {
           setStatus("Click to play");
@@ -463,10 +618,16 @@ export function Player({
       }
     } else {
       void (async () => {
-        const { mode, attemptedWhep } = await pickPlaybackMode({ whepSrc: endpoint, rtcSupported, tryWhep });
+        const { mode, attemptedWhep } = await pickPlaybackMode({
+          whepSrc: endpoint,
+          rtcSupported,
+          preferLowLatency: lowLatencyEnabled,
+          tryWhep
+        });
         if (cancelled) return;
         if (mode === "whep") return;
         if (attemptedWhep) setNote("Low-latency unavailable (falling back to HLS).");
+        else if (endpoint) setNote("Stability mode (HLS preferred). Enable low-latency mode to try WHEP.");
         startHls(primarySrc);
       })();
     }
@@ -476,9 +637,12 @@ export function Player({
       try {
         video.removeEventListener("playing", onPlaying);
         video.removeEventListener("waiting", onWaiting);
+        video.removeEventListener("stalled", onStalled);
+        video.removeEventListener("error", onErrorFallback);
       } catch {
         // ignore
       }
+      clearWhepStallTimer();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (whepRef.current) {
@@ -491,7 +655,7 @@ export function Player({
         // ignore
       }
     };
-  }, [effectiveAutoplayMuted, fallbackSrc, integrity, isMobilePlayback, lowLatencyEnabled, p2pSwarm, src, whepSrc]);
+  }, [effectiveAutoplayMuted, fallbackSrc, integrity, isMobilePlayback, lowLatencyEnabled, p2pSwarm, playbackStateKey, src, whepSrc]);
 
   const canTogglePip = typeof document !== "undefined" && "pictureInPictureEnabled" in document;
 
@@ -598,7 +762,7 @@ export function Player({
       </div>
 
       <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-800">
-        <video ref={videoRef} className="w-full h-full" playsInline controls autoPlay muted={volume === 0}>
+        <video ref={videoRef} className="w-full h-full" playsInline controls={showNativeControls} autoPlay muted={volume === 0}>
           {captionTrackList.map((track, index) => (
             <track
               key={`${track.src}-${track.lang}-${index}`}
@@ -721,81 +885,83 @@ export function Player({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 text-xs text-neutral-300">
-        <label className="inline-flex items-center gap-2">
-          <span className="text-neutral-500">Volume</span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            className="accent-blue-500"
-            aria-label="Volume"
-          />
-          <span className="font-mono text-neutral-400 w-8 text-right">{Math.round(volume * 100)}%</span>
-        </label>
+      {showAuxControls ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 text-xs text-neutral-300">
+          <label className="inline-flex items-center gap-2">
+            <span className="text-neutral-500">Volume</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="accent-blue-500"
+              aria-label="Volume"
+            />
+            <span className="font-mono text-neutral-400 w-8 text-right">{Math.round(volume * 100)}%</span>
+          </label>
 
-        <label className="inline-flex items-center gap-2">
-          <span className="text-neutral-500">Quality</span>
-          <select
-            value={String(selectedQuality)}
-            onChange={(e) => setSelectedQuality(Number(e.target.value))}
-            className="bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1 text-xs"
-            disabled={playbackMode !== "hls"}
-          >
-            <option value="-1">Auto</option>
-            {qualityOptions.map((q) => (
-              <option key={q.value} value={q.value}>
-                {q.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="inline-flex items-center gap-2">
+            <span className="text-neutral-500">Quality</span>
+            <select
+              value={String(selectedQuality)}
+              onChange={(e) => setSelectedQuality(Number(e.target.value))}
+              className="bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1 text-xs"
+              disabled={playbackMode !== "hls"}
+            >
+              <option value="-1">Auto</option>
+              {qualityOptions.map((q) => (
+                <option key={q.value} value={q.value}>
+                  {q.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={lowLatencyEnabled}
-            onChange={(e) => setLowLatencyEnabled(e.target.checked)}
-            className="accent-blue-500"
-            disabled={playbackMode !== "hls"}
-          />
-          <span>Low-latency mode</span>
-        </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={lowLatencyEnabled}
+              onChange={(e) => setLowLatencyEnabled(e.target.checked)}
+              className="accent-blue-500"
+              disabled={playbackMode !== "hls"}
+            />
+            <span>Low-latency mode</span>
+          </label>
 
-        <button
-          type="button"
-          onClick={() => void togglePip()}
-          disabled={!canTogglePip}
-          className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
-        >
-          {isPip ? "Exit PiP" : "PiP"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => void toggleFullscreen()}
-          className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800"
-        >
-          {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        </button>
-
-        {isLiveStream && showTimeline && (
           <button
             type="button"
-            onClick={jumpToLive}
-            disabled={!canJumpToLive}
+            onClick={() => void togglePip()}
+            disabled={!canTogglePip}
             className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
           >
-            Back to Live
+            {isPip ? "Exit PiP" : "PiP"}
           </button>
-        )}
 
-        <span className="font-mono text-neutral-500">Quality: {qualityIndicator}</span>
-        {captionTrackList.length > 0 && <span className="font-mono text-neutral-500">Captions: {captionTrackList.length}</span>}
-      </div>
+          <button
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800"
+          >
+            {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          </button>
+
+          {isLiveStream && showTimeline && (
+            <button
+              type="button"
+              onClick={jumpToLive}
+              disabled={!canJumpToLive}
+              className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
+            >
+              Back to Live
+            </button>
+          )}
+
+          <span className="font-mono text-neutral-500">Quality: {qualityIndicator}</span>
+          {captionTrackList.length > 0 && <span className="font-mono text-neutral-500">Captions: {captionTrackList.length}</span>}
+        </div>
+      ) : null}
     </div>
   );
 }

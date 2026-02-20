@@ -13,6 +13,7 @@ import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
+import { deriveQuickPlaySources } from "@/lib/quickplay";
 
 const HERO_COLLAPSE_STORAGE_KEY = "dstream_home_hero_collapsed_v1";
 
@@ -120,21 +121,8 @@ export default function HomePage() {
               Live Now ({visibleStreams.length})
             </h2>
 
-            {heroCollapsed ? (
-              <button
-                type="button"
-                onClick={toggleHeroCollapsed}
-                aria-controls="landing-hero"
-                aria-expanded={!heroCollapsed}
-                className="relative top-0.5 px-2.5 py-1 rounded-full text-lg leading-none text-neutral-500 hover:text-neutral-300 bg-neutral-900/70 border border-neutral-800 transition-colors"
-                title="Expand hero"
-              >
-                v
-              </button>
-            ) : null}
-
             <div className="flex items-center gap-2">
-              <label className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border border-neutral-800 bg-neutral-900 text-neutral-300 cursor-pointer">
+              <label className="ui-pill hidden sm:inline-flex cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showMatureContent}
@@ -145,7 +133,7 @@ export default function HomePage() {
               </label>
               <Link
                 href="/browse"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
+                className="ui-pill"
               >
                 <Compass className="w-4 h-4" />
                 <span>Browse</span>
@@ -154,12 +142,26 @@ export default function HomePage() {
               <button
                 onClick={handleShuffle}
                 disabled={visibleStreams.length === 0}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-blue-600/10 text-blue-400 border border-blue-500/30 hover:bg-blue-600/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="ui-pill disabled:opacity-30 disabled:cursor-not-allowed"
+                data-active={visibleStreams.length > 0}
                 title="Jump to a random live stream"
               >
                 <Shuffle className="w-4 h-4" />
                 <span className="hidden sm:inline">Shuffle</span>
               </button>
+
+              {heroCollapsed ? (
+                <button
+                  type="button"
+                  onClick={toggleHeroCollapsed}
+                  aria-controls="landing-hero"
+                  aria-expanded={!heroCollapsed}
+                  className="ui-pill"
+                  title="Expand hero"
+                >
+                  <span className="text-base leading-none">v</span>
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -175,7 +177,14 @@ export default function HomePage() {
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
+                <div key={i} className="ui-surface overflow-hidden animate-pulse min-h-[290px]">
+                  <div className="aspect-video bg-neutral-800" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-5 w-4/5 rounded bg-neutral-800" />
+                    <div className="h-3 w-2/3 rounded bg-neutral-800" />
+                    <div className="h-3 w-1/2 rounded bg-neutral-800" />
+                  </div>
+                </div>
               ))}
             </div>
           ) : visibleStreams.length === 0 ? (
@@ -196,7 +205,7 @@ export default function HomePage() {
                   <Link
                     href={`/watch/${pubkeyParam}/${stream.streamId}`}
                     key={`${stream.pubkey}:${stream.streamId}`}
-                    className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
+                    className="group ui-surface block overflow-hidden hover:border-blue-500/50 transition relative min-h-[290px] flex flex-col"
                   >
                     <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
                       <LiveStreamPreview
@@ -224,10 +233,18 @@ export default function HomePage() {
                             clearQuickPlayStream();
                             return;
                           }
+                          const quickPlaySources = deriveQuickPlaySources({
+                            pubkey: stream.pubkey,
+                            streamId: stream.streamId,
+                            streaming: stream.streaming,
+                            renditions: stream.renditions
+                          });
                           setQuickPlayStream({
                             streamPubkey: stream.pubkey,
                             streamId: stream.streamId,
-                            title: stream.title || "Untitled Stream"
+                            title: stream.title || "Untitled Stream",
+                            hlsUrl: quickPlaySources.hlsUrl,
+                            whepUrl: quickPlaySources.whepUrl
                           });
                         }}
                         className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-950/70 px-2 py-1 text-[10px] text-neutral-200 hover:text-white"
@@ -239,7 +256,7 @@ export default function HomePage() {
                           : "Quick Play"}
                       </button>
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 flex-1">
                       <h3 className="font-bold text-lg line-clamp-1">{stream.title || "Untitled Stream"}</h3>
                       <p className="text-sm text-neutral-500 font-mono mt-1">{pubkeyLabel}</p>
 

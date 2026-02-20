@@ -18,6 +18,8 @@ interface PlaybackPolicy {
   originStreamId: string;
   viewerAllowPubkeys: string[];
   privateStream: boolean;
+  vodArchiveEnabled: boolean;
+  vodVisibility: "public" | "private";
   status: "live" | "ended";
   createdAt: number;
   updatedAtSec: number;
@@ -183,6 +185,8 @@ export function registerPlaybackPolicyFromAnnounceEvent(
     originStreamId,
     viewerAllowPubkeys: parsed.viewerAllowPubkeys.map((value) => value.toLowerCase()),
     privateStream: parsed.viewerAllowPubkeys.length > 0,
+    vodArchiveEnabled: parsed.vodArchiveEnabled === true,
+    vodVisibility: parsed.vodVisibility === "private" ? "private" : "public",
     status: parsed.status,
     createdAt: parsed.createdAt,
     updatedAtSec: nowSec()
@@ -325,6 +329,40 @@ export function authorizePlaybackProxyRequest(
 
   if (!isViewerAllowed(policy, viewerPubkey)) {
     return { ok: false, status: 403, error: "Playback access denied: viewer is not allowlisted for this stream." };
+  }
+
+  return { ok: true };
+}
+
+export function authorizeVodProxyRequest(
+  originStreamId: string,
+  accessToken: string | null
+): { ok: true } | { ok: false; status: number; error: string } {
+  const normalizedOriginStreamId = stripRenditionSuffix((originStreamId ?? "").trim());
+  if (!normalizedOriginStreamId) {
+    return { ok: false, status: 400, error: "VOD access denied: invalid stream id." };
+  }
+
+  const verified = verifyPlaybackAccessToken(accessToken, normalizedOriginStreamId);
+  if (!verified.ok) {
+    return { ok: false, status: 403, error: `VOD access denied: ${verified.error}.` };
+  }
+
+  const policy = getPlaybackPolicy(normalizedOriginStreamId);
+  if (!policy) return { ok: true };
+  if (!policy.vodArchiveEnabled) {
+    return { ok: false, status: 403, error: "VOD access denied: archive is disabled for this stream." };
+  }
+
+  if (policy.vodVisibility !== "private") return { ok: true };
+
+  const viewerPubkey = normalizePubkey(verified.payload.v);
+  if (!viewerPubkey) {
+    return { ok: false, status: 403, error: "VOD access denied: viewer identity missing in access token." };
+  }
+
+  if (!isViewerAllowed(policy, viewerPubkey)) {
+    return { ok: false, status: 403, error: "VOD access denied: viewer is not allowlisted for private archive." };
   }
 
   return { ok: true };

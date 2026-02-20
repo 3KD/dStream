@@ -147,11 +147,6 @@ body {
   background-image: linear-gradient(to right, #3b82f6, #9333ea) !important;
 }
 
-/* REMOVED: Active State text override. 
-   User request: "text shouldn't change much at all in shading".
-   So we keep the metallic gradient (or brand gradient) at all times.
-*/
-
 /* Ensure Brand Gradient stays visible even when Active */
 .machined-scene.active .machined-text.brand-gradient {
   /* Enforce transparency so gradient shows through */

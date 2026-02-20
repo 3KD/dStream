@@ -6,6 +6,8 @@ export interface QuickPlayStreamRef {
   streamPubkey: string;
   streamId: string;
   title: string;
+  hlsUrl?: string;
+  whepUrl?: string;
 }
 
 interface QuickPlayContextValue {
@@ -23,14 +25,26 @@ function isValidStreamRef(input: unknown): input is QuickPlayStreamRef {
   if (typeof value.streamPubkey !== "string" || value.streamPubkey.trim().length === 0) return false;
   if (typeof value.streamId !== "string" || value.streamId.trim().length === 0) return false;
   if (typeof value.title !== "string") return false;
+  if (value.hlsUrl !== undefined && typeof value.hlsUrl !== "string") return false;
+  if (value.whepUrl !== undefined && typeof value.whepUrl !== "string") return false;
   return true;
+}
+
+function normalizePlaybackUrl(input: string | undefined): string | undefined {
+  if (typeof input !== "string") return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return undefined;
 }
 
 function normalizeStreamRef(value: QuickPlayStreamRef): QuickPlayStreamRef {
   return {
     streamPubkey: value.streamPubkey.trim().toLowerCase(),
     streamId: value.streamId.trim(),
-    title: value.title.trim() || value.streamId.trim()
+    title: value.title.trim() || value.streamId.trim(),
+    hlsUrl: normalizePlaybackUrl(value.hlsUrl),
+    whepUrl: normalizePlaybackUrl(value.whepUrl)
   };
 }
 

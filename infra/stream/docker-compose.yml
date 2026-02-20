@@ -8,9 +8,16 @@ services:
     ports:
       - "1940:1935" # RTMP Ingest
       - "1941:1936" # RTMPS Ingest (Secure)
-      - "8880:8880" # HLS/HTTP Output
-      - "8881:8881" # WebRTC/WHIP
+      - "8888:8880" # HLS/HTTP Output (Mapped to 8888 to avoid 8880 conflicts)
+      - "8889:8889" # WebRTC/WHIP
+      - "8890:8890" # WHIP (Standard)
+      - "9990:9990" # API
       - "8181:8181/udp" # ICE/UDP (WebRTC)
+      - "8189:8189" # ICE/TCP (WebRTC)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "dstream.stream:127.0.0.1"
+      - "www.dstream.stream:127.0.0.1"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
       - /tmp/dStream_hls:/hls
@@ -44,6 +51,7 @@ services:
     container_name: dStream_manifest
     environment:
       - HLS_DIR=/hls
+      - MEDIAMTX_HLS_URL=http://mediamtx:8880
       - MANIFEST_PRIVATE_KEY=${MANIFEST_PRIVATE_KEY:-}
     volumes:
       - /tmp/dStream_hls:/hls
@@ -54,11 +62,11 @@ services:
 
   # Registry service is optional - Nostr replaces it
   # Uncomment if you need legacy registry:
-  # registry:
-  #   build: ../../services/registry
-  #   container_name: dStream_registry
-  #   ports:
-  #     - "3002:3002"
+  registry:
+    build: ../../services/registry
+    container_name: dStream_registry
+    ports:
+      - "3002:3002"
 
   # Local Nostr Relay for Dev/Testing
   relay:
@@ -76,10 +84,7 @@ services:
     container_name: dStream_ffsim
     depends_on:
       mediamtx:
-        condition: service_healthy
-    command: >
-      -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i sine=frequency=440:beep_factor=4 -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -g 60 -keyint_min 60 -sc_threshold 0 -c:a aac -b:a 128k -f flv rtmp://mediamtx:1935/test
-    restart: unless-stopped
+        condition: service_started
     command: >
       -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i sine=frequency=440:beep_factor=4 -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -g 60 -keyint_min 60 -sc_threshold 0 -c:a aac -b:a 128k -f flv rtmp://mediamtx:1935/test
     restart: unless-stopped

@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleDot, Camera, Mic, MonitorUp, Radio, Square, AlertTriangle, ExternalLink } from "lucide-react";
+import { CircleDot, Camera, Mic, MonitorUp, Radio, Square, AlertTriangle, ExternalLink, PictureInPicture2 } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { useIdentity } from "@/context/IdentityContext";
+import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
+import { getPaymentRailForAsset } from "@/lib/payments/rails";
 import {
   createPaymentMethodDraft,
   paymentMethodToDraft,
@@ -24,7 +26,8 @@ import {
   type StreamGuildFeeWaiver,
   type StreamHostMode,
   type StreamPaymentAsset,
-  type StreamRendition
+  type StreamRendition,
+  type StreamVodVisibility
 } from "@dstream/protocol";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
@@ -189,6 +192,7 @@ const ENCODER_GUIDE_OPTIONS: Array<{ id: EncoderGuide; label: string }> = [
 
 export default function BroadcastPage() {
   const { identity, signEvent } = useIdentity();
+  const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
   const [requestedStreamId, setRequestedStreamId] = useState<string | null>(null);
@@ -219,6 +223,7 @@ export default function BroadcastPage() {
   const [hostMode, setHostMode] = useState<StreamHostMode>("p2p_economy");
   const [rebroadcastThresholdInput, setRebroadcastThresholdInput] = useState("6");
   const [vodArchiveEnabled, setVodArchiveEnabled] = useState(false);
+  const [vodVisibility, setVodVisibility] = useState<StreamVodVisibility>("public");
   const [feeWaiverGuilds, setFeeWaiverGuilds] = useState<StreamGuildFeeWaiver[]>([]);
   const [vipPubkeys, setVipPubkeys] = useState<string[]>([]);
   const [viewerAllowPubkeys, setViewerAllowPubkeys] = useState<string[]>([]);
@@ -263,8 +268,11 @@ export default function BroadcastPage() {
   const [announceReport, setAnnounceReport] = useState<PublishEventReport | null>(null);
   const [storedSession, setStoredSession] = useState<StoredBroadcastSession | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [externalEncoderOpen, setExternalEncoderOpen] = useState(false);
   const [encoderGuide, setEncoderGuide] = useState<EncoderGuide>("obs");
   const [encoderCopyStatus, setEncoderCopyStatus] = useState<string | null>(null);
+  const [previewPipAvailable, setPreviewPipAvailable] = useState(false);
+  const [previewPipActive, setPreviewPipActive] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -392,6 +400,7 @@ export default function BroadcastPage() {
         setDiscoverable(true);
         setMatureContent(false);
         setVodArchiveEnabled(false);
+        setVodVisibility("public");
         setFeeWaiverGuilds([]);
         setVipPubkeys([]);
         setViewerAllowPubkeys([]);
@@ -439,6 +448,8 @@ export default function BroadcastPage() {
       if (typeof parsed.rebroadcastThresholdInput === "string") setRebroadcastThresholdInput(parsed.rebroadcastThresholdInput);
       else if (typeof parsed.rebroadcastThresholdInput === "number") setRebroadcastThresholdInput(String(parsed.rebroadcastThresholdInput));
       if (typeof parsed.vodArchiveEnabled === "boolean") setVodArchiveEnabled(parsed.vodArchiveEnabled);
+      if (parsed.vodVisibility === "public" || parsed.vodVisibility === "private") setVodVisibility(parsed.vodVisibility);
+      else setVodVisibility("public");
       if (Array.isArray(parsed.feeWaiverGuilds)) {
         const normalizedGuilds = parsed.feeWaiverGuilds
           .map((item: any) => {
@@ -551,6 +562,7 @@ export default function BroadcastPage() {
           hostMode,
           rebroadcastThresholdInput,
           vodArchiveEnabled,
+          vodVisibility,
           feeWaiverGuilds,
           vipPubkeys,
           viewerAllowPubkeys,
@@ -593,6 +605,7 @@ export default function BroadcastPage() {
     stakeXmr,
     rebroadcastThresholdInput,
     vodArchiveEnabled,
+    vodVisibility,
     feeWaiverGuilds,
     vipPubkeys,
     viewerAllowPubkeys,
@@ -649,6 +662,36 @@ export default function BroadcastPage() {
     if (!identity) return null;
     return makeOriginStreamId(identity.pubkey, streamId);
   }, [identity, streamId]);
+
+  useEffect(() => {
+    if (!identity || !originStreamId) return;
+    const ownerPubkey = identity.pubkey.toLowerCase();
+    if (status === "live") {
+      setQuickPlayStream({
+        streamPubkey: ownerPubkey,
+        streamId,
+        title: title.trim() || "Untitled Stream",
+        hlsUrl: `/api/hls/${encodeURIComponent(originStreamId)}/index.m3u8`,
+        whepUrl: `/api/whep/${encodeURIComponent(originStreamId)}/whep`
+      });
+      return;
+    }
+    if (status === "idle" || status === "error") {
+      if (quickPlayStream?.streamPubkey === ownerPubkey && quickPlayStream.streamId === streamId) {
+        clearQuickPlayStream();
+      }
+    }
+  }, [
+    clearQuickPlayStream,
+    identity,
+    originStreamId,
+    quickPlayStream?.streamId,
+    quickPlayStream?.streamPubkey,
+    setQuickPlayStream,
+    status,
+    streamId,
+    title
+  ]);
 
   const autoLadderRenditionPreview = useMemo(() => {
     if (!autoLadder || !originStreamId) return [];
@@ -764,6 +807,23 @@ export default function BroadcastPage() {
     return `/watch/${npub ?? identity.pubkey}/${streamId}`;
   }, [identity, npub, streamId]);
   const watchUrl = useMemo(() => (origin ? `${origin}${watchPath}` : watchPath), [origin, watchPath]);
+
+  const announceStatusLabel = useMemo(() => {
+    if (announceStep === "idle") return "idle";
+    if (announceStep === "checking") return "publishing";
+    if (announceStep === "ok") return "ok";
+    return "failed";
+  }, [announceStep]);
+
+  const announceStatusMeta = useMemo(() => {
+    if (!announceReport) return null;
+    return `${announceReport.okRelays.length}/${relays.length} relays`;
+  }, [announceReport, relays.length]);
+
+  const lastAnnounceLabel = useMemo(() => {
+    if (!lastAnnounceAt) return null;
+    return new Date(lastAnnounceAt).toLocaleTimeString();
+  }, [lastAnnounceAt]);
 
   const hlsLocalUrl = useMemo(() => {
     const name = originStreamId ?? streamId;
@@ -893,6 +953,90 @@ export default function BroadcastPage() {
       }
     }
   }, [mediaStream]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !mediaStream) {
+      setPreviewPipAvailable(false);
+      setPreviewPipActive(false);
+      return;
+    }
+
+    const pipDoc = document as Document & {
+      pictureInPictureElement?: Element;
+      pictureInPictureEnabled?: boolean;
+    };
+    const pipVideo = video as HTMLVideoElement & {
+      disablePictureInPicture?: boolean;
+      requestPictureInPicture?: () => Promise<void>;
+      webkitSetPresentationMode?: (mode: "inline" | "picture-in-picture" | "fullscreen") => void;
+      webkitPresentationMode?: string;
+    };
+    const supportsNative =
+      pipDoc.pictureInPictureEnabled === true &&
+      !pipVideo.disablePictureInPicture &&
+      typeof pipVideo.requestPictureInPicture === "function";
+    const supportsWebkit = typeof pipVideo.webkitSetPresentationMode === "function";
+    setPreviewPipAvailable(supportsNative || supportsWebkit);
+
+    const syncPipState = () => {
+      const nativeActive = pipDoc.pictureInPictureElement === video;
+      const webkitActive = pipVideo.webkitPresentationMode === "picture-in-picture";
+      setPreviewPipActive(nativeActive || webkitActive);
+    };
+
+    syncPipState();
+    video.addEventListener("enterpictureinpicture", syncPipState as any);
+    video.addEventListener("leavepictureinpicture", syncPipState as any);
+    video.addEventListener("webkitpresentationmodechanged", syncPipState as any);
+
+    return () => {
+      video.removeEventListener("enterpictureinpicture", syncPipState as any);
+      video.removeEventListener("leavepictureinpicture", syncPipState as any);
+      video.removeEventListener("webkitpresentationmodechanged", syncPipState as any);
+      setPreviewPipActive(false);
+    };
+  }, [mediaStream]);
+
+  const togglePreviewPip = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const pipDoc = document as Document & {
+      pictureInPictureElement?: Element;
+      pictureInPictureEnabled?: boolean;
+      exitPictureInPicture?: () => Promise<void>;
+    };
+    const pipVideo = video as HTMLVideoElement & {
+      disablePictureInPicture?: boolean;
+      requestPictureInPicture?: () => Promise<void>;
+      webkitSetPresentationMode?: (mode: "inline" | "picture-in-picture" | "fullscreen") => void;
+      webkitPresentationMode?: string;
+    };
+
+    try {
+      if (pipDoc.pictureInPictureElement && typeof pipDoc.exitPictureInPicture === "function") {
+        await pipDoc.exitPictureInPicture();
+        return;
+      }
+
+      if (
+        pipDoc.pictureInPictureEnabled === true &&
+        !pipVideo.disablePictureInPicture &&
+        typeof pipVideo.requestPictureInPicture === "function"
+      ) {
+        await pipVideo.requestPictureInPicture();
+        return;
+      }
+
+      if (typeof pipVideo.webkitSetPresentationMode === "function") {
+        const nextMode = pipVideo.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture";
+        pipVideo.webkitSetPresentationMode(nextMode);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const stopPreview = () => {
     previewResourceCleanupRef.current?.();
@@ -1128,6 +1272,7 @@ export default function BroadcastPage() {
       matureContent,
       viewerAllowPubkeys,
       vodArchiveEnabled,
+      vodVisibility,
       feeWaiverGuilds,
       feeWaiverVipPubkeys: vipPubkeys,
       stakeAmountAtomic,
@@ -1174,6 +1319,7 @@ export default function BroadcastPage() {
     matureContent,
     viewerAllowPubkeys,
     vodArchiveEnabled,
+    vodVisibility,
     feeWaiverGuilds,
     vipPubkeys,
     relays,
@@ -1516,7 +1662,7 @@ export default function BroadcastPage() {
           </div>
           <div className="flex items-end gap-3">
             <span
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg ${
+              className={`min-w-[120px] text-center px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg ${
                 status === "live"
                   ? "bg-red-600/20 text-red-300 border-red-500/40"
                   : status === "connecting"
@@ -1701,6 +1847,24 @@ export default function BroadcastPage() {
                     </button>
                   )}
 
+                  {mediaStream && previewPipAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void togglePreviewPip();
+                      }}
+                      className={`px-4 py-2 rounded-xl border text-sm inline-flex items-center gap-2 ${
+                        previewPipActive
+                          ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                          : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                      }`}
+                      title={previewPipActive ? "Return preview to page" : "Pop preview out into a movable picture-in-picture window"}
+                    >
+                      <PictureInPicture2 className="w-4 h-4" />
+                      {previewPipActive ? "Return Preview" : "Pop Out Preview"}
+                    </button>
+                  ) : null}
+
                   {status === "live" ? (
                     <button onClick={endStream} className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold flex items-center gap-2">
                       <Square className="w-4 h-4" /> End Stream
@@ -1797,182 +1961,207 @@ export default function BroadcastPage() {
                 />
               </div>
 
-              <div className="text-xs text-neutral-500">
-                Announce streaming hint: <span className="font-mono break-all">{hlsHintUrl}</span>
-              </div>
-
-              <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="ui-surface-soft p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="text-sm font-semibold text-neutral-100">External Encoder (OBS / Streamlabs / vMix / XSplit / PRISM)</div>
-                    <p className="text-xs text-neutral-500">
-                      Use custom RTMP from desktop software. Keep this page open to publish announce events.
-                    </p>
+                    <div className="text-sm font-semibold text-neutral-100">Ingest + encoder tools</div>
+                    <p className="text-xs text-neutral-500">Use external tools only when streaming from OBS/Streamlabs/vMix/XSplit/PRISM.</p>
                   </div>
-                  {encoderCopyStatus ? (
-                    <span className="px-2 py-1 rounded-lg border border-blue-500/40 bg-blue-600/20 text-[11px] text-blue-200">{encoderCopyStatus}</span>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setExternalEncoderOpen((prev) => !prev)}
+                    className="ui-pill"
+                    data-active={externalEncoderOpen}
+                    aria-expanded={externalEncoderOpen}
+                    aria-controls="broadcast-external-encoder"
+                  >
+                    <span className="text-sm leading-none">{externalEncoderOpen ? "^" : "v"}</span>
+                    <span>{externalEncoderOpen ? "Hide External Tools" : "Show External Tools"}</span>
+                  </button>
                 </div>
 
-                {!identity || !originStreamId ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                    Connect identity and keep a valid Stream ID to generate a stable external stream key.
+                <div className="text-xs text-neutral-500">
+                  HLS hint: <span className="font-mono break-all">{hlsHintUrl}</span>
+                </div>
+
+                {externalEncoderOpen ? (
+                  <div id="broadcast-external-encoder" className="pt-3 border-t border-neutral-800 space-y-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-semibold text-neutral-100">External Encoder</div>
+                        <p className="text-xs text-neutral-500">
+                          Use custom RTMP from desktop software. Keep this page open to publish announce events.
+                        </p>
+                      </div>
+                      {encoderCopyStatus ? (
+                        <span className="px-2 py-1 rounded-lg border border-blue-500/40 bg-blue-600/20 text-[11px] text-blue-200">
+                          {encoderCopyStatus}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {!identity || !originStreamId ? (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        Connect identity and keep a valid Stream ID to generate a stable external stream key.
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs text-neutral-400">RTMP server</label>
+                        <div className="flex gap-2">
+                          <input
+                            value={rtmpServerUrl}
+                            readOnly
+                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyExternalEncoderValue("RTMP server", rtmpServerUrl);
+                            }}
+                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-neutral-400">Stream key</label>
+                        <div className="flex gap-2">
+                          <input
+                            value={externalStreamKey || ""}
+                            readOnly
+                            placeholder="Connect identity first"
+                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyExternalEncoderValue("Stream key", externalStreamKey);
+                            }}
+                            disabled={!externalStreamKey}
+                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-neutral-400">RTMP publish URL (reference)</label>
+                        <div className="flex gap-2">
+                          <input
+                            value={rtmpPublishUrl}
+                            readOnly
+                            placeholder="Generated from server + key"
+                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyExternalEncoderValue("RTMP URL", rtmpPublishUrl);
+                            }}
+                            disabled={!rtmpPublishUrl}
+                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-neutral-400">WHIP endpoint (optional, WHIP-capable encoders)</label>
+                        <div className="flex gap-2">
+                          <input
+                            value={whipPublishUrl}
+                            readOnly
+                            placeholder="Generated from stream key"
+                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyExternalEncoderValue("WHIP endpoint", whipPublishUrl);
+                            }}
+                            disabled={!whipPublishUrl}
+                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-xs text-neutral-400">Quick setup</label>
+                      <div className="flex flex-wrap gap-2">
+                        {ENCODER_GUIDE_OPTIONS.map((guide) => (
+                          <button
+                            key={guide.id}
+                            type="button"
+                            onClick={() => setEncoderGuide(guide.id)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs ${
+                              encoderGuide === guide.id
+                                ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
+                                : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                            }`}
+                          >
+                            {guide.label}
+                          </button>
+                        ))}
+                      </div>
+                      <ol className="list-decimal pl-5 space-y-1 text-xs text-neutral-300">
+                        {encoderGuideSteps.map((step, index) => (
+                          <li key={`encoder-guide-${index}`}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void announceExternal("live");
+                        }}
+                        disabled={!identity || !originStreamId || announceStep === "checking"}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold disabled:opacity-50"
+                      >
+                        Announce Live (External)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void announceExternal("ended");
+                        }}
+                        disabled={!identity || !originStreamId || announceStep === "checking"}
+                        className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
+                      >
+                        Announce Ended
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void checkExternalIngest();
+                        }}
+                        className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
+                      >
+                        Check External Feed
+                      </button>
+                    </div>
                   </div>
                 ) : null}
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">RTMP server</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={rtmpServerUrl}
-                        readOnly
-                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyExternalEncoderValue("RTMP server", rtmpServerUrl);
-                        }}
-                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">Stream key</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={externalStreamKey || ""}
-                        readOnly
-                        placeholder="Connect identity first"
-                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyExternalEncoderValue("Stream key", externalStreamKey);
-                        }}
-                        disabled={!externalStreamKey}
-                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">RTMP publish URL (reference)</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={rtmpPublishUrl}
-                        readOnly
-                        placeholder="Generated from server + key"
-                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyExternalEncoderValue("RTMP URL", rtmpPublishUrl);
-                        }}
-                        disabled={!rtmpPublishUrl}
-                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">WHIP endpoint (optional, WHIP-capable encoders)</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={whipPublishUrl}
-                        readOnly
-                        placeholder="Generated from stream key"
-                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyExternalEncoderValue("WHIP endpoint", whipPublishUrl);
-                        }}
-                        disabled={!whipPublishUrl}
-                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <label className="text-xs text-neutral-400">Quick setup</label>
-                  <div className="flex flex-wrap gap-2">
-                    {ENCODER_GUIDE_OPTIONS.map((guide) => (
-                      <button
-                        key={guide.id}
-                        type="button"
-                        onClick={() => setEncoderGuide(guide.id)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs ${
-                          encoderGuide === guide.id
-                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                        }`}
-                      >
-                        {guide.label}
-                      </button>
-                    ))}
-                  </div>
-                  <ol className="list-decimal pl-5 space-y-1 text-xs text-neutral-300">
-                    {encoderGuideSteps.map((step, index) => (
-                      <li key={`encoder-guide-${index}`}>{step}</li>
-                    ))}
-                  </ol>
-                </div>
-
-                <div className="flex flex-wrap gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void announceExternal("live");
-                    }}
-                    disabled={!identity || !originStreamId || announceStep === "checking"}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold disabled:opacity-50"
-                  >
-                    Announce Live (External)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void announceExternal("ended");
-                    }}
-                    disabled={!identity || !originStreamId || announceStep === "checking"}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
-                  >
-                    Announce Ended
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void checkExternalIngest();
-                    }}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                  >
-                    Check External Feed
-                  </button>
-                </div>
               </div>
 
               <div className="pt-2 border-t border-neutral-800">
                 <button
                   type="button"
                   onClick={() => setAdvancedOpen((prev) => !prev)}
-                  className="text-sm text-neutral-300 hover:text-white transition-colors inline-flex items-center gap-2"
+                  className="ui-pill"
+                  data-active={advancedOpen}
                   aria-expanded={advancedOpen}
                   aria-controls="broadcast-advanced-settings"
                 >
                   <span className="text-lg leading-none">{advancedOpen ? "^" : "v"}</span>
-                  <span>{advancedOpen ? "Hide advanced settings" : "Show advanced settings"}</span>
+                  <span>{advancedOpen ? "Hide Advanced Settings" : "Show Advanced Settings"}</span>
                 </button>
               </div>
 
@@ -2067,51 +2256,63 @@ export default function BroadcastPage() {
                       <div className="text-xs text-neutral-500">No additional payout methods configured.</div>
                     ) : (
                       <div className="space-y-2">
-                        {paymentDrafts.map((row, index) => (
-                          <div key={`broadcast-payment-${index}`} className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
-                            <select
-                              value={row.asset}
-                              onChange={(e) => updatePaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
-                              disabled={status === "connecting"}
-                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-2 text-xs"
-                            >
-                              {PAYMENT_ASSET_ORDER.map((asset) => (
-                                <option key={asset} value={asset}>
-                                  {PAYMENT_ASSET_META[asset].symbol}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              value={row.address}
-                              onChange={(e) => updatePaymentDraft(index, { address: e.target.value })}
-                              disabled={status === "connecting"}
-                              placeholder={PAYMENT_ASSET_META[row.asset].placeholder}
-                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
-                            />
-                            <input
-                              value={row.network}
-                              onChange={(e) => updatePaymentDraft(index, { network: e.target.value })}
-                              disabled={status === "connecting"}
-                              placeholder="network"
-                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
-                            />
-                            <input
-                              value={row.label}
-                              onChange={(e) => updatePaymentDraft(index, { label: e.target.value })}
-                              disabled={status === "connecting"}
-                              placeholder="label"
-                              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removePaymentDraft(index)}
-                              disabled={status === "connecting"}
-                              className="px-3 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
+                        {paymentDrafts.map((row, index) => {
+                          const rail = getPaymentRailForAsset(row.asset);
+                          return (
+                            <div key={`broadcast-payment-${index}`} className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/40 p-2">
+                              <div className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
+                                <select
+                                  value={row.asset}
+                                  onChange={(e) => updatePaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
+                                  disabled={status === "connecting"}
+                                  className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-2 text-xs"
+                                >
+                                  {PAYMENT_ASSET_ORDER.map((asset) => (
+                                    <option key={asset} value={asset}>
+                                      {PAYMENT_ASSET_META[asset].symbol}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  value={row.address}
+                                  onChange={(e) => updatePaymentDraft(index, { address: e.target.value })}
+                                  disabled={status === "connecting"}
+                                  placeholder={PAYMENT_ASSET_META[row.asset].placeholder}
+                                  className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
+                                />
+                                <input
+                                  value={row.network}
+                                  onChange={(e) => updatePaymentDraft(index, { network: e.target.value })}
+                                  disabled={status === "connecting"}
+                                  placeholder="network"
+                                  className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                                />
+                                <input
+                                  value={row.label}
+                                  onChange={(e) => updatePaymentDraft(index, { label: e.target.value })}
+                                  disabled={status === "connecting"}
+                                  placeholder="label"
+                                  className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removePaymentDraft(index)}
+                                  disabled={status === "connecting"}
+                                  className="px-3 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="text-[11px] text-neutral-500">
+                                Rail:{" "}
+                                <span className="text-neutral-300">
+                                  {rail.name}
+                                </span>{" "}
+                                · {rail.execution === "verified_backend" ? "verified backend" : "wallet URI / copy"}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -2169,6 +2370,23 @@ export default function BroadcastPage() {
                         </span>
                       </span>
                     </label>
+                    {vodArchiveEnabled ? (
+                      <div className="mt-3 pt-3 border-t border-neutral-800/80 space-y-2">
+                        <label className="text-xs text-neutral-400">VOD visibility</label>
+                        <select
+                          value={vodVisibility}
+                          onChange={(event) => setVodVisibility(event.target.value === "private" ? "private" : "public")}
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                          disabled={status === "connecting" || status === "live"}
+                        >
+                          <option value="public">Public (recommended for open channels)</option>
+                          <option value="private">Private (owner + allowlist only)</option>
+                        </select>
+                        <div className="text-xs text-neutral-500">
+                          Simple mode: choose one default. Public VOD is visible to everyone; private VOD requires stream-owner or allowlisted identity.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2707,31 +2925,20 @@ export default function BroadcastPage() {
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
                   <span className="text-neutral-400">Announce</span>
-	                  <span className="font-mono text-neutral-300">
-	                    {announceStep === "idle"
-	                      ? "idle"
-	                      : announceStep === "checking"
-	                        ? "publishing…"
-	                        : announceStep === "ok"
-	                          ? `ok${announceReport ? ` (${announceReport.okRelays.length}/${relays.length})` : ""}${lastAnnounceAt ? ` (${new Date(lastAnnounceAt).toLocaleTimeString()})` : ""}`
-	                          : `failed${announceReport ? ` (${announceReport.okRelays.length}/${relays.length})` : ""}`}
-	                  </span>
-	                </div>
-	              </div>
+                  <div className="min-w-[130px] text-right">
+                    <div className="font-mono text-neutral-300">{announceStatusLabel}</div>
+                    {announceStatusMeta ? <div className="text-[11px] text-neutral-500">{announceStatusMeta}</div> : null}
+                  </div>
+                </div>
+              </div>
+
+              {lastAnnounceLabel ? (
+                <div className="text-[11px] text-neutral-500">Last announce: {lastAnnounceLabel}</div>
+              ) : null}
 
               <div className="text-xs text-neutral-500">
                 Your identity: <span className="font-mono break-all text-neutral-300">{npub ?? "Connect identity"}</span>
               </div>
-            </div>
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
-              <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Checklist</div>
-              <ul className="text-sm text-neutral-300 space-y-2">
-                <li>1) Start Docker stack: `infra/stream`</li>
-                <li>2) Connect identity (header)</li>
-                <li>3) Start preview, then Go Live</li>
-                <li>4) Open Watch page and chat</li>
-              </ul>
             </div>
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-2 text-sm text-neutral-300">

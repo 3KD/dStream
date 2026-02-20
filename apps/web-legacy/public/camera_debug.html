@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Camera Debug - Deep Diagnostic</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        .log {
+            border: 1px solid #444;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+
+        .success {
+            border-color: #2f2;
+            color: #2f2;
+        }
+
+        .error {
+            border-color: #f22;
+            color: #f22;
+        }
+
+        .warn {
+            border-color: #ff0;
+            color: #ff0;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+        }
+
+        video {
+            width: 400px;
+            height: 300px;
+            background: #000;
+            margin: 10px 0;
+        }
+
+        #logs {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Deep Camera Diagnostic</h1>
+    <p>This page will log every detail about camera access attempts.</p>
+
+    <div style="margin: 20px 0;">
+        <button onclick="testCamera()">TEST CAMERA NOW</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+
+    <video id="preview" autoplay playsinline></video>
+
+    <h3>Logs:</h3>
+    <div id="logs"></div>
+
+    <script>
+        function log(msg, type = '') {
+            const div = document.createElement('div');
+            div.className = 'log ' + type;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
+            document.getElementById('logs').prepend(div);
+            console.log('[CameraDebug]', msg);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        async function testCamera() {
+            log('=== STARTING CAMERA TEST ===');
+
+            // 1. Check secure context
+            log(`Secure Context: ${window.isSecureContext}`, window.isSecureContext ? 'success' : 'error');
+            log(`Protocol: ${window.location.protocol}`);
+            log(`Host: ${window.location.host}`);
+
+            // 2. Check if mediaDevices exists
+            if (!navigator.mediaDevices) {
+                log('navigator.mediaDevices is UNDEFINED!', 'error');
+                return;
+            }
+            log('navigator.mediaDevices exists', 'success');
+
+            // 3. Check getUserMedia exists
+            if (!navigator.mediaDevices.getUserMedia) {
+                log('navigator.mediaDevices.getUserMedia is UNDEFINED!', 'error');
+                return;
+            }
+            log('navigator.mediaDevices.getUserMedia exists', 'success');
+
+            // 4. Enumerate devices BEFORE permission request
+            try {
+                log('Enumerating devices (pre-auth)...');
+                const devicesPre = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devicesPre.filter(d => d.kind === 'videoinput');
+                const audioDevices = devicesPre.filter(d => d.kind === 'audioinput');
+                log(`Found ${videoDevices.length} video devices, ${audioDevices.length} audio devices`);
+                videoDevices.forEach((d, i) => log(`  Video ${i}: "${d.label || '(no label)'}" ID: ${d.deviceId.slice(0, 8)}...`));
+            } catch (e) {
+                log(`enumerateDevices error: ${e.name}: ${e.message}`, 'error');
+            }
+
+            // 5. Attempt camera access
+            log('Requesting getUserMedia({ video: true, audio: false })...');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                log('SUCCESS! Got video stream', 'success');
+                log(`Stream ID: ${stream.id}`);
+                log(`Video tracks: ${stream.getVideoTracks().length}`);
+                stream.getVideoTracks().forEach((t, i) => {
+                    log(`  Track ${i}: ${t.label} (${t.readyState})`);
+                });
+                document.getElementById('preview').srcObject = stream;
+
+                // Enumerate again to get labels
+                const devicesPost = await navigator.mediaDevices.enumerateDevices();
+                log('Devices (post-auth):');
+                devicesPost.filter(d => d.kind === 'videoinput').forEach((d, i) => {
+                    log(`  Video ${i}: "${d.label}" ID: ${d.deviceId.slice(0, 8)}...`);
+                });
+
+            } catch (err) {
+                log(`FAILED: ${err.name}`, 'error');
+                log(`Message: ${err.message}`, 'error');
+                log(`Full error: ${JSON.stringify({ name: err.name, message: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' | ') })}`, 'error');
+
+                // Additional context based on error type
+                if (err.name === 'NotFoundError') {
+                    log('DIAGNOSIS: No camera device found. Check if camera is connected or in use by another app.', 'warn');
+                } else if (err.name === 'NotAllowedError') {
+                    log('DIAGNOSIS: Permission denied. Check browser/OS camera permissions for this site.', 'warn');
+                } else if (err.name === 'NotReadableError') {
+                    log('DIAGNOSIS: Camera exists but cannot be accessed. Another app may be using it.', 'warn');
+                } else if (err.name === 'OverconstrainedError') {
+                    log('DIAGNOSIS: Camera cannot meet the requested constraints.', 'warn');
+                } else if (err.name === 'SecurityError') {
+                    log('DIAGNOSIS: Security error. Page may not be in a secure context or permissions are blocked.', 'warn');
+                } else if (err.name === 'AbortError') {
+                    log('DIAGNOSIS: Request was aborted. This is unusual.', 'warn');
+                }
+            }
+
+            log('=== TEST COMPLETE ===');
+        }
+
+        // Auto-run on load
+        log('Page loaded. Click TEST CAMERA NOW to begin.');
+    </script>
+</body>
+
+</html>
