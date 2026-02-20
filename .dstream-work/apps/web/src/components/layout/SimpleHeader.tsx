@@ -13,12 +13,10 @@ const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/browse", label: "Browse" },
   { href: "/guilds", label: "Guilds" },
   { href: "/inbox", label: "Inbox" },
-  { href: "/broadcast", label: "Broadcast" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/profile", label: "Profile" },
   { href: "/moderation", label: "Moderation" },
   { href: "/community-guidelines", label: "Guidelines" },
-  { href: "/support", label: "Support" },
   { href: "/settings", label: "Settings" }
 ];
 
