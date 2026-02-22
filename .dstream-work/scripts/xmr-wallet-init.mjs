@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const RECEIVER_RPC = (process.env.XMR_INIT_RECEIVER_RPC || "http://127.0.0.1:28083").replace(/\/$/, "");
 const SENDER_RPC = (process.env.XMR_INIT_SENDER_RPC || "http://127.0.0.1:28084").replace(/\/$/, "");
@@ -29,7 +31,8 @@ function parseDigestChallenge(headerValue) {
   const digestPos = lower.indexOf("digest ");
   if (digestPos < 0) return null;
   const attrs = {};
-  const body = raw.slice(digestPos + 7);
+  const digestBody = raw.slice(digestPos + 7);
+  const body = digestBody.split(/,\s*Digest\s+/i)[0] ?? digestBody;
   const re = /([a-zA-Z0-9_-]+)=("([^"]*)"|([^,]+))/g;
   let match;
   while ((match = re.exec(body)) !== null) {
@@ -81,6 +84,56 @@ function buildDigestAuthorization({ username, password, method, uri, challenge }
   return `Digest ${parts.join(", ")}`;
 }
 
+function readHeader(headers, name) {
+  const raw = headers[name.toLowerCase()];
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.length > 0) return raw.join(", ");
+  return null;
+}
+
+async function postJson(url, payload, headers = {}) {
+  const parsed = new URL(url);
+  const isHttps = parsed.protocol === "https:";
+  const requestImpl = isHttps ? httpsRequest : httpRequest;
+
+  return new Promise((resolve, reject) => {
+    const req = requestImpl(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : isHttps ? 443 : 80,
+        path: `${parsed.pathname}${parsed.search}`,
+        method: "POST",
+        headers: {
+          ...headers,
+          "content-length": Buffer.byteLength(payload, "utf8").toString()
+        }
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => {
+          if (typeof chunk === "string") {
+            chunks.push(Buffer.from(chunk, "utf8"));
+          } else {
+            chunks.push(chunk);
+          }
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode || 0,
+            text: Buffer.concat(chunks).toString("utf8"),
+            getHeader: (name) => readHeader(res.headers, name)
+          });
+        });
+      }
+    );
+    req.on("error", reject);
+    req.setTimeout(10000, () => req.destroy(new Error(`wallet-rpc timeout (${url})`)));
+    req.write(payload);
+    req.end();
+  });
+}
+
 async function rpc(origin, method, params = {}) {
   const url = `${origin}/json_rpc`;
   const uri = new URL(url).pathname || "/json_rpc";
@@ -90,11 +143,7 @@ async function rpc(origin, method, params = {}) {
   async function doRequest(authHeader) {
     const headers = { ...baseHeaders };
     if (authHeader) headers.authorization = authHeader;
-    return fetch(url, {
-      method: "POST",
-      headers,
-      body: payload
-    });
+    return postJson(url, payload, headers);
   }
 
   const basicAuth = RPC_USER
@@ -103,7 +152,7 @@ async function rpc(origin, method, params = {}) {
 
   let res = await doRequest(basicAuth || "");
   if (res.status === 401 && RPC_USER) {
-    const challenge = parseDigestChallenge(res.headers.get("www-authenticate"));
+    const challenge = parseDigestChallenge(res.getHeader("www-authenticate"));
     if (challenge) {
       const digestAuth = buildDigestAuthorization({
         username: RPC_USER,
@@ -119,14 +168,14 @@ async function rpc(origin, method, params = {}) {
     }
   }
 
-  const text = await res.text();
+  const text = res.text;
   let data = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
     throw new Error(`invalid JSON-RPC response from ${origin} (${method}): ${text.slice(0, 200)}`);
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${origin} (${method})`);
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status} from ${origin} (${method})`);
   if (data?.error) throw new Error(`rpc ${method} failed: ${data.error.message ?? data.error.code ?? "unknown"}`);
   return data?.result ?? {};
 }

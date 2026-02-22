@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 export type WalletRpcConfig = {
   origin: string;
@@ -107,7 +109,8 @@ function parseDigestChallenge(headerValue: string | null): DigestChallenge | nul
   const digestPos = lower.indexOf("digest ");
   if (digestPos < 0) return null;
   const attrs: Record<string, string> = {};
-  const body = raw.slice(digestPos + 7);
+  const digestBody = raw.slice(digestPos + 7);
+  const body = digestBody.split(/,\s*Digest\s+/i)[0] ?? digestBody;
   const re = /([a-zA-Z0-9_-]+)=("([^"]*)"|([^,]+))/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(body)) !== null) {
@@ -207,6 +210,68 @@ function parseSubaddrIndex(value: any): MoneroSubaddrIndex | null {
   return { major, minor };
 }
 
+type RpcRawResponse = {
+  status: number;
+  text: string;
+  getHeader: (name: string) => string | null;
+};
+
+function readHeader(headers: IncomingHttpHeaders, name: string): string | null {
+  const raw = headers[name.toLowerCase()];
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.length > 0) return raw.join(", ");
+  return null;
+}
+
+async function postJsonViaNodeHttp(
+  endpoint: string,
+  body: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<RpcRawResponse> {
+  const url = new URL(endpoint);
+  const isHttps = url.protocol === "https:";
+  const requestImpl = isHttps ? httpsRequest : httpRequest;
+
+  return new Promise<RpcRawResponse>((resolve, reject) => {
+    const req = requestImpl(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port ? Number(url.port) : isHttps ? 443 : 80,
+        path: `${url.pathname}${url.search}`,
+        method: "POST",
+        headers: {
+          ...headers,
+          "content-length": Buffer.byteLength(body, "utf8").toString()
+        }
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => {
+          if (typeof chunk === "string") {
+            chunks.push(Buffer.from(chunk, "utf8"));
+          } else {
+            chunks.push(chunk);
+          }
+        });
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          resolve({
+            status: res.statusCode ?? 0,
+            text,
+            getHeader: (name: string) => readHeader(res.headers, name)
+          });
+        });
+      }
+    );
+    req.on("error", reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("wallet rpc request timed out")));
+    req.write(body);
+    req.end();
+  });
+}
+
 const PASSIVE_SKIP_METHODS = new Set([
   "sweep_all",
   "prepare_multisig",
@@ -274,66 +339,83 @@ export class MoneroWalletRpcClient {
   }
 
   private async call<T>(method: string, params?: any): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const endpoint = `${this.origin}/json_rpc`;
-      const uri = new URL(endpoint).pathname || "/json_rpc";
-      const body = JSON.stringify({ jsonrpc: "2.0", id: "0", method, params });
-      const request = async (auth?: string) => {
-        const headers: Record<string, string> = { "content-type": "application/json" };
-        if (auth) headers.authorization = auth;
-        return this.fetchImpl(endpoint, {
+    const useNodeHttp = this.fetchImpl === fetch;
+    const endpoint = `${this.origin}/json_rpc`;
+    const uri = new URL(endpoint).pathname || "/json_rpc";
+    const body = JSON.stringify({ jsonrpc: "2.0", id: "0", method, params });
+    const request = async (auth?: string): Promise<RpcRawResponse> => {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (auth) headers.authorization = auth;
+
+      if (useNodeHttp) {
+        return postJsonViaNodeHttp(endpoint, body, headers, this.timeoutMs);
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const res = await this.fetchImpl(endpoint, {
           method: "POST",
           headers,
           body,
           signal: controller.signal
         });
-      };
-
-      const basic = this.username && this.password ? authHeader(this.username, this.password) : "";
-      let res = await request(basic || undefined);
-      if (res.status === 401 && this.username && this.password) {
-        const challenge = parseDigestChallenge(res.headers.get("www-authenticate"));
-        if (challenge) {
-          const digest = digestAuthHeader({
-            username: this.username,
-            password: this.password,
-            method: "POST",
-            uri,
-            challenge
-          });
-          res = await request(digest);
-        }
-        if (res.status === 401) {
-          res = await request();
-        }
-      }
-
-      if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new WalletRpcCallError({
-          kind: "http",
-          code: res.status,
-          message: `wallet rpc http ${res.status}${text ? `: ${text}` : ""}`
-        });
+        return {
+          status: res.status,
+          text,
+          getHeader: (name: string) => res.headers.get(name)
+        };
+      } finally {
+        clearTimeout(timeout);
       }
+    };
 
-      const data = (await res.json().catch(() => null)) as JsonRpcSuccess<T> | JsonRpcError | null;
-      if (!data || (data as any).jsonrpc !== "2.0") {
-        throw new WalletRpcCallError({ kind: "invalid", message: "wallet rpc: invalid JSON-RPC response" });
-      }
-      if ("error" in data) {
-        throw new WalletRpcCallError({
-          kind: "rpc",
-          code: data.error.code,
-          message: `wallet rpc error ${data.error.code}: ${data.error.message}`
+    const basic = this.username && this.password ? authHeader(this.username, this.password) : "";
+    let res = await request(basic || undefined);
+    if (res.status === 401 && this.username && this.password) {
+      const challenge = parseDigestChallenge(res.getHeader("www-authenticate"));
+      if (challenge) {
+        const digest = digestAuthHeader({
+          username: this.username,
+          password: this.password,
+          method: "POST",
+          uri,
+          challenge
         });
+        res = await request(digest);
       }
-      return data.result;
-    } finally {
-      clearTimeout(timeout);
+      if (res.status === 401) {
+        res = await request();
+      }
     }
+
+    if (res.status < 200 || res.status >= 300) {
+      throw new WalletRpcCallError({
+        kind: "http",
+        code: res.status,
+        message: `wallet rpc http ${res.status}${res.text ? `: ${res.text}` : ""}`
+      });
+    }
+
+    const data = (() => {
+      try {
+        return (res.text ? JSON.parse(res.text) : null) as JsonRpcSuccess<T> | JsonRpcError | null;
+      } catch {
+        return null;
+      }
+    })();
+    if (!data || (data as any).jsonrpc !== "2.0") {
+      throw new WalletRpcCallError({ kind: "invalid", message: "wallet rpc: invalid JSON-RPC response" });
+    }
+    if ("error" in data) {
+      throw new WalletRpcCallError({
+        kind: "rpc",
+        code: data.error.code,
+        message: `wallet rpc error ${data.error.code}: ${data.error.message}`
+      });
+    }
+    return data.result;
   }
 
   async getVersion(): Promise<{ version: number }> {

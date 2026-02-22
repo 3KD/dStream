@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { GlobalQuickPlayDock } from "@/components/player/GlobalQuickPlayDock";
+import { GlobalStreamDirectoryPrefetch } from "@/components/stream/GlobalStreamDirectoryPrefetch";
 
 const FAVICON_URL = "/logo_favicon_upright.png?v=2";
 
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-neutral-950 text-white">
         <Providers>
           <div className="min-h-screen flex flex-col">
+            <GlobalStreamDirectoryPrefetch />
             <div className="flex-1">{children}</div>
             <SiteFooter />
             <GlobalQuickPlayDock />

@@ -23,7 +23,7 @@ webrtcAddress: :8889
 webrtcLocalUDPAddress: :8181
 webrtcLocalTCPAddress: :8189
 webrtcAllowOrigins: [ "*" ]
-webrtcAdditionalHosts: [ "host.docker.internal", "localhost", "127.0.0.1" ]
+webrtcAdditionalHosts: [ "dstream.stream", "142.93.189.147", "host.docker.internal", "localhost", "127.0.0.1" ]
 
 # Broadcast archive recording (VOD) persisted to /recordings.
 # Disabled by default for decentralized-first behavior.

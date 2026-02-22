@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export interface QuickPlayStreamRef {
   streamPubkey: string;
@@ -50,6 +50,19 @@ function normalizeStreamRef(value: QuickPlayStreamRef): QuickPlayStreamRef {
 
 export function QuickPlayProvider({ children }: { children: ReactNode }) {
   const [quickPlayStream, setQuickPlayStreamState] = useState<QuickPlayStreamRef | null>(null);
+  const quickPlayStreamRef = useRef<QuickPlayStreamRef | null>(null);
+
+  const persistQuickPlay = useCallback((next: QuickPlayStreamRef | null) => {
+    try {
+      if (!next) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -64,16 +77,26 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    try {
-      if (!quickPlayStream) {
-        localStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(quickPlayStream));
-    } catch {
-      // ignore storage failures
-    }
-  }, [quickPlayStream]);
+    quickPlayStreamRef.current = quickPlayStream;
+    persistQuickPlay(quickPlayStream);
+  }, [persistQuickPlay, quickPlayStream]);
+
+  useEffect(() => {
+    const flushNow = () => persistQuickPlay(quickPlayStreamRef.current);
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      flushNow();
+    };
+
+    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", flushNow);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", flushNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [persistQuickPlay]);
 
   const setQuickPlayStream = useCallback((next: QuickPlayStreamRef) => {
     setQuickPlayStreamState(normalizeStreamRef(next));

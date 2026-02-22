@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { Copy, Heart, Wallet } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
+import { SupportAddressCopyChip } from "@/components/layout/SupportXmrAddress";
 
 const fallbackSupportXmrAddress =
   "49zL3oidgJbD6DeMheen873myfW1Jkp2tHiQJWXD7L64gjMjQ2pjFmjeksziP3CGKA1rfeLMCtgEqbUWBmhzL9YGP6X5w42";
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? fallbackSupportXmrAddress).trim();
+const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
+const supportBtcLightning = (process.env.NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING ?? "").trim();
+const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
+const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
 
 export default function DonatePage() {
   return (
@@ -37,6 +42,75 @@ export default function DonatePage() {
           <p className="text-xs text-neutral-500">
             Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_XMR_ADDRESS</span> (falls back to default support
             address when unset).
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
+          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
+            <Wallet className="w-6 h-6 text-amber-400" />
+            Bitcoin Support Address
+          </h2>
+          {supportBtcAddress ? (
+            <>
+              <p className="text-sm text-neutral-400">Send BTC directly to:</p>
+              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportBtcAddress}</p>
+              <SupportAddressCopyChip label="BTC" address={supportBtcAddress} ariaLabel="Copy Bitcoin support address" />
+            </>
+          ) : (
+            <p className="text-sm text-neutral-400">
+              This deployment does not currently expose a BTC support address.
+            </p>
+          )}
+
+          {supportBtcLightning ? (
+            <div className="space-y-2">
+              <p className="text-sm text-neutral-400">Lightning (optional):</p>
+              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportBtcLightning}</p>
+              <SupportAddressCopyChip label="LN" address={supportBtcLightning} ariaLabel="Copy Lightning support address" />
+            </div>
+          ) : null}
+
+          <p className="text-xs text-neutral-500">
+            Address sources: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_BTC_ADDRESS</span> and{" "}
+            <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING</span>.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
+          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
+            <Wallet className="w-6 h-6 text-violet-400" />
+            Ethereum Support Address
+          </h2>
+          {supportEthAddress ? (
+            <>
+              <p className="text-sm text-neutral-400">Send ETH (and EVM tokens) to:</p>
+              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportEthAddress}</p>
+              <SupportAddressCopyChip label="ETH" address={supportEthAddress} ariaLabel="Copy Ethereum support address" />
+            </>
+          ) : (
+            <p className="text-sm text-neutral-400">This deployment does not currently expose an ETH support address.</p>
+          )}
+          <p className="text-xs text-neutral-500">
+            Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_ETH_ADDRESS</span>.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
+          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
+            <Wallet className="w-6 h-6 text-cyan-400" />
+            TRON Support Address
+          </h2>
+          {supportTrxAddress ? (
+            <>
+              <p className="text-sm text-neutral-400">Send TRX to:</p>
+              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportTrxAddress}</p>
+              <SupportAddressCopyChip label="TRX" address={supportTrxAddress} ariaLabel="Copy TRON support address" />
+            </>
+          ) : (
+            <p className="text-sm text-neutral-400">This deployment does not currently expose a TRX support address.</p>
+          )}
+          <p className="text-xs text-neutral-500">
+            Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_TRX_ADDRESS</span>.
           </p>
         </section>
 

@@ -32,7 +32,7 @@ import {
   getWalletIntegrationById,
   getWalletIntegrationsForAsset
 } from "@/lib/payments/catalog";
-import { getPaymentRailForAsset, groupPaymentMethodsByRail } from "@/lib/payments/rails";
+import { getPaymentRailForAsset, getPaymentRailForMethod, groupPaymentMethodsByRail } from "@/lib/payments/rails";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
 import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
@@ -45,7 +45,8 @@ import {
   parseGuildRoleEvent,
   type StreamGuildFeeWaiver,
   type StreamHostMode,
-  type StreamPaymentAsset
+  type StreamPaymentAsset,
+  type StreamPaymentMethod
 } from "@dstream/protocol";
 import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
 
@@ -214,8 +215,6 @@ export default function WatchPage() {
       return comparePaymentAssetOrder(left, right);
     });
   }, [payoutAssets, social.settings.paymentDefaults.preferredWalletByAsset]);
-  const autoSelectedPayoutAsset = orderedPayoutAssets[0] ?? null;
-  const autoSelectedPayoutRail = autoSelectedPayoutAsset ? getPaymentRailForAsset(autoSelectedPayoutAsset) : null;
   const orderedNonXmrPayments = useMemo(() => {
     const assetRank = new Map<StreamPaymentAsset, number>(orderedPayoutAssets.map((asset, index) => [asset, index]));
     return nonXmrPayments
@@ -232,6 +231,19 @@ export default function WatchPage() {
       })
       .map((row) => row.method);
   }, [nonXmrPayments, orderedPayoutAssets]);
+  const autoSelectedPayoutAsset = orderedPayoutAssets[0] ?? null;
+  const autoSelectedPayoutMethod = useMemo<StreamPaymentMethod | null>(() => {
+    if (!autoSelectedPayoutAsset) return null;
+    if (autoSelectedPayoutAsset === "xmr" && xmrPaymentAddress) {
+      return { asset: "xmr", address: xmrPaymentAddress };
+    }
+    return orderedNonXmrPayments.find((method) => method.asset === autoSelectedPayoutAsset) ?? null;
+  }, [autoSelectedPayoutAsset, orderedNonXmrPayments, xmrPaymentAddress]);
+  const autoSelectedPayoutRail = autoSelectedPayoutMethod
+    ? getPaymentRailForMethod(autoSelectedPayoutMethod)
+    : autoSelectedPayoutAsset
+      ? getPaymentRailForAsset(autoSelectedPayoutAsset)
+      : null;
   const nonXmrPaymentsByRail = useMemo(() => groupPaymentMethodsByRail(orderedNonXmrPayments), [orderedNonXmrPayments]);
   const preferredWalletsForPayoutAssets = useMemo(() => {
     return orderedPayoutAssets
@@ -841,6 +853,36 @@ export default function WatchPage() {
       .filter((caption) => caption.src && caption.lang && caption.label && isPlaybackUrl(caption.src))
       .slice(0, 8);
   }, [announce?.captions]);
+  const [identityCopyStatus, setIdentityCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [playbackUrlCopyStatus, setPlaybackUrlCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const identityDisplayValue = useMemo(() => (npub ?? pubkey ?? "").trim(), [npub, pubkey]);
+  const copyIdentityDisplayValue = useCallback(async () => {
+    setIdentityCopyStatus("idle");
+    try {
+      if (!identityDisplayValue) return;
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
+      await navigator.clipboard.writeText(identityDisplayValue);
+      setIdentityCopyStatus("copied");
+      setTimeout(() => setIdentityCopyStatus("idle"), 1200);
+    } catch {
+      setIdentityCopyStatus("error");
+      setTimeout(() => setIdentityCopyStatus("idle"), 1800);
+    }
+  }, [identityDisplayValue]);
+  const copyPlaybackUrl = useCallback(async () => {
+    setPlaybackUrlCopyStatus("idle");
+    try {
+      const url = (streamUrl ?? "").trim();
+      if (!url) return;
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
+      await navigator.clipboard.writeText(url);
+      setPlaybackUrlCopyStatus("copied");
+      setTimeout(() => setPlaybackUrlCopyStatus("idle"), 1200);
+    } catch {
+      setPlaybackUrlCopyStatus("error");
+      setTimeout(() => setPlaybackUrlCopyStatus("idle"), 1800);
+    }
+  }, [streamUrl]);
 
   const postE2E = useCallback((payload: any) => {
     if (!e2e) return;
@@ -1340,300 +1382,350 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-7xl mx-auto p-6">
+      <main className="w-full min-h-0 px-4 pb-6 md:px-5 lg:px-6">
         {!pubkey && (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
             Invalid pubkey in route. Expected a 64-hex pubkey or an <span className="font-mono">npub…</span>.
           </div>
         )}
-        <header className="flex items-center justify-between mb-6">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold">{announce?.title ?? "Live Stream"}</h1>
-            {pubkey && (
-              <div className="text-xs text-neutral-500 font-mono">
-                {social.getAlias(pubkey) && <span className="text-neutral-300">{social.getAlias(pubkey)}</span>}
-                {social.getAlias(pubkey) && <span className="text-neutral-600"> · </span>}
-                {npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(pubkey, { head: 14, tail: 8 })} / {streamId}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {pubkey && (
-              <button
-                type="button"
-                onClick={() => social.toggleFavoriteStream(pubkey, streamId)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
-                title={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite" : "Favorite"}
-                aria-label={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite stream" : "Favorite stream"}
-              >
-                <Star
-                  className={`w-4 h-4 ${
-                    social.isFavoriteStream(pubkey, streamId) ? "fill-yellow-400 text-yellow-400" : "text-neutral-400"
-                  }`}
-                />
-              </button>
-            )}
-            {pubkey && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReportError(null);
-                    setReportTarget({
-                      targetType: "stream",
-                      targetPubkey: pubkey,
-                      targetStreamId: streamId,
-                      summary: `Report stream ${announce?.title ?? streamId}`
-                    });
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                  title="Report stream"
-                  aria-label="Report stream"
-                >
-                  <Flag className="w-3.5 h-3.5" />
-                  Stream
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const npubLabel = npub ?? pubkey;
-                    setReportError(null);
-                    setReportTarget({
-                      targetType: "user",
-                      targetPubkey: pubkey,
-                      targetStreamId: streamId,
-                      summary: `Report creator ${shortenText(npubLabel, { head: 14, tail: 8 })}`
-                    });
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                  title="Report creator"
-                  aria-label="Report creator"
-                >
-                  <Flag className="w-3.5 h-3.5" />
-                  Creator
-                </button>
-              </>
-            )}
-            <Link className="text-sm text-neutral-300 hover:text-white" href="/browse">
-              Back to Browse
-            </Link>
-          </div>
-        </header>
-
-        {reportNotice ? (
-          <div className="mb-6 rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">{reportNotice}</div>
-        ) : null}
-        {announce?.matureContent ? (
-          <div className="mb-6 rounded-xl border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
-            Mature-content label set by streamer. Viewer discretion is advised.
-          </div>
-        ) : null}
-
-        {pubkey && (
-          <div className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="text-sm text-neutral-200 space-y-1">
-              <div>
-                <span className="text-neutral-400">Viewers</span> <span className="font-mono">≈ {viewerCount}</span>
-                <span className="ml-2 text-xs text-neutral-500">presence (approx)</span>
-              </div>
-              <div className="text-xs text-neutral-500">
-                Host mode:{" "}
-                <span className="text-neutral-300">
-                  {hostMode === "host_only" ? "Host-Only" : `P2P Economy (T=${rebroadcastThreshold})`}
-                </span>
-                {hostMode === "p2p_economy" && (
-                  <span className="ml-2 text-neutral-500">
-                    active {activeViewerPubkeys.length} · queued {queuedViewerPubkeys.length}
-                  </span>
-                )}
-              </div>
-              {stakeRequiredAtomic && stakeFeeWaived && (
-                <div className="text-xs text-emerald-300">
-                  Stake waived for this viewer ({stakeWaiverReason ?? "allowlist"}).
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-400">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={presenceEnabled}
-                    onChange={(e) => social.updateSettings({ presenceEnabled: e.target.checked })}
-                    className="accent-blue-500"
-                  />
-                  Share presence
-                </label>
-                <label
-                  className={`flex items-center gap-2 select-none ${
-                    p2pAllowed ? "cursor-pointer" : "cursor-not-allowed opacity-60"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={p2pEnabled}
-                    onChange={(e) => social.updateSettings({ p2pAssistEnabled: e.target.checked })}
-                    className="accent-blue-500"
-                    disabled={!p2pAllowed}
-                  />
-                  P2P assist
-                </label>
-                {p2pBlockedReason && <span className="w-full text-[11px] text-neutral-500">{p2pBlockedReason}</span>}
-                {hostMode === "p2p_economy" && (
-                  <span className="w-full text-[11px] text-neutral-500">
-                    {queueStatusLabel}
-                  </span>
-                )}
-                {integritySnapshot && manifestSignerPubkey && (
-                  <span
-                    className={`font-mono ${
-                      integritySnapshot.lastTamper
-                        ? "text-red-300"
-                        : integritySnapshot.verifiedOk > 0
-                          ? "text-emerald-300"
-                          : "text-neutral-500"
-                    }`}
-                    title={
-                      integritySnapshot.lastTamper
-                        ? `Tamper detected for ${integritySnapshot.lastTamper.uri}`
-                        : !integritySnapshot.sha256Supported
-                          ? "SHA-256 unavailable in this browser context"
-                          : integritySnapshot.verifiedOk > 0
-                            ? "Segments verified"
-                            : "Waiting for manifests / first verified segment"
-                    }
-                  >
-                    integrity:
-                    {integritySnapshot.lastTamper
-                      ? " tamper"
-                      : !integritySnapshot.sha256Supported
-                        ? " unsupported"
-                        : integritySnapshot.verifiedOk > 0
-                          ? " verified"
-                          : " pending"}
-                  </span>
-                )}
-                {identity ? (
-                  <span
-                    className={`inline-flex min-w-[8.5rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums ${
-                      presenceStatus === "ok"
-                        ? "border-emerald-800/70 text-emerald-300"
-                        : presenceStatus === "sending"
-                          ? "border-blue-800/70 text-blue-300"
-                          : presenceStatus === "fail"
-                            ? "border-red-800/70 text-red-300"
-                            : "border-neutral-800 text-neutral-500"
-                    }`}
-                    title={
-                      presenceStatus === "ok" && lastSentAt
-                        ? `Last published ${new Date(lastSentAt).toLocaleTimeString()}`
-                        : undefined
-                    }
-                  >
-                    {presenceStatus === "sending"
-                      ? "publishing"
-                      : presenceStatus === "ok"
-                        ? "published"
-                        : presenceStatus === "fail"
-                          ? "retrying"
-                          : "idle"}
-                  </span>
-                ) : (
-                  <span className="text-neutral-500">Connect identity to publish.</span>
-                )}
-            </div>
-          </div>
-        )}
-
-        {showP2PPanel && (
-          <div className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="text-sm text-neutral-200">
-              <span className="text-neutral-400">P2P</span>{" "}
-              <span className="font-mono">
-                {p2pStats?.peersConnected ?? 0} peers / {Math.round((p2pStats?.cacheBytes ?? 0) / 1024)} KiB cache
-              </span>
-              <span className="ml-2 text-xs text-neutral-500 font-mono">
-                hit-rate {p2pHitRatePct === null ? "n/a" : `${p2pHitRatePct}%`} · contribution{" "}
-                {p2pContributionPct === null ? "n/a" : `${p2pContributionPct}%`}
-              </span>
-            </div>
-            <div className="text-xs text-neutral-400 font-mono">
-              in: {Math.round((p2pStats?.bytesFromPeers ?? 0) / 1024)} KiB · out:{" "}
-              {Math.round((p2pStats?.bytesToPeers ?? 0) / 1024)} KiB · hits: {p2pStats?.hitsFromPeers ?? 0}/
-              {p2pStats?.requestsToPeers ?? 0} · evictions: {p2pStats?.evictedPeers ?? 0}
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {playbackBlocked ? (
-              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-3">
-                <div className="text-sm font-semibold text-amber-200">Private stream access required</div>
-                <div className="text-sm text-amber-100/90">{playbackBlockedMessage ?? "Checking private-stream access…"}</div>
-                {playbackAccessState === "denied" && !viewerPubkey && (
-                  <div className="text-xs text-amber-200/80">
-                    Connect identity in dStream, then reload this watch page to request access.
-                  </div>
-                )}
-                {playbackAccessState === "error" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlaybackAccessRetryTick((value) => value + 1);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs text-amber-100"
-                  >
-                    Retry access check
-                  </button>
-                )}
-              </div>
-            ) : (
-              <Player
-                src={streamUrl}
-                fallbackSrc={isPlaybackLive ? fallbackUrl : null}
-                whepSrc={whepUrl}
-                p2pSwarm={p2pSwarm}
-                integrity={integritySession}
-                isLiveStream={isPlaybackLive && announce?.status !== "ended"}
-                showTimelineControls={vodArchiveEnabled}
-                captionTracks={captionTracks}
-                autoplayMuted={e2e ? true : social.settings.playbackAutoplayMuted}
-                playbackStateKey={playbackStateKey}
-                onReady={() => {
-                  if (!e2e || e2eSentRef.current.player) return;
-                  e2eSentRef.current.player = true;
-                  postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
-                }}
-              />
-            )}
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5">
-              <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold mb-2">About</div>
-              <p className="text-sm text-neutral-300 leading-relaxed">
-                {announce?.summary ??
-                  "This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available)."}
-              </p>
-              <div className="mt-4 text-xs text-neutral-500">
-                Playback URL: <span className="font-mono break-all">{streamUrl}</span>
-              </div>
-              {captionTracks.length > 0 && (
-                <div className="mt-2 text-xs text-neutral-500">
-                  Captions:{" "}
-                  <span className="text-neutral-300">
-                    {captionTracks.map((track) => `${track.label} (${track.lang})`).join(", ")}
-                  </span>
-                </div>
-              )}
-              {selectedVod ? (
-                <div className="mt-3 text-xs text-amber-300">
-                  Playing archived recording: <span className="font-mono text-amber-200">{selectedVod.name}</span>
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_22rem] md:gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6">
+          <div className="min-w-0 space-y-6">
+            <div className="h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]">
+              {playbackBlocked ? (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-3 h-full">
+                  <div className="text-sm font-semibold text-amber-200">Private stream access required</div>
+                  <div className="text-sm text-amber-100/90">{playbackBlockedMessage ?? "Checking private-stream access…"}</div>
+                  {playbackAccessState === "denied" && !viewerPubkey && (
+                    <div className="text-xs text-amber-200/80">
+                      Connect identity in dStream, then reload this watch page to request access.
+                    </div>
+                  )}
+                  {playbackAccessState === "error" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlaybackAccessRetryTick((value) => value + 1);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs text-amber-100"
+                    >
+                      Retry access check
+                    </button>
+                  )}
                 </div>
               ) : (
-                <div className="mt-3 text-xs text-emerald-300">Playing live stream path.</div>
+                <Player
+                  src={streamUrl}
+                  fallbackSrc={isPlaybackLive ? fallbackUrl : null}
+                  whepSrc={whepUrl}
+                  p2pSwarm={p2pSwarm}
+                  integrity={integritySession}
+                  isLiveStream={isPlaybackLive && announce?.status !== "ended"}
+                  showTimelineControls={vodArchiveEnabled}
+                  captionTracks={captionTracks}
+                  autoplayMuted={e2e ? true : social.settings.playbackAutoplayMuted}
+                  playbackStateKey={playbackStateKey}
+                  layoutMode="fill"
+                  auxMetaSlot={
+                    pubkey ? (
+                      <button
+                        type="button"
+                        onClick={() => social.toggleFavoriteStream(pubkey, streamId)}
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
+                        title={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite" : "Favorite"}
+                        aria-label={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite stream" : "Favorite stream"}
+                      >
+                        <Star
+                          className={`w-3.5 h-3.5 ${
+                            social.isFavoriteStream(pubkey, streamId) ? "fill-yellow-400 text-yellow-400" : "text-neutral-400"
+                          }`}
+                        />
+                      </button>
+                    ) : null
+                  }
+                  onReady={() => {
+                    if (!e2e || e2eSentRef.current.player) return;
+                    e2eSentRef.current.player = true;
+                    postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
+                  }}
+                />
               )}
             </div>
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-start">
+                <div className="text-left space-y-1">
+                  <h1 className="text-2xl font-bold">{announce?.title ?? "Live Stream"}</h1>
+                  {pubkey && (
+                    <div className="text-xs text-neutral-500 font-mono flex flex-wrap items-center gap-1.5">
+                      {social.getAlias(pubkey) && <span className="text-neutral-300">{social.getAlias(pubkey)}</span>}
+                      {social.getAlias(pubkey) && <span className="text-neutral-600"> · </span>}
+                      <button
+                        type="button"
+                        onClick={() => void copyIdentityDisplayValue()}
+                        className="text-neutral-400 hover:text-neutral-200 hover:underline underline-offset-2"
+                        title={identityDisplayValue}
+                      >
+                        {npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(pubkey, { head: 14, tail: 8 })}
+                      </button>
+                      <span>/ {streamId}</span>
+                      {identityCopyStatus === "copied" ? (
+                        <span className="text-emerald-300">Copied</span>
+                      ) : identityCopyStatus === "error" ? (
+                        <span className="text-red-300">Error</span>
+                      ) : null}
+                    </div>
+                  )}
+                  {selectedVod ? (
+                    <div className="text-xs text-amber-300">
+                      Playing archived recording: <span className="font-mono text-amber-200">{selectedVod.name}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-emerald-300">Playing live stream path.</div>
+                  )}
+                </div>
 
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+                <div>
+                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold mb-2">About</div>
+                  <p className="text-sm text-neutral-300 leading-relaxed">
+                    {announce?.summary ??
+                      "This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available)."}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                    <a
+                      href={streamUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200"
+                      title={streamUrl}
+                    >
+                      Playback URL
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => void copyPlaybackUrl()}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
+                      title={streamUrl}
+                      aria-label="Copy playback URL"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    {playbackUrlCopyStatus === "copied" ? (
+                      <span className="text-emerald-300">Copied</span>
+                    ) : playbackUrlCopyStatus === "error" ? (
+                      <span className="text-red-300">Error</span>
+                    ) : null}
+                  </div>
+                  {captionTracks.length > 0 && (
+                    <div className="mt-2 text-xs text-neutral-500">
+                      Captions:{" "}
+                      <span className="text-neutral-300">
+                        {captionTracks.map((track) => `${track.label} (${track.lang})`).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {reportNotice ? (
+                <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">
+                  {reportNotice}
+                </div>
+              ) : null}
+              {announce?.matureContent ? (
+                <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+                  Mature-content label set by streamer. Viewer discretion is advised.
+                </div>
+              ) : null}
+            </div>
+
+            {pubkey && (
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-3 space-y-3">
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <div className="text-xs text-neutral-500">
+                        Host mode:{" "}
+                        <span className="text-neutral-300">
+                          {hostMode === "host_only" ? "Host-Only" : `P2P Economy (T=${rebroadcastThreshold})`}
+                        </span>
+                        {hostMode === "p2p_economy" && (
+                          <span className="ml-2 text-neutral-500">
+                            active {activeViewerPubkeys.length} · queued {queuedViewerPubkeys.length}
+                          </span>
+                        )}
+                      </div>
+                      {hostMode === "p2p_economy" && <div className="text-[11px] text-neutral-500">{queueStatusLabel}</div>}
+                      {stakeRequiredAtomic && stakeFeeWaived && (
+                        <div className="text-xs text-emerald-300">
+                          Stake waived for this viewer ({stakeWaiverReason ?? "allowlist"}).
+                        </div>
+                      )}
+                    </div>
+                    {!vodArchiveEnabled && (
+                      <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-left lg:text-right max-w-md space-y-1">
+                        <div className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider font-bold">
+                          Archived Broadcasts (VOD)
+                        </div>
+                        <div className="text-[11px] text-neutral-500">
+                          Visibility:{" "}
+                          <span className={vodVisibility === "private" ? "text-amber-300" : "text-emerald-300"}>
+                            {vodVisibility === "private" ? "Private (owner + allowlist)" : "Public"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-neutral-500">
+                          Broadcaster disabled VOD archive and DVR controls for this stream.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportError(null);
+                        setReportTarget({
+                          targetType: "stream",
+                          targetPubkey: pubkey,
+                          targetStreamId: streamId,
+                          summary: `Report stream ${announce?.title ?? streamId}`
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+                      title="Report stream"
+                      aria-label="Report stream"
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      Stream
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const npubLabel = npub ?? pubkey;
+                        setReportError(null);
+                        setReportTarget({
+                          targetType: "user",
+                          targetPubkey: pubkey,
+                          targetStreamId: streamId,
+                          summary: `Report creator ${shortenText(npubLabel, { head: 14, tail: 8 })}`
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+                      title="Report creator"
+                      aria-label="Report creator"
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      Creator
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-neutral-800 pt-2 text-xs text-neutral-400">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={presenceEnabled}
+                      onChange={(e) => social.updateSettings({ presenceEnabled: e.target.checked })}
+                      className="accent-blue-500"
+                    />
+                    Share presence
+                  </label>
+                  <label
+                    className={`flex items-center gap-2 select-none ${
+                      p2pAllowed ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={p2pEnabled}
+                      onChange={(e) => social.updateSettings({ p2pAssistEnabled: e.target.checked })}
+                      className="accent-blue-500"
+                      disabled={!p2pAllowed}
+                    />
+                    P2P assist
+                  </label>
+                  {identity ? (
+                    <div
+                      className={`inline-flex min-w-[8.5rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums ${
+                        presenceStatus === "ok"
+                          ? "border-emerald-800/70 text-emerald-300"
+                          : presenceStatus === "sending"
+                            ? "border-blue-800/70 text-blue-300"
+                            : presenceStatus === "fail"
+                              ? "border-red-800/70 text-red-300"
+                              : "border-neutral-800 text-neutral-500"
+                      }`}
+                      title={
+                        presenceStatus === "ok" && lastSentAt
+                          ? `Last published ${new Date(lastSentAt).toLocaleTimeString()}`
+                          : undefined
+                      }
+                    >
+                      {presenceStatus === "sending"
+                        ? "publishing"
+                        : presenceStatus === "ok"
+                          ? "published"
+                          : presenceStatus === "fail"
+                            ? "retrying"
+                            : "idle"}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-neutral-500">Connect identity to publish.</div>
+                  )}
+                  {integritySnapshot && manifestSignerPubkey && (
+                    <div
+                      className={`text-[11px] font-mono ${
+                        integritySnapshot.lastTamper
+                          ? "text-red-300"
+                          : integritySnapshot.verifiedOk > 0
+                            ? "text-emerald-300"
+                            : "text-neutral-500"
+                      }`}
+                      title={
+                        integritySnapshot.lastTamper
+                          ? `Tamper detected for ${integritySnapshot.lastTamper.uri}`
+                          : !integritySnapshot.sha256Supported
+                            ? "SHA-256 unavailable in this browser context"
+                            : integritySnapshot.verifiedOk > 0
+                              ? "Segments verified"
+                              : "Waiting for manifests / first verified segment"
+                      }
+                    >
+                      integrity:
+                      {integritySnapshot.lastTamper
+                        ? " tamper"
+                        : !integritySnapshot.sha256Supported
+                          ? " unsupported"
+                          : integritySnapshot.verifiedOk > 0
+                            ? " verified"
+                            : " pending"}
+                    </div>
+                  )}
+                  {p2pBlockedReason && <div className="w-full text-[11px] text-neutral-500">{p2pBlockedReason}</div>}
+                </div>
+
+                {showP2PPanel && (
+                  <div className="border-t border-neutral-800 pt-2 text-xs text-neutral-400 space-y-1">
+                    <div className="text-neutral-200">
+                      <span className="text-neutral-400">P2P</span>{" "}
+                      <span className="font-mono">
+                        {p2pStats?.peersConnected ?? 0} peers / {Math.round((p2pStats?.cacheBytes ?? 0) / 1024)} KiB cache
+                      </span>
+                      <span className="ml-2 text-neutral-500 font-mono">
+                        hit-rate {p2pHitRatePct === null ? "n/a" : `${p2pHitRatePct}%`} · contribution{" "}
+                        {p2pContributionPct === null ? "n/a" : `${p2pContributionPct}%`}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-neutral-500 font-mono">
+                      in: {Math.round((p2pStats?.bytesFromPeers ?? 0) / 1024)} KiB · out:{" "}
+                      {Math.round((p2pStats?.bytesToPeers ?? 0) / 1024)} KiB · hits: {p2pStats?.hitsFromPeers ?? 0}/
+                      {p2pStats?.requestsToPeers ?? 0} · evictions: {p2pStats?.evictedPeers ?? 0}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {vodArchiveEnabled && (
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Archived Broadcasts (VOD)</div>
                 {!isPlaybackLive && (
@@ -1653,11 +1745,7 @@ export default function WatchPage() {
                 </span>
               </div>
 
-              {!vodArchiveEnabled ? (
-                <div className="text-xs text-neutral-500">
-                  Broadcaster disabled VOD archive and DVR controls for this stream.
-                </div>
-              ) : vodLoading ? (
+              {vodLoading ? (
                 <div className="text-xs text-neutral-500">Loading archive list…</div>
               ) : vodError ? (
                 <div className="text-xs text-red-300">{vodError}</div>
@@ -1705,7 +1793,8 @@ export default function WatchPage() {
                   })}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {payoutAssets.length > 0 && (
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
@@ -1996,11 +2085,14 @@ export default function WatchPage() {
                       </div>
                       <div className="space-y-3">
                         {methods.map((method, index) => {
-                          const key = `${rail.id}:${method.asset}:${method.address}:${method.network ?? ""}:${index}`;
+                          const key = `${rail.id}:${method.asset}:${method.address}:${method.network ?? ""}:${method.amount ?? ""}:${index}`;
                           const uri = buildPaymentUri(method);
                           const preferredWalletId = social.settings.paymentDefaults.preferredWalletByAsset[method.asset];
                           const preferredWallet = getWalletIntegrationById(preferredWalletId);
                           const wallets = getWalletIntegrationsForAsset(method.asset);
+                          const amountText = method.amount
+                            ? `${method.amount} ${method.asset === "btc" && rail.id === "lightning" ? "sats" : PAYMENT_ASSET_META[method.asset].symbol}`
+                            : null;
                           return (
                             <div key={key} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
                               <div className="flex items-center justify-between gap-3">
@@ -2016,7 +2108,9 @@ export default function WatchPage() {
                               </div>
                               <div className="text-sm text-neutral-200 font-mono break-all">{method.address}</div>
                               <div className="text-xs text-neutral-500">
-                                {method.network ? `Network: ${method.network}` : "Network: default"} {method.label ? `· ${method.label}` : ""}
+                                {method.network ? `Network: ${method.network}` : "Network: default"}
+                                {method.label ? ` · ${method.label}` : ""}
+                                {amountText ? ` · amount: ${amountText}` : ""}
                               </div>
                               <div className="flex flex-wrap items-center gap-2 text-xs">
                                 {uri ? (
@@ -2050,7 +2144,7 @@ export default function WatchPage() {
             )}
           </div>
 
-          <div className="h-[70vh] lg:h-auto">
+          <div className="h-[23rem] sm:h-[29rem] md:sticky md:top-14 md:h-[calc(100dvh-6rem)] md:min-h-[26rem] md:self-start">
             {playbackBlocked ? (
               <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-400">
                 Chat is available after private-stream access is granted.
@@ -2059,6 +2153,8 @@ export default function WatchPage() {
               <ChatBox
                 streamPubkey={pubkey ?? ""}
                 streamId={streamId}
+                viewerCount={viewerCount}
+                className="h-full"
                 slowModeSec={chatSlowModeSec}
                 subscriberOnly={chatSubscriberOnly}
                 followerOnly={chatFollowerOnly}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
 import type { P2PSwarm } from "@/lib/p2p/swarm";
@@ -21,6 +21,8 @@ interface PlayerProps {
   showAuxControls?: boolean;
   showNativeControls?: boolean;
   playbackStateKey?: string;
+  layoutMode?: "aspect" | "fill";
+  auxMetaSlot?: ReactNode;
   captionTracks?: Array<{
     src: string;
     lang: string;
@@ -105,6 +107,8 @@ export function Player({
   showAuxControls = true,
   showNativeControls = true,
   playbackStateKey,
+  layoutMode = "aspect",
+  auxMetaSlot,
   captionTracks
 }: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -627,7 +631,6 @@ export function Player({
         if (cancelled) return;
         if (mode === "whep") return;
         if (attemptedWhep) setNote("Low-latency unavailable (falling back to HLS).");
-        else if (endpoint) setNote("Stability mode (HLS preferred). Enable low-latency mode to try WHEP.");
         startHls(primarySrc);
       })();
     }
@@ -708,6 +711,10 @@ export function Player({
   const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 1.5;
   const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 1.5;
   const showTapForSound = !error && volume === 0;
+  const lowLatencyHint =
+    (whepSrc ?? "").trim().length > 0 && playbackMode === "hls"
+      ? "Stability mode (HLS preferred). Enable low-latency mode to try WHEP."
+      : undefined;
 
   const togglePip = async () => {
     const video = videoRef.current;
@@ -753,15 +760,19 @@ export function Player({
   };
 
   return (
-    <div className="relative w-full">
+    <div className={`relative w-full ${layoutMode === "fill" ? "flex h-full min-h-[24rem] flex-col" : ""}`}>
       <div
         data-testid="player-status"
-        className="pointer-events-none absolute -top-4 right-2 px-2 py-1 rounded bg-black/60 text-xs text-neutral-200 border border-white/10"
+        className="pointer-events-none absolute top-2 right-2 z-20 px-2 py-1 rounded bg-black/60 text-xs text-neutral-200 border border-white/10"
       >
         {error ? "Error" : playbackMode === "whep" ? `${status} • Low latency` : status}
       </div>
 
-      <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-800">
+      <div
+        className={`group/player relative w-full bg-black rounded-2xl overflow-hidden border border-neutral-800 ${
+          layoutMode === "fill" ? "min-h-[16rem] flex-1" : "aspect-video"
+        }`}
+      >
         <video ref={videoRef} className="w-full h-full" playsInline controls={showNativeControls} autoPlay muted={volume === 0}>
           {captionTrackList.map((track, index) => (
             <track
@@ -815,6 +826,95 @@ export function Player({
           >
             Tap for sound
           </button>
+        )}
+
+        {showAuxControls && !error && !needsClick && (
+          <div
+            className={`absolute bottom-3 left-3 right-3 z-20 transition-opacity duration-150 ${
+              isMobilePlayback
+                ? "opacity-100 pointer-events-auto"
+                : "opacity-0 pointer-events-none group-hover/player:opacity-100 group-hover/player:pointer-events-auto group-focus-within/player:opacity-100 group-focus-within/player:pointer-events-auto"
+            }`}
+          >
+            <div className="rounded-xl border border-neutral-700/80 bg-black/75 backdrop-blur px-3 py-2 text-xs text-neutral-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex items-center gap-2">
+                  <span className="text-neutral-400">Volume</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="accent-blue-500"
+                    aria-label="Volume"
+                  />
+                  <span className="font-mono text-neutral-300 w-8 text-right">{Math.round(volume * 100)}%</span>
+                </label>
+
+                <label className="inline-flex items-center gap-2" title={lowLatencyHint}>
+                  <input
+                    type="checkbox"
+                    checked={lowLatencyEnabled}
+                    onChange={(e) => setLowLatencyEnabled(e.target.checked)}
+                    className="accent-blue-500"
+                    disabled={playbackMode !== "hls"}
+                  />
+                  <span>Low-latency mode</span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => void togglePip()}
+                  disabled={!canTogglePip}
+                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 disabled:opacity-50"
+                >
+                  {isPip ? "Exit PiP" : "PiP"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void toggleFullscreen()}
+                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700"
+                >
+                  {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                </button>
+
+                {isLiveStream && showTimeline && (
+                  <button
+                    type="button"
+                    onClick={jumpToLive}
+                    disabled={!canJumpToLive}
+                    className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 disabled:opacity-50"
+                  >
+                    Back to Live
+                  </button>
+                )}
+
+                <label className="inline-flex items-center gap-2">
+                  <span className="text-neutral-400">Quality</span>
+                  <select
+                    value={String(selectedQuality)}
+                    onChange={(e) => setSelectedQuality(Number(e.target.value))}
+                    className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-xs"
+                    disabled={playbackMode !== "hls"}
+                    title={qualityIndicator}
+                  >
+                    <option value="-1">Auto</option>
+                    {qualityOptions.map((q) => (
+                      <option key={q.value} value={q.value}>
+                        {q.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {captionTrackList.length > 0 && <span className="font-mono text-neutral-400">Captions: {captionTrackList.length}</span>}
+                {auxMetaSlot ? <span className="ml-1 pl-2 border-l border-neutral-700">{auxMetaSlot}</span> : null}
+              </div>
+            </div>
+          </div>
         )}
 
         {error && (
@@ -885,83 +985,6 @@ export function Player({
         </div>
       )}
 
-      {showAuxControls ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 text-xs text-neutral-300">
-          <label className="inline-flex items-center gap-2">
-            <span className="text-neutral-500">Volume</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={volume}
-              onChange={(e) => setVolume(Number(e.target.value))}
-              className="accent-blue-500"
-              aria-label="Volume"
-            />
-            <span className="font-mono text-neutral-400 w-8 text-right">{Math.round(volume * 100)}%</span>
-          </label>
-
-          <label className="inline-flex items-center gap-2">
-            <span className="text-neutral-500">Quality</span>
-            <select
-              value={String(selectedQuality)}
-              onChange={(e) => setSelectedQuality(Number(e.target.value))}
-              className="bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1 text-xs"
-              disabled={playbackMode !== "hls"}
-            >
-              <option value="-1">Auto</option>
-              {qualityOptions.map((q) => (
-                <option key={q.value} value={q.value}>
-                  {q.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={lowLatencyEnabled}
-              onChange={(e) => setLowLatencyEnabled(e.target.checked)}
-              className="accent-blue-500"
-              disabled={playbackMode !== "hls"}
-            />
-            <span>Low-latency mode</span>
-          </label>
-
-          <button
-            type="button"
-            onClick={() => void togglePip()}
-            disabled={!canTogglePip}
-            className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
-          >
-            {isPip ? "Exit PiP" : "PiP"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void toggleFullscreen()}
-            className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800"
-          >
-            {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-          </button>
-
-          {isLiveStream && showTimeline && (
-            <button
-              type="button"
-              onClick={jumpToLive}
-              disabled={!canJumpToLive}
-              className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 disabled:opacity-50"
-            >
-              Back to Live
-            </button>
-          )}
-
-          <span className="font-mono text-neutral-500">Quality: {qualityIndicator}</span>
-          {captionTrackList.length > 0 && <span className="font-mono text-neutral-500">Captions: {captionTrackList.length}</span>}
-        </div>
-      ) : null}
     </div>
   );
 }

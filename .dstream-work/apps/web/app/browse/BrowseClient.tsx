@@ -37,6 +37,8 @@ export default function BrowseClient() {
   const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const searchParams = useSearchParams();
   const guildQueryRaw = searchParams.get("guild");
+  const searchQuery = (searchParams.get("q") ?? "").trim();
+  const normalizedSearchQuery = searchQuery.toLowerCase();
   const guildQuery = useMemo(() => parseGuildQuery(guildQueryRaw), [guildQueryRaw]);
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
   const showMatureContent = social.settings.showMatureContent;
@@ -99,9 +101,17 @@ export default function BrowseClient() {
       if (aLive === bLive) return 0;
       return aLive ? -1 : 1;
     });
-    if (!curatedOnly) return liveFirst;
-    return liveFirst.filter((s) => curatedKeys.has(makeStreamKey(s.pubkey, s.streamId)));
-  }, [curatedKeys, curatedOnly, dedupedStreams, favoritesOnly, social]);
+    const curatedFiltered = !curatedOnly ? liveFirst : liveFirst.filter((s) => curatedKeys.has(makeStreamKey(s.pubkey, s.streamId)));
+    if (!normalizedSearchQuery) return curatedFiltered;
+    return curatedFiltered.filter((stream) => {
+      const alias = social.getAlias(stream.pubkey);
+      const haystack = [stream.title, stream.summary, stream.streamId, stream.pubkey, alias, ...(stream.topics ?? [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedSearchQuery);
+    });
+  }, [curatedKeys, curatedOnly, dedupedStreams, favoritesOnly, normalizedSearchQuery, social]);
   const showLoadingSkeleton = isLoading && !hasSettledOnce;
   const showRefreshingNotice = isLoading && visibleStreams.length > 0;
 
@@ -172,9 +182,6 @@ export default function BrowseClient() {
                 {visibleStreams.length} stream{visibleStreams.length === 1 ? "" : "s"}
               </div>
             </div>
-            <Link className="ui-pill" href="/guilds">
-              Guilds
-            </Link>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="ui-pill" data-active={favoritesOnly} onClick={() => setFavoritesOnly((prev) => !prev)}>
@@ -186,6 +193,9 @@ export default function BrowseClient() {
             <button type="button" className="ui-pill" data-active={curatedOnly} onClick={() => setCuratedOnly((prev) => !prev)}>
               {guildQuery ? "Guild Curated" : "Curated"}
             </button>
+            <Link className="ui-pill" href="/guilds">
+              Guilds
+            </Link>
             <button
               type="button"
               className="ui-pill"
@@ -202,6 +212,7 @@ export default function BrowseClient() {
         ) : null}
 
         {curatedInfo}
+        {searchQuery ? <div className="text-xs text-neutral-500">Search: “{searchQuery}”</div> : null}
         {showRefreshingNotice ? <div className="text-xs text-neutral-500">Refreshing stream list…</div> : null}
 
         {showLoadingSkeleton ? (

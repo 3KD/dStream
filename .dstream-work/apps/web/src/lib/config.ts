@@ -69,13 +69,15 @@ function getRelayOverrideFromStorage(): string[] {
 }
 
 export function getNostrRelays(): string[] {
-  const override = getRelayOverrideFromStorage();
-  if (override.length > 0) return override;
-
   const configuredRelays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
-  if (configuredRelays.length === 0) return DEFAULT_NOSTR_RELAYS;
-
-  return uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  const override = getRelayOverrideFromStorage();
+  if (override.length > 0) {
+    return uniq([...override, ...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  }
+  if (configuredRelays.length > 0) {
+    return uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  }
+  return DEFAULT_NOSTR_RELAYS;
 }
 
 export function getNip05Policy(): Nip05Policy {

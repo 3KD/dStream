@@ -44,7 +44,84 @@ function normalizePaymentAsset(input: string | undefined): StreamPaymentAsset | 
   return STREAM_PAYMENT_ASSETS.includes(value as StreamPaymentAsset) ? (value as StreamPaymentAsset) : undefined;
 }
 
-function isValidPaymentAddress(asset: StreamPaymentAsset, addressRaw: string): boolean {
+const BTC_ONCHAIN_RE = /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,87}$/;
+const BTC_LIGHTNING_INVOICE_RE = /^(lnbc|lntb|lnbcrt|lnsb|lntbs)[0-9a-z]+$/i;
+const BTC_LIGHTNING_LNURL_RE = /^lnurl[0-9a-z]+$/i;
+const BTC_LIGHTNING_ADDRESS_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+const PAYMENT_AMOUNT_MAX_DECIMALS: Record<StreamPaymentAsset, number> = {
+  xmr: 12,
+  eth: 18,
+  btc: 8,
+  usdt: 8,
+  xrp: 6,
+  usdc: 8,
+  sol: 9,
+  trx: 6,
+  doge: 8,
+  bch: 8,
+  ada: 6,
+  pepe: 18
+};
+
+function stripScheme(input: string, scheme: string): string {
+  const prefix = `${scheme}:`;
+  if (input.slice(0, prefix.length).toLowerCase() !== prefix) return input;
+  return input.slice(prefix.length);
+}
+
+function isBtcLightningNetwork(input: string | undefined): boolean {
+  const value = (input ?? "").trim().toLowerCase();
+  return value === "lightning" || value === "ln" || value === "lnurl" || value === "bolt11";
+}
+
+function isBtcLightningPayload(input: string): boolean {
+  if (!input) return false;
+  return BTC_LIGHTNING_INVOICE_RE.test(input) || BTC_LIGHTNING_LNURL_RE.test(input) || BTC_LIGHTNING_ADDRESS_RE.test(input);
+}
+
+function normalizeIntegerAmount(inputRaw: string): string | null {
+  const input = inputRaw.trim();
+  if (!/^\d+$/.test(input)) return null;
+  const normalized = input.replace(/^0+(?=\d)/, "");
+  if (normalized === "0") return null;
+  return normalized;
+}
+
+function normalizeDecimalAmount(inputRaw: string, maxDecimals: number): string | null {
+  const input = inputRaw.trim();
+  const match = input.match(/^(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+  const wholeRaw = match[1] ?? "0";
+  const fracRaw = match[2] ?? "";
+  if (fracRaw.length > maxDecimals) return null;
+  if (/^0+$/.test(wholeRaw) && (!fracRaw || /^0+$/.test(fracRaw))) return null;
+  const whole = wholeRaw.replace(/^0+(?=\d)/, "");
+  const frac = fracRaw.replace(/0+$/, "");
+  if (!frac) return whole;
+  return `${whole}.${frac}`;
+}
+
+function normalizePaymentAmount(
+  asset: StreamPaymentAsset,
+  amountRaw: string | undefined,
+  networkRaw: string | undefined,
+  addressRaw: string
+): string | undefined | null {
+  const value = (amountRaw ?? "").trim();
+  if (!value) return undefined;
+
+  if (asset === "btc") {
+    const lightningPayload = stripScheme(addressRaw, "lightning").trim();
+    if (isBtcLightningNetwork(networkRaw) || isBtcLightningPayload(lightningPayload)) {
+      return normalizeIntegerAmount(value);
+    }
+  }
+
+  const maxDecimals = PAYMENT_AMOUNT_MAX_DECIMALS[asset] ?? 8;
+  return normalizeDecimalAmount(value, maxDecimals);
+}
+
+function isValidPaymentAddress(asset: StreamPaymentAsset, addressRaw: string, networkRaw?: string): boolean {
   const address = addressRaw.trim();
   if (!address) return false;
 
@@ -56,8 +133,13 @@ function isValidPaymentAddress(asset: StreamPaymentAsset, addressRaw: string): b
     case "usdc":
     case "pepe":
       return /^0x[a-fA-F0-9]{40}$/.test(address);
-    case "btc":
-      return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,87}$/.test(address);
+    case "btc": {
+      const lightningPayload = stripScheme(address, "lightning").trim();
+      if (isBtcLightningNetwork(networkRaw) || isBtcLightningPayload(lightningPayload)) {
+        return isBtcLightningPayload(lightningPayload);
+      }
+      return BTC_ONCHAIN_RE.test(address);
+    }
     case "xrp":
       return /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address);
     case "sol":
@@ -79,14 +161,22 @@ function normalizePaymentMethod(input: StreamPaymentMethod): StreamPaymentMethod
   const asset = normalizePaymentAsset(input.asset);
   const address = (input.address ?? "").trim();
   if (!asset || !address) return null;
-  if (!isValidPaymentAddress(asset, address)) return null;
+  if (!isValidPaymentAddress(asset, address, input.network)) return null;
+  const amount = normalizePaymentAmount(asset, input.amount, input.network, address);
+  if ((input.amount ?? "").trim() && amount === null) return null;
   const network = (input.network ?? "").trim() || undefined;
   const label = (input.label ?? "").trim() || undefined;
-  return { asset, address, network, label };
+  return {
+    asset,
+    address,
+    network,
+    label,
+    ...(amount ? { amount } : {})
+  };
 }
 
 function paymentMethodKey(input: StreamPaymentMethod): string {
-  return `${input.asset}|${input.address}|${input.network ?? ""}|${input.label ?? ""}`;
+  return `${input.asset}|${input.address}|${input.network ?? ""}|${input.label ?? ""}|${input.amount ?? ""}`;
 }
 
 function normalizePaymentMethods(input: StreamPaymentMethod[]): StreamPaymentMethod[] {
@@ -219,7 +309,8 @@ function parsePaymentTag(tag: string[]): StreamPaymentMethod | null {
   if (!asset || !address) return null;
   const network = (tag[3] ?? "").trim() || undefined;
   const label = (tag[4] ?? "").trim() || undefined;
-  return { asset, address, network, label };
+  const amount = (tag[5] ?? "").trim() || undefined;
+  return { asset, address, network, label, amount };
 }
 
 export interface BuildStreamAnnounceInput {
@@ -272,7 +363,7 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   const legacyXmr = normalizedPayments.find((method) => method.asset === "xmr")?.address;
   if (legacyXmr) tags.push(["xmr", legacyXmr]);
   for (const method of normalizedPayments) {
-    tags.push(["payment", method.asset, method.address, method.network ?? "", method.label ?? ""]);
+    tags.push(["payment", method.asset, method.address, method.network ?? "", method.label ?? "", method.amount ?? ""]);
   }
 
   if (input.hostMode) tags.push(["host_mode", input.hostMode]);

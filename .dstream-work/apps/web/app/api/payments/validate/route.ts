@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
     asset: normalizePaymentAsset(row?.asset) ?? "eth",
     address: typeof row?.address === "string" ? row.address : "",
     network: typeof row?.network === "string" ? row.network : "",
-    label: typeof row?.label === "string" ? row.label : ""
+    label: typeof row?.label === "string" ? row.label : "",
+    amount: typeof row?.amount === "string" ? row.amount : ""
   }));
 
   const result = validatePaymentMethodDrafts(drafts);

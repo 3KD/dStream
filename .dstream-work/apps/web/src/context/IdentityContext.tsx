@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { finalizeEvent, generateSecretKey, getPublicKey, nip04, nip19, type Event as NostrToolsEvent } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@/lib/encoding";
 
@@ -170,6 +170,16 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     locals: {}
   });
   const [isLoading, setIsLoading] = useState(true);
+  const storeRef = useRef(store);
+
+  const persistStore = useCallback((nextStore: IdentityStoreV2) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(nextStore));
+      localStorage.removeItem(STORAGE_KEY_V1);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -216,13 +226,28 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(store));
-      localStorage.removeItem(STORAGE_KEY_V1);
-    } catch {
-      // ignore
-    }
-  }, [isLoading, store]);
+    storeRef.current = store;
+    persistStore(store);
+  }, [isLoading, persistStore, store]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const flushNow = () => persistStore(storeRef.current);
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      flushNow();
+    };
+
+    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", flushNow);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", flushNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isLoading, persistStore]);
 
   const identity = useMemo<Identity | null>(() => {
     if (!store.active) return null;

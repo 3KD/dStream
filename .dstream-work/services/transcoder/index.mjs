@@ -7,9 +7,9 @@ const SOURCE_HLS_BASE = (process.env.TRANSCODER_SOURCE_HLS_BASE || "http://media
 const OUTPUT_RTMP_BASE = (process.env.TRANSCODER_OUTPUT_RTMP_BASE || "rtmp://mediamtx:1935").trim().replace(/\/$/, "");
 const POLL_MS = Math.max(500, Number(process.env.TRANSCODER_POLL_MS || "2500"));
 const STALE_MS = Math.max(3000, Number(process.env.TRANSCODER_STALE_MS || "12000"));
-const MAX_JOBS = Math.max(1, Number(process.env.TRANSCODER_MAX_STREAMS || "24"));
+const MAX_JOBS = Math.max(1, Number(process.env.TRANSCODER_MAX_STREAMS || "6"));
 const PROFILE_RAW =
-  process.env.TRANSCODER_PROFILES || "720p:1280:720:2500k:128k,480p:854:480:1200k:96k,360p:640:360:700k:64k";
+  process.env.TRANSCODER_PROFILES || "360p:640:360:700k:64k";
 const RENDITION_SUFFIX = /__r([0-9]{3,4}p)$/;
 
 function parseProfiles(raw) {

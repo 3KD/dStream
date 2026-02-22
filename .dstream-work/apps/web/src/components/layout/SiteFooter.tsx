@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { BookOpenText, ExternalLink, Heart, Network, ShieldCheck, Sparkles } from "lucide-react";
-import { SupportXmrAddress } from "@/components/layout/SupportXmrAddress";
+import { SupportAddressCopyChip } from "@/components/layout/SupportXmrAddress";
 import { getSupportLinks } from "@/lib/support";
 
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? "").trim();
+const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
+const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
+const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
 const supportLinks = getSupportLinks();
 const protocolLinks = [
   { href: "/whitepaper", label: "Whitepaper" },
@@ -90,7 +93,10 @@ export function SiteFooter() {
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
-            {supportXmrAddress && <SupportXmrAddress address={supportXmrAddress} />}
+            {supportXmrAddress && <SupportAddressCopyChip label="XMR" address={supportXmrAddress} ariaLabel="Copy Monero support address" />}
+            {supportBtcAddress && <SupportAddressCopyChip label="BTC" address={supportBtcAddress} ariaLabel="Copy Bitcoin support address" />}
+            {supportEthAddress && <SupportAddressCopyChip label="ETH" address={supportEthAddress} ariaLabel="Copy Ethereum support address" />}
+            {supportTrxAddress && <SupportAddressCopyChip label="TRX" address={supportTrxAddress} ariaLabel="Copy TRON support address" />}
             <div className="text-[11px] text-neutral-500">Wallet plugin setup: Settings → Wallet Integrations</div>
             <Link href="/community-guidelines" className="text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors">
               Report abuse or policy violations

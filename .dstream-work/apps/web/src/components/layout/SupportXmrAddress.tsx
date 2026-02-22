@@ -23,7 +23,15 @@ async function copyText(text: string) {
   document.body.removeChild(input);
 }
 
-export function SupportXmrAddress({ address }: { address: string }) {
+export function SupportAddressCopyChip({
+  label,
+  address,
+  ariaLabel
+}: {
+  label: string;
+  address: string;
+  ariaLabel?: string;
+}) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const onCopy = useCallback(async () => {
@@ -39,17 +47,21 @@ export function SupportXmrAddress({ address }: { address: string }) {
 
   return (
     <div className="text-xs text-neutral-400 font-mono">
-      <span className="mr-2">XMR:</span>
+      <span className="mr-2">{label}:</span>
       <button
         type="button"
         onClick={() => void onCopy()}
         className="inline-flex items-center gap-2 rounded border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-neutral-300 hover:text-white transition-colors"
         title={address}
-        aria-label="Copy Monero support address"
+        aria-label={ariaLabel ?? `Copy ${label} support address`}
       >
         <span>{shortAddress(address)}</span>
         <span className="text-[10px] text-neutral-500">{copyState === "copied" ? "copied" : copyState === "failed" ? "failed" : "copy"}</span>
       </button>
     </div>
   );
+}
+
+export function SupportXmrAddress({ address }: { address: string }) {
+  return <SupportAddressCopyChip label="XMR" address={address} ariaLabel="Copy Monero support address" />;
 }

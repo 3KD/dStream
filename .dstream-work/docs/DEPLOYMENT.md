@@ -29,6 +29,10 @@ See `.env.example`. Quick reference:
 - `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`: ICE server URLs (CSV or JSON array). For authenticated TURN, use JSON objects with `urls`, `username`, `credential`.
 - `NEXT_PUBLIC_NIP05_POLICY`: `off|badge|require` policy for NIP-05 UI enforcement.
 - `NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`: optional platform support donation address shown on `/donate`.
+- `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`: optional platform BTC address shown on `/donate` and footer support chips.
+- `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`: optional Lightning destination (`bolt11`, `lnurl`, or `name@domain`) shown on `/donate`.
+- `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`: optional platform ETH address shown on `/donate` and footer support chips.
+- `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`: optional platform TRX address shown on `/donate` and footer support chips.
 
 **TURN (bundled compose service)**
 - `TURN_REALM`: TURN realm (default `dstream.stream`).

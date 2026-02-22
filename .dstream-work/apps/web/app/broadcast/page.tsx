@@ -12,7 +12,7 @@ import { WhipClient } from "@/lib/whip";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
-import { getPaymentRailForAsset } from "@/lib/payments/rails";
+import { getPaymentRailForMethod } from "@/lib/payments/rails";
 import {
   createPaymentMethodDraft,
   paymentMethodToDraft,
@@ -171,10 +171,9 @@ type CaptureResolutionPreset = "source" | "1080p" | "720p" | "480p";
 type EncoderGuide = "obs" | "streamlabs" | "vmix" | "xsplit" | "prism";
 
 const AUTO_LADDER_PROFILES: LadderProfile[] = [
-  { id: "720p", width: 1280, height: 720, bandwidth: 2_500_000 },
-  { id: "480p", width: 854, height: 480, bandwidth: 1_200_000 },
   { id: "360p", width: 640, height: 360, bandwidth: 700_000 }
 ];
+const DEFAULT_BROADCAST_MAX_BITRATE_KBPS = 1000;
 
 const CAPTURE_RESOLUTION_PRESETS: Record<Exclude<CaptureResolutionPreset, "source">, { width: number; height: number }> = {
   "1080p": { width: 1920, height: 1080 },
@@ -217,7 +216,7 @@ export default function BroadcastPage() {
   const [stakeNote, setStakeNote] = useState("");
   const [captionLines, setCaptionLines] = useState("");
   const [renditionLines, setRenditionLines] = useState("");
-  const [autoLadder, setAutoLadder] = useState(true);
+  const [autoLadder, setAutoLadder] = useState(false);
   const [manifestSignerPubkey, setManifestSignerPubkey] = useState<string | null>(null);
   const [topicsCsv, setTopicsCsv] = useState("");
   const [hostMode, setHostMode] = useState<StreamHostMode>("p2p_economy");
@@ -240,9 +239,9 @@ export default function BroadcastPage() {
   const [audioDeviceId, setAudioDeviceId] = useState<string>("");
   const [sourceMode, setSourceMode] = useState<SourceMode>("camera");
   const [captureResolution, setCaptureResolution] = useState<CaptureResolutionPreset>("source");
-  const [bitratePreset, setBitratePreset] = useState<"custom" | "low" | "medium" | "high">("custom");
+  const [bitratePreset, setBitratePreset] = useState<"custom" | "low" | "medium" | "high">("low");
   const [includeAudio, setIncludeAudio] = useState(true);
-  const [videoMaxBitrateKbps, setVideoMaxBitrateKbps] = useState("");
+  const [videoMaxBitrateKbps, setVideoMaxBitrateKbps] = useState(String(DEFAULT_BROADCAST_MAX_BITRATE_KBPS));
   const [videoMaxFps, setVideoMaxFps] = useState("");
   const [autoReconnectEnabled, setAutoReconnectEnabled] = useState(true);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -434,7 +433,8 @@ export default function BroadcastPage() {
                 asset,
                 address: typeof row.address === "string" ? row.address : "",
                 network: typeof row.network === "string" ? row.network : "",
-                label: typeof row.label === "string" ? row.label : ""
+                label: typeof row.label === "string" ? row.label : "",
+                amount: typeof row.amount === "string" ? row.amount : ""
               } satisfies PaymentMethodDraft;
             })
             .filter((row: PaymentMethodDraft | null): row is PaymentMethodDraft => !!row)
@@ -626,6 +626,10 @@ export default function BroadcastPage() {
     return stakeAtomic.toString();
   }, [stakeAtomic]);
   const videoMaxBitrateParsed = useMemo(() => parsePositiveInt(videoMaxBitrateKbps), [videoMaxBitrateKbps]);
+  const effectiveVideoMaxBitrateKbps = useMemo(
+    () => videoMaxBitrateParsed ?? DEFAULT_BROADCAST_MAX_BITRATE_KBPS,
+    [videoMaxBitrateParsed]
+  );
   const videoMaxFpsParsed = useMemo(() => parsePositiveInt(videoMaxFps), [videoMaxFps]);
   const chatSlowModeSecParsed = useMemo(() => parsePositiveInt(chatSlowModeSecInput), [chatSlowModeSecInput]);
   const rebroadcastThresholdParsed = useMemo(() => parsePositiveInt(rebroadcastThresholdInput), [rebroadcastThresholdInput]);
@@ -698,7 +702,7 @@ export default function BroadcastPage() {
     const source = {
       id: "source",
       url: `/api/hls/${originStreamId}/index.m3u8`,
-      bandwidth: videoMaxBitrateParsed ? videoMaxBitrateParsed * 1000 : undefined,
+      bandwidth: effectiveVideoMaxBitrateKbps * 1000,
       width: undefined,
       height: undefined,
       codecs: undefined
@@ -712,7 +716,7 @@ export default function BroadcastPage() {
       codecs: "avc1.4d401f,mp4a.40.2"
     }));
     return [source, ...derived];
-  }, [autoLadder, originStreamId, videoMaxBitrateParsed]);
+  }, [autoLadder, effectiveVideoMaxBitrateKbps, originStreamId]);
 
   const topics = useMemo(() => {
     return topicsCsv
@@ -1227,7 +1231,7 @@ export default function BroadcastPage() {
             {
               id: "source",
               url: `/api/hls/${originStreamId}/index.m3u8`,
-              bandwidth: videoMaxBitrateParsed ? videoMaxBitrateParsed * 1000 : undefined
+              bandwidth: effectiveVideoMaxBitrateKbps * 1000
             },
             ...AUTO_LADDER_PROFILES.map((profile) => ({
               id: profile.id,
@@ -1332,7 +1336,7 @@ export default function BroadcastPage() {
     summary,
     title,
     topics,
-    videoMaxBitrateParsed,
+    effectiveVideoMaxBitrateKbps,
     xmr
   ]);
 
@@ -1518,11 +1522,11 @@ export default function BroadcastPage() {
       const client = new WhipClient(endpoint);
       whipRef.current = client;
       lastWhipOptionsRef.current = {
-        videoMaxBitrateKbps: videoMaxBitrateParsed ?? undefined,
+        videoMaxBitrateKbps: effectiveVideoMaxBitrateKbps,
         videoMaxFps: videoMaxFpsParsed ?? undefined
       };
       await client.publish(mediaStream, {
-        videoMaxBitrateKbps: videoMaxBitrateParsed ?? undefined,
+        videoMaxBitrateKbps: effectiveVideoMaxBitrateKbps,
         videoMaxFps: videoMaxFpsParsed ?? undefined,
         onConnectionStateChange: (connectionState) => {
           if (connectionState === "failed" || connectionState === "disconnected") {
@@ -2257,10 +2261,29 @@ export default function BroadcastPage() {
                     ) : (
                       <div className="space-y-2">
                         {paymentDrafts.map((row, index) => {
-                          const rail = getPaymentRailForAsset(row.asset);
+                          const rail = getPaymentRailForMethod({
+                            asset: row.asset,
+                            address: row.address.trim(),
+                            network: row.network.trim() || undefined,
+                            label: row.label.trim() || undefined,
+                            amount: row.amount.trim() || undefined
+                          });
+                          const networkToken = row.network.trim().toLowerCase();
+                          const addressToken = row.address.trim().toLowerCase();
+                          const isBtcLightning =
+                            row.asset === "btc" &&
+                            (networkToken === "lightning" ||
+                              networkToken === "ln" ||
+                              networkToken === "lnurl" ||
+                              networkToken === "bolt11" ||
+                              addressToken.startsWith("lnbc") ||
+                              addressToken.startsWith("lntb") ||
+                              addressToken.startsWith("lnbcrt") ||
+                              addressToken.startsWith("lnurl") ||
+                              addressToken.includes("@"));
                           return (
                             <div key={`broadcast-payment-${index}`} className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/40 p-2">
-                              <div className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
+                              <div className="grid grid-cols-1 lg:grid-cols-[120px_1fr_130px_130px_130px_auto] gap-2">
                                 <select
                                   value={row.asset}
                                   onChange={(e) => updatePaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
@@ -2284,7 +2307,7 @@ export default function BroadcastPage() {
                                   value={row.network}
                                   onChange={(e) => updatePaymentDraft(index, { network: e.target.value })}
                                   disabled={status === "connecting"}
-                                  placeholder="network"
+                                  placeholder={row.asset === "btc" ? "network (bitcoin/lightning)" : "network"}
                                   className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
                                 />
                                 <input
@@ -2293,6 +2316,13 @@ export default function BroadcastPage() {
                                   disabled={status === "connecting"}
                                   placeholder="label"
                                   className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                                />
+                                <input
+                                  value={row.amount}
+                                  onChange={(e) => updatePaymentDraft(index, { amount: e.target.value })}
+                                  disabled={status === "connecting"}
+                                  placeholder={isBtcLightning ? "amount sats" : "amount (optional)"}
+                                  className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
                                 />
                                 <button
                                   type="button"
@@ -2309,6 +2339,9 @@ export default function BroadcastPage() {
                                   {rail.name}
                                 </span>{" "}
                                 · {rail.execution === "verified_backend" ? "verified backend" : "wallet URI / copy"}
+                                {row.amount.trim()
+                                  ? ` · amount: ${row.amount.trim()}${isBtcLightning ? " sats" : ` ${PAYMENT_ASSET_META[row.asset].symbol}`}`
+                                  : ""}
                               </div>
                             </div>
                           );
@@ -2320,7 +2353,7 @@ export default function BroadcastPage() {
                       <div className="text-xs text-red-300">{paymentInputError}</div>
                     ) : (
                       <div className="text-xs text-neutral-500">
-                        Supported assets: XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE.
+                        Supported assets: XMR, ETH, BTC (on-chain + Lightning), USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE.
                       </div>
                     )}
                   </div>
@@ -2650,7 +2683,7 @@ export default function BroadcastPage() {
                           className="accent-blue-500"
                           disabled={status === "connecting"}
                         />
-                        Auto-generate ladder hints (source + 720p/480p/360p derived renditions)
+                        Auto-generate ladder hints (source + 360p derived rendition)
                       </label>
                       {autoLadderRenditionPreview.length > 0 && (
                         <div className="text-[11px] text-neutral-500 font-mono break-all">

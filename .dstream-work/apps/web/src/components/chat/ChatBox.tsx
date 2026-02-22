@@ -29,6 +29,7 @@ interface ChatReportTarget {
 export function ChatBox({
   streamPubkey,
   streamId,
+  viewerCount,
   slowModeSec,
   subscriberOnly,
   followerOnly,
@@ -39,6 +40,7 @@ export function ChatBox({
 }: {
   streamPubkey: string;
   streamId: string;
+  viewerCount?: number;
   slowModeSec?: number;
   subscriberOnly?: boolean;
   followerOnly?: boolean;
@@ -114,6 +116,7 @@ export function ChatBox({
   );
 
   const hiddenCount = messages.length - visibleMessages.length;
+  const normalizedViewerCount = typeof viewerCount === "number" && Number.isFinite(viewerCount) ? Math.max(0, viewerCount) : 0;
   const visiblePubkeys = useMemo(() => visibleMessages.map((message) => message.pubkey), [visibleMessages]);
   const profilesByPubkey = useNostrProfiles(visiblePubkeys);
 
@@ -406,6 +409,9 @@ export function ChatBox({
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm">Chat</span>
           {isConnected && <span className="w-2 h-2 bg-green-500 rounded-full" title="Connected" />}
+          {normalizedViewerCount > 0 ? (
+            <span className="text-[11px] font-mono text-neutral-400">≈ {normalizedViewerCount}</span>
+          ) : null}
           {!isConnected && moderation.isLoading && <span className="text-[10px] text-neutral-500">syncing moderation…</span>}
         </div>
         <span className="text-xs text-neutral-500">

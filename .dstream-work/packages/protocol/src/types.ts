@@ -37,6 +37,7 @@ export interface StreamPaymentMethod {
   address: string;
   network?: string;
   label?: string;
+  amount?: string;
 }
 
 export interface StreamCaptionTrack {

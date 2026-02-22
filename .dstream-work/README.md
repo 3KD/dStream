@@ -11,7 +11,7 @@ npm run dev
 ```
 
 Copy `.env.example` to `.env.local` if you want to override relays/origin/ICE servers.
-Set `NEXT_PUBLIC_SUPPORT_XMR_ADDRESS` if you want `/donate` to expose a platform support address.
+Set support addresses (`NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`, `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`, optional `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`, `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`, `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`) to expose platform donation rails on `/donate`.
 
 ## Docker (all-in-one)
 

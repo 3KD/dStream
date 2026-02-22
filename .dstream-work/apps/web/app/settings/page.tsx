@@ -601,6 +601,22 @@ export default function SettingsPage() {
           </Link>
         </header>
 
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-neutral-500 mr-1">Operator Tools:</span>
+          <Link
+            href="/settings/operations"
+            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+          >
+            Operations
+          </Link>
+          <Link
+            href="/settings/monetization"
+            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+          >
+            Monetization
+          </Link>
+        </section>
+
         {social.isLoading || identityLoading ? (
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
             Loading…
@@ -964,7 +980,7 @@ export default function SettingsPage() {
                 ) : (
                   <div className="space-y-2">
                     {defaultPaymentDrafts.map((row, index) => (
-                      <div key={`payment-default-${index}`} className="grid grid-cols-1 lg:grid-cols-[120px_1fr_150px_150px_auto] gap-2">
+                      <div key={`payment-default-${index}`} className="grid grid-cols-1 lg:grid-cols-[120px_1fr_130px_130px_130px_auto] gap-2">
                         <select
                           value={row.asset}
                           onChange={(e) => updateDefaultPaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
@@ -993,6 +1009,12 @@ export default function SettingsPage() {
                           onChange={(e) => updateDefaultPaymentDraft(index, { label: e.target.value })}
                           placeholder="label"
                           className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs"
+                        />
+                        <input
+                          value={row.amount}
+                          onChange={(e) => updateDefaultPaymentDraft(index, { amount: e.target.value })}
+                          placeholder={row.asset === "btc" ? "amount (btc/sats)" : "amount (optional)"}
+                          className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono"
                         />
                         <button
                           type="button"

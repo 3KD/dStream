@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createDefaultSocialState,
   makeStreamFavoriteKey,
@@ -141,6 +141,15 @@ function tryMigrateLegacyState(parsed: any): SocialStateV1 | null {
 export function SocialProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SocialStateV1>(() => createDefaultSocialState());
   const [isLoading, setIsLoading] = useState(true);
+  const stateRef = useRef(state);
+
+  const persistState = useCallback((nextState: SocialStateV1) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -182,12 +191,27 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // ignore
-    }
-  }, [isLoading, state]);
+    stateRef.current = state;
+    persistState(state);
+  }, [isLoading, persistState, state]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const flushNow = () => persistState(stateRef.current);
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      flushNow();
+    };
+
+    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", flushNow);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", flushNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isLoading, persistState]);
 
   const sets = useMemo(() => {
     return {

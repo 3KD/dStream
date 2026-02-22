@@ -82,7 +82,7 @@ export default function HomePage() {
         rightSlot={
           <Link
             href="/broadcast"
-            className="hidden md:flex px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-full font-medium items-center gap-2 transition active:scale-95"
+            className="hidden md:flex px-4 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-full font-medium items-center gap-2 transition active:scale-95 whitespace-nowrap leading-none"
           >
             Start Streaming
           </Link>
@@ -122,15 +122,14 @@ export default function HomePage() {
             </h2>
 
             <div className="flex items-center gap-2">
-              <label className="ui-pill hidden sm:inline-flex cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showMatureContent}
-                  onChange={(event) => social.updateSettings({ showMatureContent: event.target.checked })}
-                  className="accent-blue-500"
-                />
+              <button
+                type="button"
+                className="ui-pill"
+                data-active={showMatureContent}
+                onClick={() => social.updateSettings({ showMatureContent: !showMatureContent })}
+              >
                 Mature
-              </label>
+              </button>
               <Link
                 href="/browse"
                 className="ui-pill"

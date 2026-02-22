@@ -52,7 +52,8 @@ test("stream announce: build + parse roundtrip", () => {
     xmr: "4".repeat(95),
     payments: [
       { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM main" },
-      { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", label: "BTC tips" }
+      { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", label: "BTC tips", amount: "0.0005" },
+      { asset: "btc", address: "alice@getalby.com", network: "lightning", label: "LN tips", amount: "2500" }
     ],
     hostMode: "p2p_economy",
     rebroadcastThreshold: 6,
@@ -109,7 +110,8 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(parsed.xmr, "4".repeat(95));
   assert.deepEqual(parsed.payments, [
     { asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", label: "EVM main" },
-    { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", network: undefined, label: "BTC tips" },
+    { asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", network: undefined, label: "BTC tips", amount: "0.0005" },
+    { asset: "btc", address: "alice@getalby.com", network: "lightning", label: "LN tips", amount: "2500" },
     { asset: "xmr", address: "4".repeat(95), network: undefined, label: undefined }
   ]);
   assert.equal(parsed.hostMode, "p2p_economy");
@@ -203,6 +205,24 @@ test("stream announce: invalid xmr values are ignored", () => {
   const parsed = parseStreamAnnounceEvent(event);
   assert.ok(parsed);
   assert.equal(parsed.xmr, undefined);
+  assert.deepEqual(parsed.payments, []);
+});
+
+test("stream announce: invalid payment amounts are ignored", () => {
+  const event: NostrEvent = {
+    kind: NOSTR_KINDS.STREAM_ANNOUNCE,
+    pubkey: STREAM_PUBKEY,
+    created_at: 1002,
+    tags: [
+      ["d", STREAM_ID],
+      ["title", "Invalid Amount"],
+      ["status", "live"],
+      ["payment", "btc", "alice@getalby.com", "lightning", "LN", "12.5"]
+    ],
+    content: ""
+  };
+  const parsed = parseStreamAnnounceEvent(event);
+  assert.ok(parsed);
   assert.deepEqual(parsed.payments, []);
 });
 
