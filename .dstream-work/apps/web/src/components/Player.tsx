@@ -84,6 +84,18 @@ function isLikelyMobilePlaybackDevice(): boolean {
   return false;
 }
 
+function isLikelySafariBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  if (!/Safari/i.test(ua)) return false;
+  if (/Chrome|Chromium|CriOS|FxiOS|Firefox|Edg|OPR|SamsungBrowser|Android/i.test(ua)) return false;
+  return true;
+}
+
+function isExternalPlaybackUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
   const height = typeof level.height === "number" && level.height > 0 ? `${level.height}p` : null;
   const bitrate =
@@ -92,6 +104,15 @@ function formatQualityLabel(level: { width?: number; height?: number; bitrate?: 
   if (height) return height;
   if (bitrate) return bitrate;
   return "Unknown";
+}
+
+function formatPlaybackTime(seconds: number): string {
+  const safe = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
 export function Player({
@@ -123,12 +144,16 @@ export function Player({
   const [playbackMode, setPlaybackMode] = useState<"hls" | "whep">("hls");
   const [note, setNote] = useState<string | null>(null);
   const isMobilePlayback = useMemo(() => isLikelyMobilePlaybackDevice(), []);
+  const preferNativeHls = useMemo(() => isLikelySafariBrowser(), []);
   const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
   const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
+  const lastAudibleVolumeRef = useRef(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [unmuteHintPhase, setUnmuteHintPhase] = useState<"hidden" | "visible" | "fading">("hidden");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [timelineStart, setTimelineStart] = useState(0);
@@ -194,6 +219,41 @@ export function Player({
       // ignore
     }
   }, [volume]);
+
+  useEffect(() => {
+    if (volume > 0) {
+      lastAudibleVolumeRef.current = volume;
+    }
+  }, [volume]);
+
+  useEffect(() => {
+    if (error || needsClick || volume !== 0) {
+      setUnmuteHintPhase("hidden");
+      return;
+    }
+    setUnmuteHintPhase("visible");
+    const fadeTimer = setTimeout(() => setUnmuteHintPhase("fading"), 1300);
+    const hideTimer = setTimeout(() => setUnmuteHintPhase("hidden"), 2100);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
+    };
+  }, [error, needsClick, volume, src, whepSrc]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const syncPlaying = () => setIsPlaying(!video.paused && !video.ended);
+    syncPlaying();
+    video.addEventListener("play", syncPlaying);
+    video.addEventListener("pause", syncPlaying);
+    video.addEventListener("ended", syncPlaying);
+    return () => {
+      video.removeEventListener("play", syncPlaying);
+      video.removeEventListener("pause", syncPlaying);
+      video.removeEventListener("ended", syncPlaying);
+    };
+  }, [src, whepSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -278,7 +338,7 @@ export function Player({
 
     const primarySrc = (src ?? "").trim();
     const backupSrc = (fallbackSrc ?? "").trim();
-    const canUseBackup = backupSrc.length > 0 && backupSrc !== primarySrc;
+    const canUseBackup = backupSrc.length > 0 && backupSrc !== primarySrc && !isExternalPlaybackUrl(primarySrc);
     let backupTried = false;
 
     if (!primarySrc || !videoRef.current) return;
@@ -418,7 +478,7 @@ export function Player({
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
       // unless integrity verification is enabled (we need byte access).
-      if (!integrityEnabled && video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (!integrityEnabled && preferNativeHls && video.canPlayType("application/vnd.apple.mpegurl")) {
         const onLoaded = () => {
           applyPersistedSeek();
           setStatus("Ready");
@@ -658,7 +718,18 @@ export function Player({
         // ignore
       }
     };
-  }, [effectiveAutoplayMuted, fallbackSrc, integrity, isMobilePlayback, lowLatencyEnabled, p2pSwarm, playbackStateKey, src, whepSrc]);
+  }, [
+    effectiveAutoplayMuted,
+    fallbackSrc,
+    integrity,
+    isMobilePlayback,
+    lowLatencyEnabled,
+    p2pSwarm,
+    playbackStateKey,
+    preferNativeHls,
+    src,
+    whepSrc
+  ]);
 
   const canTogglePip = typeof document !== "undefined" && "pictureInPictureEnabled" in document;
 
@@ -711,10 +782,14 @@ export function Player({
   const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 1.5;
   const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 1.5;
   const showTapForSound = !error && volume === 0;
+  const timelineDuration = Math.max(0, timelineEnd - timelineStart);
+  const visibleTimelinePosition = Math.max(0, clampedTimelinePosition - timelineStart);
   const lowLatencyHint =
     (whepSrc ?? "").trim().length > 0 && playbackMode === "hls"
       ? "Stability mode (HLS preferred). Enable low-latency mode to try WHEP."
       : undefined;
+  const statusLabel = error ? "Error" : playbackMode === "whep" ? `${status} • Low latency` : status;
+  const effectiveNativeControls = showNativeControls && !showAuxControls;
 
   const togglePip = async () => {
     const video = videoRef.current;
@@ -759,21 +834,66 @@ export function Player({
     }
   };
 
+  const unmuteFromGesture = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const next = Math.max(0.05, Math.min(1, lastAudibleVolumeRef.current || 1));
+    setVolume(next);
+    setUnmuteHintPhase("hidden");
+    try {
+      video.muted = false;
+      video.volume = next;
+    } catch {
+      // ignore
+    }
+  };
+
+  const togglePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      void video.play().catch(() => {
+        // ignore autoplay restrictions
+      });
+      return;
+    }
+    video.pause();
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (volume === 0) {
+      unmuteFromGesture();
+      return;
+    }
+    setVolume(0);
+    try {
+      video.muted = true;
+      video.volume = 0;
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className={`relative w-full ${layoutMode === "fill" ? "flex h-full min-h-[24rem] flex-col" : ""}`}>
-      <div
-        data-testid="player-status"
-        className="pointer-events-none absolute top-2 right-2 z-20 px-2 py-1 rounded bg-black/60 text-xs text-neutral-200 border border-white/10"
-      >
-        {error ? "Error" : playbackMode === "whep" ? `${status} • Low latency` : status}
-      </div>
-
       <div
         className={`group/player relative w-full bg-black rounded-2xl overflow-hidden border border-neutral-800 ${
           layoutMode === "fill" ? "min-h-[16rem] flex-1" : "aspect-video"
         }`}
       >
-        <video ref={videoRef} className="w-full h-full" playsInline controls={showNativeControls} autoPlay muted={volume === 0}>
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          playsInline
+          controls={effectiveNativeControls}
+          autoPlay
+          muted={volume === 0}
+          onClick={() => {
+            if (volume === 0) unmuteFromGesture();
+          }}
+        >
           {captionTrackList.map((track, index) => (
             <track
               key={`${track.src}-${track.lang}-${index}`}
@@ -792,6 +912,7 @@ export function Player({
             onClick={() => {
               const video = videoRef.current;
               if (!video) return;
+              if (volume === 0) unmuteFromGesture();
               void video.play().catch(() => {
                 setStatus("Click to play");
                 setNeedsClick(true);
@@ -805,29 +926,6 @@ export function Player({
           </button>
         )}
 
-        {showTapForSound && !needsClick && (
-          <button
-            type="button"
-            onClick={() => {
-              const video = videoRef.current;
-              setVolume(1);
-              if (!video) return;
-              try {
-                video.muted = false;
-                video.volume = 1;
-              } catch {
-                // ignore
-              }
-              void video.play().catch(() => {
-                // ignore
-              });
-            }}
-            className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-neutral-950/80 border border-neutral-700 text-xs text-neutral-100 hover:bg-neutral-900/90"
-          >
-            Tap for sound
-          </button>
-        )}
-
         {showAuxControls && !error && !needsClick && (
           <div
             className={`absolute bottom-3 left-3 right-3 z-20 transition-opacity duration-150 ${
@@ -838,8 +936,76 @@ export function Player({
           >
             <div className="rounded-xl border border-neutral-700/80 bg-black/75 backdrop-blur px-3 py-2 text-xs text-neutral-200">
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={togglePlayPause}
+                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 min-w-[4.25rem]"
+                >
+                  {isPlaying ? "Pause" : "Play"}
+                </button>
+
+                {hasSeekWindow && (
+                  <label className="inline-flex items-center gap-2 min-w-[13rem]">
+                    <input
+                      type="range"
+                      min={timelineStart}
+                      max={timelineEnd}
+                      step={0.01}
+                      value={clampedTimelinePosition}
+                      onChange={(e) => {
+                        const video = videoRef.current;
+                        if (!video) return;
+                        const next = Number(e.target.value);
+                        if (!Number.isFinite(next)) return;
+                        try {
+                          video.currentTime = next;
+                          setTimelinePosition(next);
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className="accent-blue-500 w-32"
+                      aria-label="Seek"
+                    />
+                    <span className="font-mono text-neutral-300 text-[11px] tabular-nums whitespace-nowrap">
+                      {formatPlaybackTime(visibleTimelinePosition)} / {formatPlaybackTime(timelineDuration)}
+                    </span>
+                  </label>
+                )}
+
+                <span
+                  data-testid="player-status"
+                  className="inline-flex items-center rounded-md border border-neutral-700/80 bg-black/70 px-2 py-1 font-mono text-[11px] text-neutral-200"
+                >
+                  {statusLabel}
+                </span>
+
+                {showTapForSound && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unmuteFromGesture();
+                      const video = videoRef.current;
+                      if (!video) return;
+                      void video.play().catch(() => {
+                        // ignore
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700"
+                  >
+                    Tap for sound
+                  </button>
+                )}
+
                 <label className="inline-flex items-center gap-2">
                   <span className="text-neutral-400">Volume</span>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className="px-2 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-[11px]"
+                  >
+                    {volume === 0 ? "Unmute" : "Mute"}
+                  </button>
                   <input
                     type="range"
                     min={0}
@@ -914,6 +1080,16 @@ export function Player({
                 {auxMetaSlot ? <span className="ml-1 pl-2 border-l border-neutral-700">{auxMetaSlot}</span> : null}
               </div>
             </div>
+          </div>
+        )}
+
+        {showTapForSound && unmuteHintPhase !== "hidden" && (
+          <div
+            className={`pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-neutral-700 bg-black/80 px-3 py-1.5 text-xs text-neutral-100 transition-opacity duration-500 ${
+              unmuteHintPhase === "fading" ? "opacity-0" : "opacity-100"
+            }`}
+          >
+            Click to unmute
           </div>
         )}
 

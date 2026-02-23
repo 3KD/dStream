@@ -166,7 +166,8 @@ function chooseBetterStream(current: StreamAnnounce, candidate: StreamAnnounce, 
 function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): StreamAnnounce[] {
   const byCanonical = new Map<string, StreamAnnounce>();
   for (const stream of streams) {
-    const key = canonicalStreamKey(stream);
+    const canonical = canonicalStreamKey(stream);
+    const key = `${stream.pubkey.toLowerCase()}::${canonical}`;
     if (!key) continue;
     const existing = byCanonical.get(key);
     byCanonical.set(key, existing ? chooseBetterStream(existing, stream, nowSec) : stream);

@@ -117,9 +117,15 @@ echo "🔹 Compose profile: $([[ "${DEPLOY_REAL_WALLET}" == "1" ]] && echo 'real
 
 echo "🔹 Rebuilding and restarting containers..."
 run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
-  docker compose ${COMPOSE_ARGS} --env-file .env.production down --remove-orphans || true && \
-  (docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --build --remove-orphans || \
-   (echo '--- compose failure logs (tail 220) ---' && \
+  (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
+   docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
+   docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest || \
+   (echo '--- compose build failure logs (tail 220) ---' && \
+    docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
+      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true) && \
+   exit 1) && \
+  (docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans || \
+   (echo '--- compose up failure logs (tail 220) ---' && \
     docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
       xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true) && \
    exit 1)"

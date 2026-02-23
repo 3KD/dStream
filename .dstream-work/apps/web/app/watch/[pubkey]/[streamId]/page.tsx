@@ -726,7 +726,16 @@ export default function WatchPage() {
     if (renditionHints[0]?.url) return appendPlaybackAccessToken(renditionHints[0].url, playbackAccessToken);
     if (isPlaybackUrl(streamingHint)) return streamingHint;
     return fallbackUrl;
-  }, [announce?.streaming, e2eHlsOverride, fallbackUrl, playbackAccessToken, privateStreamEnabled, renditionHints, renditionMasterUrl]);
+  }, [
+    announce,
+    announce?.streaming,
+    e2eHlsOverride,
+    fallbackUrl,
+    playbackAccessToken,
+    privateStreamEnabled,
+    renditionHints,
+    renditionMasterUrl
+  ]);
 
   const [vodRecordings, setVodRecordings] = useState<VodRecordingEntry[]>([]);
   const [vodLoading, setVodLoading] = useState(false);
@@ -1382,7 +1391,7 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="w-full min-h-0 px-4 pb-6 md:px-5 lg:px-6">
+      <main className="w-full min-h-0 px-4 pt-6 pb-6 md:px-5 lg:px-6">
         {!pubkey && (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
             Invalid pubkey in route. Expected a 64-hex pubkey or an <span className="font-mono">npub…</span>.
@@ -1421,6 +1430,7 @@ export default function WatchPage() {
                   integrity={integritySession}
                   isLiveStream={isPlaybackLive && announce?.status !== "ended"}
                   showTimelineControls={vodArchiveEnabled}
+                  showNativeControls={false}
                   captionTracks={captionTracks}
                   autoplayMuted={e2e ? true : social.settings.playbackAutoplayMuted}
                   playbackStateKey={playbackStateKey}
@@ -1474,22 +1484,14 @@ export default function WatchPage() {
                       ) : null}
                     </div>
                   )}
-                  {selectedVod ? (
-                    <div className="text-xs text-amber-300">
-                      Playing archived recording: <span className="font-mono text-amber-200">{selectedVod.name}</span>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-emerald-300">Playing live stream path.</div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold mb-2">About</div>
-                  <p className="text-sm text-neutral-300 leading-relaxed">
-                    {announce?.summary ??
-                      "This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available)."}
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {selectedVod ? (
+                      <div className="text-amber-300">
+                        Playing archived recording: <span className="font-mono text-amber-200">{selectedVod.name}</span>
+                      </div>
+                    ) : (
+                      <div className="text-emerald-300">Playing live stream path.</div>
+                    )}
                     <a
                       href={streamUrl}
                       target="_blank"
@@ -1515,6 +1517,14 @@ export default function WatchPage() {
                       <span className="text-red-300">Error</span>
                     ) : null}
                   </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold mb-2">About</div>
+                  <p className="text-sm text-neutral-300 leading-relaxed">
+                    {announce?.summary ??
+                      "This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available)."}
+                  </p>
                   {captionTracks.length > 0 && (
                     <div className="mt-2 text-xs text-neutral-500">
                       Captions:{" "}
@@ -1535,10 +1545,9 @@ export default function WatchPage() {
                   Mature-content label set by streamer. Viewer discretion is advised.
                 </div>
               ) : null}
-            </div>
 
             {pubkey && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-3 space-y-3">
+              <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-3">
                 <div className="space-y-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 space-y-1">
@@ -1577,130 +1586,147 @@ export default function WatchPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReportError(null);
-                        setReportTarget({
-                          targetType: "stream",
-                          targetPubkey: pubkey,
-                          targetStreamId: streamId,
-                          summary: `Report stream ${announce?.title ?? streamId}`
-                        });
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                      title="Report stream"
-                      aria-label="Report stream"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                      Stream
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const npubLabel = npub ?? pubkey;
-                        setReportError(null);
-                        setReportTarget({
-                          targetType: "user",
-                          targetPubkey: pubkey,
-                          targetStreamId: streamId,
-                          summary: `Report creator ${shortenText(npubLabel, { head: 14, tail: 8 })}`
-                        });
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                      title="Report creator"
-                      aria-label="Report creator"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                      Creator
-                    </button>
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => social.updateSettings({ presenceEnabled: !presenceEnabled })}
+                        aria-pressed={presenceEnabled}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors ${
+                          presenceEnabled
+                            ? "bg-blue-500/20 border-blue-500/50 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-1.5 w-1.5 rounded-full ${presenceEnabled ? "bg-blue-300" : "bg-neutral-500"}`}
+                          aria-hidden="true"
+                        />
+                        Presence {presenceEnabled ? "On" : "Off"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!p2pAllowed) return;
+                          social.updateSettings({ p2pAssistEnabled: !p2pEnabled });
+                        }}
+                        aria-pressed={p2pEnabled}
+                        disabled={!p2pAllowed}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors ${
+                          p2pEnabled
+                            ? "bg-blue-500/20 border-blue-500/50 text-blue-200"
+                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                        } ${p2pAllowed ? "" : "opacity-60 cursor-not-allowed"}`}
+                        title={p2pAllowed ? "Toggle P2P assist" : "P2P assist unavailable"}
+                      >
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${p2pEnabled ? "bg-blue-300" : "bg-neutral-500"}`} aria-hidden="true" />
+                        P2P Assist {p2pEnabled ? "On" : "Off"}
+                      </button>
+                      {identity ? (
+                        <div
+                          className={`inline-flex min-w-[8.5rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums ${
+                            presenceStatus === "ok"
+                              ? "border-emerald-800/70 text-emerald-300"
+                              : presenceStatus === "sending"
+                                ? "border-blue-800/70 text-blue-300"
+                                : presenceStatus === "fail"
+                                  ? "border-red-800/70 text-red-300"
+                                  : "border-neutral-800 text-neutral-500"
+                          }`}
+                          title={
+                            presenceStatus === "ok" && lastSentAt
+                              ? `Last published ${new Date(lastSentAt).toLocaleTimeString()}`
+                              : undefined
+                          }
+                        >
+                          {presenceStatus === "sending"
+                            ? "publishing"
+                            : presenceStatus === "ok"
+                              ? "published"
+                              : presenceStatus === "fail"
+                                ? "retrying"
+                                : "idle"}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-neutral-500">Connect identity to publish.</div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportError(null);
+                          setReportTarget({
+                            targetType: "stream",
+                            targetPubkey: pubkey,
+                            targetStreamId: streamId,
+                            summary: `Report stream ${announce?.title ?? streamId}`
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+                        title="Report stream"
+                        aria-label="Report stream"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                        Stream
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const npubLabel = npub ?? pubkey;
+                          setReportError(null);
+                          setReportTarget({
+                            targetType: "user",
+                            targetPubkey: pubkey,
+                            targetStreamId: streamId,
+                            summary: `Report creator ${shortenText(npubLabel, { head: 14, tail: 8 })}`
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+                        title="Report creator"
+                        aria-label="Report creator"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                        Creator
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 border-t border-neutral-800 pt-2 text-xs text-neutral-400">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={presenceEnabled}
-                      onChange={(e) => social.updateSettings({ presenceEnabled: e.target.checked })}
-                      className="accent-blue-500"
-                    />
-                    Share presence
-                  </label>
-                  <label
-                    className={`flex items-center gap-2 select-none ${
-                      p2pAllowed ? "cursor-pointer" : "cursor-not-allowed opacity-60"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={p2pEnabled}
-                      onChange={(e) => social.updateSettings({ p2pAssistEnabled: e.target.checked })}
-                      className="accent-blue-500"
-                      disabled={!p2pAllowed}
-                    />
-                    P2P assist
-                  </label>
-                  {identity ? (
-                    <div
-                      className={`inline-flex min-w-[8.5rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums ${
-                        presenceStatus === "ok"
-                          ? "border-emerald-800/70 text-emerald-300"
-                          : presenceStatus === "sending"
-                            ? "border-blue-800/70 text-blue-300"
-                            : presenceStatus === "fail"
-                              ? "border-red-800/70 text-red-300"
-                              : "border-neutral-800 text-neutral-500"
-                      }`}
-                      title={
-                        presenceStatus === "ok" && lastSentAt
-                          ? `Last published ${new Date(lastSentAt).toLocaleTimeString()}`
-                          : undefined
-                      }
-                    >
-                      {presenceStatus === "sending"
-                        ? "publishing"
-                        : presenceStatus === "ok"
-                          ? "published"
-                          : presenceStatus === "fail"
-                            ? "retrying"
-                            : "idle"}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-neutral-500">Connect identity to publish.</div>
-                  )}
-                  {integritySnapshot && manifestSignerPubkey && (
-                    <div
-                      className={`text-[11px] font-mono ${
-                        integritySnapshot.lastTamper
-                          ? "text-red-300"
-                          : integritySnapshot.verifiedOk > 0
-                            ? "text-emerald-300"
-                            : "text-neutral-500"
-                      }`}
-                      title={
-                        integritySnapshot.lastTamper
-                          ? `Tamper detected for ${integritySnapshot.lastTamper.uri}`
-                          : !integritySnapshot.sha256Supported
-                            ? "SHA-256 unavailable in this browser context"
+                {(integritySnapshot && manifestSignerPubkey) || p2pBlockedReason ? (
+                  <div className="flex flex-wrap items-center gap-3 border-t border-neutral-800 pt-2 text-xs text-neutral-400">
+                    {integritySnapshot && manifestSignerPubkey && (
+                      <div
+                        className={`text-[11px] font-mono ${
+                          integritySnapshot.lastTamper
+                            ? "text-red-300"
                             : integritySnapshot.verifiedOk > 0
-                              ? "Segments verified"
-                              : "Waiting for manifests / first verified segment"
-                      }
-                    >
-                      integrity:
-                      {integritySnapshot.lastTamper
-                        ? " tamper"
-                        : !integritySnapshot.sha256Supported
-                          ? " unsupported"
-                          : integritySnapshot.verifiedOk > 0
-                            ? " verified"
-                            : " pending"}
-                    </div>
-                  )}
-                  {p2pBlockedReason && <div className="w-full text-[11px] text-neutral-500">{p2pBlockedReason}</div>}
-                </div>
+                              ? "text-emerald-300"
+                              : "text-neutral-500"
+                        }`}
+                        title={
+                          integritySnapshot.lastTamper
+                            ? `Tamper detected for ${integritySnapshot.lastTamper.uri}`
+                            : !integritySnapshot.sha256Supported
+                              ? "SHA-256 unavailable in this browser context"
+                              : integritySnapshot.verifiedOk > 0
+                                ? "Segments verified"
+                                : "Waiting for manifests / first verified segment"
+                        }
+                      >
+                        integrity:
+                        {integritySnapshot.lastTamper
+                          ? " tamper"
+                          : !integritySnapshot.sha256Supported
+                            ? " unsupported"
+                            : integritySnapshot.verifiedOk > 0
+                              ? " verified"
+                              : " pending"}
+                      </div>
+                    )}
+                    {p2pBlockedReason && <div className="w-full text-[11px] text-neutral-500">{p2pBlockedReason}</div>}
+                  </div>
+                ) : null}
 
                 {showP2PPanel && (
                   <div className="border-t border-neutral-800 pt-2 text-xs text-neutral-400 space-y-1">
@@ -1723,6 +1749,7 @@ export default function WatchPage() {
                 )}
               </div>
             )}
+            </div>
 
             {vodArchiveEnabled && (
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
@@ -2144,7 +2171,7 @@ export default function WatchPage() {
             )}
           </div>
 
-          <div className="h-[23rem] sm:h-[29rem] md:sticky md:top-14 md:h-[calc(100dvh-6rem)] md:min-h-[26rem] md:self-start">
+          <div className="h-[23rem] sm:h-[29rem] md:sticky md:top-20 md:h-[calc(100dvh-6rem)] md:min-h-[26rem] md:self-start">
             {playbackBlocked ? (
               <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-400">
                 Chat is available after private-stream access is granted.
