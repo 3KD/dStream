@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Machined Cube Animation */
+:root {
+  /* Use Em-based height to match parent font size exactly */
+  --cube-height: 1em;
+}
+
+.machined-scene {
+  position: relative;
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  perspective: 2000px;
+  margin: 0;
+  transform: none;
+  overflow: visible;
+}
+
+.machined-cube {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  /* Transition Speed - Slowed down to 1.2s per user request */
+  transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.machined-cube-face {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+
+  -webkit-backface-visibility: visible;
+  backface-visibility: visible;
+
+  /* Shadow: controlled by component or specific state */
+  box-shadow: none;
+  border: none !important;
+
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Active State: Textured, Light "Reverse Shadowing" */
+.machined-scene.active .machined-cube-face {
+  /* Texture: Metallic Gray (Lighter to show volume) */
+  background: linear-gradient(145deg, #2a2a2a 0%, #050505 100%) !important;
+
+  /* Depth: "Reverse Shadowing" (White Insets) + Deep Drop Shadow */
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    /* Bright Top Edge */
+    inset 0 0 30px rgba(255, 255, 255, 0.15),
+    /* Inner White Glow */
+    0 20px 50px rgba(0, 0, 0, 0.9)
+    /* Deep Dark Drop Shadow */
+    !important;
+}
+
+/* Standard Cube Geometry (Em-based) */
+.machined-cube-face-front {
+  transform: rotateX(0deg) translateZ(calc(0.8em));
+}
+
+.machined-cube-face-bottom {
+  transform: rotateX(-90deg) translateZ(calc(0.8em));
+}
+
+.machined-cube-face-back {
+  transform: rotateX(180deg) translateZ(calc(0.8em));
+}
+
+.machined-cube-face-top {
+  transform: rotateX(90deg) translateZ(calc(0.8em));
+}
+
+.machined-text {
+  font-weight: 900;
+  display: inline-flex;
+  line-height: 1 !important;
+  white-space: nowrap;
+
+  padding: 0.3em 0.25em 0.3em 0.25em;
+
+  position: relative;
+  top: 0;
+
+  transition: all 0.2s ease;
+}
+
+/* User Request: "decentralized" gets dStream Brand Gradient */
+.machined-text.brand-gradient {
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  background-image: linear-gradient(to right, #3b82f6, #9333ea) !important;
+}
+
+/* Ensure Brand Gradient stays visible even when Active */
+.machined-scene.active .machined-text.brand-gradient {
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  background-image: linear-gradient(to right, #3b82f6, #9333ea) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+/* Initial Load Animation: "Stream" turns Blue, then Fades to White */
+@keyframes stream-pulse {
+  0%,
+  40% {
+    color: #3b82f6;
+  }
+
+  100% {
+    color: #a3a3a3;
+  }
+}
+
+.animate-stream-pulse {
+  animation: stream-pulse 2.5s ease-out forwards;
+}
+
+/* ==========================================
+   ACCESSIBILITY ENHANCEMENTS
+   ========================================== */
+
+/* Skip to main content link (for keyboard users) */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: #3b82f6;
+  color: white;
+  padding: 0.5rem 1rem;
+  z-index: 1000;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 0 0 0.5rem 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Global focus indicators */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Remove default focus for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .machined-cube {
+    transition: none !important;
+  }
+
+  .machined-scene.active .machined-cube {
+    transform: translateZ(0) !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  button,
+  a {
+    border: 2px solid currentColor;
+  }
+}
+

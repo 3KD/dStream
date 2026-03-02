@@ -1,0 +1,89 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Broadcast" [ref=e14] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Dashboard" [ref=e15] [cursor=pointer]:
+            - /url: /dashboard
+          - link "Profile" [ref=e16] [cursor=pointer]:
+            - /url: /profile
+          - link "Moderation" [ref=e17] [cursor=pointer]:
+            - /url: /moderation
+          - link "Settings" [ref=e18] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e21]:
+      - generic [ref=e22]: Invalid pubkey in route. Expected a 64-hex pubkey or an npub….
+      - generic [ref=e23]:
+        - heading "Live Stream" [level=1] [ref=e25]
+        - link "Back to Browse" [ref=e27] [cursor=pointer]:
+          - /url: /browse
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - generic: Loading…
+            - generic [ref=e33]:
+              - generic [ref=e34]:
+                - generic [ref=e35]: Volume
+                - slider "Volume" [ref=e36]: "0"
+                - generic [ref=e37]: 0%
+              - generic [ref=e38]:
+                - generic [ref=e39]: Quality
+                - combobox "Quality" [ref=e40]:
+                  - option "Auto" [selected]
+              - generic [ref=e41]:
+                - checkbox "Low-latency mode" [checked] [ref=e42]
+                - generic [ref=e43]: Low-latency mode
+              - button "PiP" [disabled] [ref=e44]
+              - button "Fullscreen" [ref=e45]
+              - generic [ref=e46]: "Quality: Auto"
+          - generic [ref=e47]:
+            - generic [ref=e48]: About
+            - paragraph [ref=e49]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+            - generic [ref=e50]: "Playback URL: /api/hls/synthdragon-chill/index.m3u8"
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - generic [ref=e55]: Chat
+              - generic [ref=e56]: syncing moderation…
+            - generic [ref=e57]: 0 msgs
+          - generic [ref=e59]: No messages yet
+          - generic [ref=e60]: Connect an identity to chat.
+  - contentinfo [ref=e61]:
+    - generic [ref=e62]:
+      - generic [ref=e63]:
+        - generic [ref=e64]:
+          - img "dStream logo" [ref=e65]
+          - generic [ref=e66]: dStream Rebuild
+        - paragraph [ref=e67]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+      - generic [ref=e68]:
+        - paragraph [ref=e69]: Protocol
+        - link "Whitepaper" [ref=e70] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e71] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e72] [cursor=pointer]:
+          - /url: /use-cases
+      - generic [ref=e73]:
+        - paragraph [ref=e74]: Support
+        - link "Donate" [ref=e75] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e76]
+          - text: Donate
+        - link "GitHub" [ref=e78] [cursor=pointer]:
+          - /url: https://github.com/dstream-protocol
+        - paragraph [ref=e79]:
+          - img [ref=e80]
+          - img [ref=e83]
+          - text: Updated for the current rebuild architecture
