@@ -17,6 +17,8 @@
 #   DSTREAM_DEPLOY_SMOKE=1                            (run post-deploy production smoke)
 #   DSTREAM_DEPLOY_DISK_CLEANUP=1                     (run remote disk cleanup before build)
 #   DSTREAM_DEPLOY_MIN_FREE_GB=4                      (minimum free GB required before build)
+#   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (build web image locally and stream to host)
+#   DSTREAM_DEPLOY_LOCAL_WEB_PLATFORM=linux/amd64     (platform for local web build)
 
 set -euo pipefail
 
@@ -42,6 +44,8 @@ DEPLOY_HEALTHCHECK="${DSTREAM_DEPLOY_HEALTHCHECK:-1}"
 DEPLOY_SMOKE="${DSTREAM_DEPLOY_SMOKE:-1}"
 DEPLOY_DISK_CLEANUP="${DSTREAM_DEPLOY_DISK_CLEANUP:-1}"
 DEPLOY_MIN_FREE_GB="${DSTREAM_DEPLOY_MIN_FREE_GB:-4}"
+DEPLOY_LOCAL_WEB_BUILD="${DSTREAM_DEPLOY_LOCAL_WEB_BUILD:-0}"
+DEPLOY_LOCAL_WEB_PLATFORM="${DSTREAM_DEPLOY_LOCAL_WEB_PLATFORM:-linux/amd64}"
 SSH_CONTROL_PATH="${DSTREAM_DEPLOY_SSH_CONTROL_PATH:-/tmp/dstream-%C}"
 SSH_MULTIPLEX="${DSTREAM_DEPLOY_SSH_MULTIPLEX:-1}"
 if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
@@ -61,6 +65,33 @@ run_ssh() {
     ssh "${SSH_OPTS[@]}" "$@"
   else
     ssh "$@"
+  fi
+}
+
+build_local_web_image() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: docker is required for DSTREAM_DEPLOY_LOCAL_WEB_BUILD=1."
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: local Docker daemon is not available for DSTREAM_DEPLOY_LOCAL_WEB_BUILD=1."
+    exit 1
+  fi
+
+  echo "🔹 Building web image locally (${DEPLOY_LOCAL_WEB_PLATFORM})..."
+  (
+    cd "${PROJECT_DIR}"
+    COMPOSE_PROJECT_NAME=dstream DOCKER_DEFAULT_PLATFORM="${DEPLOY_LOCAL_WEB_PLATFORM}" \
+      docker compose --env-file .env.production -f docker-compose.yml build web
+  )
+}
+
+stream_local_web_image_to_remote() {
+  echo "🔹 Streaming local web image to remote..."
+  if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
+    docker save dstream-web:latest | ssh "${SSH_OPTS[@]}" "${TARGET}" "docker load"
+  else
+    docker save dstream-web:latest | ssh "${TARGET}" "docker load"
   fi
 }
 
@@ -133,6 +164,11 @@ if (( remote_free_gb < DEPLOY_MIN_FREE_GB )); then
   exit 1
 fi
 
+if [[ "${DEPLOY_LOCAL_WEB_BUILD}" == "1" ]]; then
+  build_local_web_image
+  stream_local_web_image_to_remote
+fi
+
 COMPOSE_ARGS="-f docker-compose.yml"
 DEPLOY_REAL_WALLET="${DSTREAM_DEPLOY_REAL_WALLET:-auto}"
 if [[ "${DEPLOY_REAL_WALLET}" == "auto" ]]; then
@@ -148,21 +184,38 @@ fi
 echo "🔹 Compose profile: $([[ "${DEPLOY_REAL_WALLET}" == "1" ]] && echo 'real-wallet' || echo 'base')"
 
 echo "🔹 Rebuilding and restarting containers..."
-run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
-  if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
-        docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
-        docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
-    echo '--- compose build failure logs (tail 220) ---'; \
-    docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-    exit 1; \
-  fi; \
-  if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
-    echo '--- compose up failure logs (tail 220) ---'; \
-    docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-    exit 1; \
-  fi"
+if [[ "${DEPLOY_LOCAL_WEB_BUILD}" == "1" ]]; then
+  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
+    if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
+          docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
+      echo '--- compose build failure logs (tail 220) ---'; \
+      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
+        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+      exit 1; \
+    fi; \
+    if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
+      echo '--- compose up failure logs (tail 220) ---'; \
+      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
+        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+      exit 1; \
+    fi"
+else
+  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
+    if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
+          docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
+          docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
+      echo '--- compose build failure logs (tail 220) ---'; \
+      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
+        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+      exit 1; \
+    fi; \
+    if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
+      echo '--- compose up failure logs (tail 220) ---'; \
+      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
+        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+      exit 1; \
+    fi"
+fi
 
 if [[ "${DEPLOY_SELF_HEAL}" == "1" ]]; then
   echo "🔹 Self-healing edge proxy (${DEPLOY_CADDY_CONTAINER})..."
