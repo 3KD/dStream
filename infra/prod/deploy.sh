@@ -15,6 +15,8 @@
 #   DSTREAM_DEPLOY_SELF_HEAL=1                        (recreate edge proxy container)
 #   DSTREAM_DEPLOY_HEALTHCHECK=1                      (run post-deploy route probes)
 #   DSTREAM_DEPLOY_SMOKE=1                            (run post-deploy production smoke)
+#   DSTREAM_DEPLOY_DISK_CLEANUP=1                     (run remote disk cleanup before build)
+#   DSTREAM_DEPLOY_MIN_FREE_GB=4                      (minimum free GB required before build)
 
 set -euo pipefail
 
@@ -38,6 +40,8 @@ DEPLOY_DOMAIN="${DSTREAM_DEPLOY_DOMAIN:-dstream.stream}"
 DEPLOY_SELF_HEAL="${DSTREAM_DEPLOY_SELF_HEAL:-1}"
 DEPLOY_HEALTHCHECK="${DSTREAM_DEPLOY_HEALTHCHECK:-1}"
 DEPLOY_SMOKE="${DSTREAM_DEPLOY_SMOKE:-1}"
+DEPLOY_DISK_CLEANUP="${DSTREAM_DEPLOY_DISK_CLEANUP:-1}"
+DEPLOY_MIN_FREE_GB="${DSTREAM_DEPLOY_MIN_FREE_GB:-4}"
 SSH_CONTROL_PATH="${DSTREAM_DEPLOY_SSH_CONTROL_PATH:-/tmp/dstream-%C}"
 SSH_MULTIPLEX="${DSTREAM_DEPLOY_SSH_MULTIPLEX:-1}"
 if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
@@ -109,6 +113,25 @@ rsync -az --delete \
   --exclude 'infra/prod/Caddyfile' \
   --exclude '*.log' \
   "${PROJECT_DIR}/" "${TARGET}:${REMOTE_DIR}/"
+
+if [[ "${DEPLOY_DISK_CLEANUP}" == "1" ]]; then
+  echo "🔹 Running remote disk cleanup..."
+  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && bash scripts/ops-disk-cleanup.sh"
+fi
+
+echo "🔹 Checking remote disk headroom..."
+remote_free_gb="$(
+  run_ssh "${TARGET}" "df -BG / | awk 'NR==2 { gsub(/G/, \"\", \$4); print \$4 }'" | tr -d '\r\n'
+)"
+if [[ ! "${remote_free_gb}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: could not determine remote free disk space."
+  exit 1
+fi
+echo "   remote free disk: ${remote_free_gb}G"
+if (( remote_free_gb < DEPLOY_MIN_FREE_GB )); then
+  echo "ERROR: remote free disk ${remote_free_gb}G is below required minimum ${DEPLOY_MIN_FREE_GB}G."
+  exit 1
+fi
 
 COMPOSE_ARGS="-f docker-compose.yml"
 DEPLOY_REAL_WALLET="${DSTREAM_DEPLOY_REAL_WALLET:-auto}"
