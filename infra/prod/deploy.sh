@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # dStream (current stack) push-to-deploy script.
-# Deploys the modern root docker-compose stack from `.dstream-work`.
+# Deploys the modern root docker-compose stack from sibling `../dStream` by default.
 #
 # Usage:
 #   ./deploy.sh user@host
 #
 # Optional env vars:
-#   DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/project   (default: ../../.dstream-work)
+#   DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/project   (default: ../../../dStream, fallback: ../../.dstream-work)
 #   DSTREAM_DEPLOY_REMOTE_DIR=/opt/dstream            (remote project path)
 #   DSTREAM_DEPLOY_REAL_WALLET=1                      (include docker-compose.real-wallet.yml)
 #   DSTREAM_DEPLOY_NETWORK=dstream_default            (docker network for app + caddy)
@@ -14,6 +14,7 @@
 #   DSTREAM_DEPLOY_DOMAIN=dstream.stream              (public domain for HTTPS checks)
 #   DSTREAM_DEPLOY_SELF_HEAL=1                        (recreate edge proxy container)
 #   DSTREAM_DEPLOY_HEALTHCHECK=1                      (run post-deploy route probes)
+#   DSTREAM_DEPLOY_SMOKE=1                            (run post-deploy production smoke)
 
 set -euo pipefail
 
@@ -24,7 +25,11 @@ if [[ -z "${TARGET}" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../.dstream-work" && pwd)"
+if [[ -d "${SCRIPT_DIR}/../../../dStream" ]]; then
+  DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../../dStream" && pwd)"
+else
+  DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../.dstream-work" && pwd)"
+fi
 PROJECT_DIR="${DSTREAM_DEPLOY_PROJECT_DIR:-${DEFAULT_PROJECT_DIR}}"
 REMOTE_DIR="${DSTREAM_DEPLOY_REMOTE_DIR:-/opt/dstream}"
 DEPLOY_NETWORK="${DSTREAM_DEPLOY_NETWORK:-dstream_default}"
@@ -32,6 +37,7 @@ DEPLOY_CADDY_CONTAINER="${DSTREAM_DEPLOY_CADDY_CONTAINER:-dStream_caddy}"
 DEPLOY_DOMAIN="${DSTREAM_DEPLOY_DOMAIN:-dstream.stream}"
 DEPLOY_SELF_HEAL="${DSTREAM_DEPLOY_SELF_HEAL:-1}"
 DEPLOY_HEALTHCHECK="${DSTREAM_DEPLOY_HEALTHCHECK:-1}"
+DEPLOY_SMOKE="${DSTREAM_DEPLOY_SMOKE:-1}"
 SSH_CONTROL_PATH="${DSTREAM_DEPLOY_SSH_CONTROL_PATH:-/tmp/dstream-%C}"
 SSH_MULTIPLEX="${DSTREAM_DEPLOY_SSH_MULTIPLEX:-1}"
 if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
@@ -98,6 +104,9 @@ rsync -az --delete \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.turbo' \
+  --exclude '.caddy-data' \
+  --exclude '.caddy-config' \
+  --exclude 'infra/prod/Caddyfile' \
   --exclude '*.log' \
   "${PROJECT_DIR}/" "${TARGET}:${REMOTE_DIR}/"
 
@@ -117,18 +126,20 @@ echo "🔹 Compose profile: $([[ "${DEPLOY_REAL_WALLET}" == "1" ]] && echo 'real
 
 echo "🔹 Rebuilding and restarting containers..."
 run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
-  (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
-   docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
-   docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest || \
-   (echo '--- compose build failure logs (tail 220) ---' && \
+  if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
+        docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
+        docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
+    echo '--- compose build failure logs (tail 220) ---'; \
     docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true) && \
-   exit 1) && \
-  (docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans || \
-   (echo '--- compose up failure logs (tail 220) ---' && \
+      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+    exit 1; \
+  fi; \
+  if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
+    echo '--- compose up failure logs (tail 220) ---'; \
     docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true) && \
-   exit 1)"
+      xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
+    exit 1; \
+  fi"
 
 if [[ "${DEPLOY_SELF_HEAL}" == "1" ]]; then
   echo "🔹 Self-healing edge proxy (${DEPLOY_CADDY_CONTAINER})..."
@@ -143,7 +154,7 @@ domain="$4"
 mkdir -p "${remote_dir}/infra/prod" "${remote_dir}/.caddy-data" "${remote_dir}/.caddy-config"
 
 if [[ ! -s "${remote_dir}/infra/prod/Caddyfile" ]]; then
-  printf '%s\n' "${domain}, www.${domain} {" "  reverse_proxy dstream-web-1:5656" "}" > "${remote_dir}/infra/prod/Caddyfile"
+  printf '%s\n' "${domain} {" "  reverse_proxy dstream-web-1:5656" "}" > "${remote_dir}/infra/prod/Caddyfile"
 fi
 
 if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
@@ -240,6 +251,18 @@ fi
 
 echo "health checks: PASS"
 EOS
+fi
+
+if [[ "${DEPLOY_SMOKE}" == "1" ]]; then
+  if [[ ! -f "${PROJECT_DIR}/scripts/smoke-production-runtime.sh" ]]; then
+    echo "ERROR: ${PROJECT_DIR}/scripts/smoke-production-runtime.sh not found."
+    exit 1
+  fi
+  echo "🔹 Running post-deploy production smoke..."
+  (
+    cd "${PROJECT_DIR}"
+    SSH_TARGET="${TARGET}" DSTREAM_DEPLOY_DOMAIN="${DEPLOY_DOMAIN}" bash scripts/smoke-production-runtime.sh "${TARGET}"
+  )
 fi
 
 if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
