@@ -23,7 +23,7 @@ export function ChatBox({
   onMessageCountChange?: (count: number) => void;
 }) {
   const { identity, signEvent } = useIdentity();
-  const social = useSocial();
+  const { isMuted, isBlocked, addMuted, addBlocked, removeMuted, removeBlocked, setAlias } = useSocial();
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
   const scrollRef = useRef<HTMLDivElement>(null);
   const nip05Policy = useMemo(() => getNip05Policy(), []);
@@ -50,12 +50,12 @@ export function ChatBox({
     () =>
       messages.filter(
         (message) =>
-          !social.isMuted(message.pubkey) &&
-          !social.isBlocked(message.pubkey) &&
+          !isMuted(message.pubkey) &&
+          !isBlocked(message.pubkey) &&
           !moderation.remoteMuted.has(message.pubkey) &&
           !moderation.remoteBlocked.has(message.pubkey)
       ),
-    [messages, moderation.remoteBlocked, moderation.remoteMuted, social.isMuted, social.isBlocked]
+    [messages, moderation.remoteBlocked, moderation.remoteMuted, isMuted, isBlocked]
   );
 
   const hiddenCount = messages.length - visibleMessages.length;
@@ -94,14 +94,14 @@ export function ChatBox({
       setModerationBusy(targetPubkey, true);
 
       if (action === "mute") {
-        social.removeBlocked(targetPubkey);
-        social.addMuted(targetPubkey);
+        removeBlocked(targetPubkey);
+        addMuted(targetPubkey);
       } else if (action === "block") {
-        social.removeMuted(targetPubkey);
-        social.addBlocked(targetPubkey);
+        removeMuted(targetPubkey);
+        addBlocked(targetPubkey);
       } else {
-        social.removeMuted(targetPubkey);
-        social.removeBlocked(targetPubkey);
+        removeMuted(targetPubkey);
+        removeBlocked(targetPubkey);
       }
 
       const ok = await moderation.publishModerationAction(targetPubkey, action);
@@ -110,7 +110,7 @@ export function ChatBox({
       }
       setModerationBusy(targetPubkey, false);
     },
-    [canModerate, moderation, setModerationBusy, social.addBlocked, social.addMuted, social.removeBlocked, social.removeMuted]
+    [canModerate, moderation, setModerationBusy, addBlocked, addMuted, removeBlocked, removeMuted]
   );
 
   const handleToggleModerator = useCallback(
@@ -168,7 +168,7 @@ export function ChatBox({
       }
 
       if (command.type === "set_alias") {
-        const res = social.setAlias(command.targetPubkey, command.alias);
+        const res = setAlias(command.targetPubkey, command.alias);
         showNotice(res.ok ? `Alias saved for ${pubkeyHexToNpub(command.targetPubkey) ?? command.targetPubkey}` : res.error);
         return res.ok;
       }
@@ -191,8 +191,8 @@ export function ChatBox({
       const target = command.targetPubkey;
 
       if (command.type === "mute") {
-        social.removeBlocked(target);
-        social.addMuted(target);
+        removeBlocked(target);
+        addMuted(target);
         if (canModerate) {
           const ok = await moderation.publishModerationAction(target, "mute");
           if (!ok) showNotice("Muted locally, but failed to publish relay moderation action.");
@@ -204,7 +204,7 @@ export function ChatBox({
       }
 
       if (command.type === "unmute") {
-        social.removeMuted(target);
+        removeMuted(target);
         if (canModerate) {
           const ok = await moderation.publishModerationAction(target, "clear");
           if (!ok) showNotice("Unmuted locally, but failed to publish relay moderation clear.");
@@ -216,8 +216,8 @@ export function ChatBox({
       }
 
       if (command.type === "ban") {
-        social.removeMuted(target);
-        social.addBlocked(target);
+        removeMuted(target);
+        addBlocked(target);
         if (canModerate) {
           const ok = await moderation.publishModerationAction(target, "block");
           if (!ok) showNotice("Blocked locally, but failed to publish relay moderation action.");
@@ -228,8 +228,8 @@ export function ChatBox({
         return true;
       }
 
-      social.removeBlocked(target);
-      social.removeMuted(target);
+      removeBlocked(target);
+      removeMuted(target);
       if (canModerate) {
         const ok = await moderation.publishModerationAction(target, "clear");
         if (!ok) showNotice("Unblocked locally, but failed to publish relay moderation clear.");
@@ -239,7 +239,7 @@ export function ChatBox({
       showNotice("Unblocked locally.");
       return true;
     },
-    [canModerate, canWhisper, moderation, sendMessage, sendWhisper, showNotice, social.addBlocked, social.addMuted, social.removeBlocked, social.removeMuted, social.setAlias, streamPubkey]
+    [canModerate, canWhisper, moderation, sendMessage, sendWhisper, showNotice, addBlocked, addMuted, removeBlocked, removeMuted, setAlias, streamPubkey]
   );
 
   return (

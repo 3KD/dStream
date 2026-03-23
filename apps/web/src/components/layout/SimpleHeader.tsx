@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Mail, Settings } from "lucide-react";
 import { IdentityButton } from "@/components/IdentityButton";
 
@@ -13,7 +14,8 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
   return (
     <header className="sticky top-0 z-[1000] border-b border-neutral-800 bg-neutral-950/90 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-6 flex items-center justify-between">
-        <a href="/" className="flex items-center gap-0 group">
+        <Link href="/" className="flex items-center gap-0 group">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo_trimmed.png"
             alt="dStream Logo"
@@ -22,56 +24,56 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
           <span className="text-2xl md:text-4xl font-black tracking-tighter bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent hidden sm:block relative z-0">
             Stream
           </span>
-        </a>
+        </Link>
 
         <nav className="hidden md:flex items-center gap-4 text-sm text-neutral-300 pointer-events-auto">
-          <a href="/browse" className="hover:text-white transition-colors">
+          <Link href="/browse" className="hover:text-white transition-colors">
             Browse
-          </a>
-          <a href="/guilds" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/guilds" className="hover:text-white transition-colors">
             Guilds
-          </a>
-          <a href="/inbox" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/inbox" className="hover:text-white transition-colors">
             Inbox
-          </a>
-          <a href="/broadcast" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/broadcast" className="hover:text-white transition-colors">
             Broadcast
-          </a>
-          <a href="/dashboard" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/dashboard" className="hover:text-white transition-colors">
             Dashboard
-          </a>
-          <a href="/profile" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/profile" className="hover:text-white transition-colors">
             Profile
-          </a>
-          <a href="/moderation" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/moderation" className="hover:text-white transition-colors">
             Moderation
-          </a>
-          <a href="/settings" className="hover:text-white transition-colors">
+          </Link>
+          <Link href="/settings" className="hover:text-white transition-colors">
             Settings
-          </a>
+          </Link>
           {showDevLinks && (
-            <a href="/dev/visuals" className="hover:text-white transition-colors text-neutral-400">
+            <Link href="/dev/visuals" className="hover:text-white transition-colors text-neutral-400">
               Visuals
-            </a>
+            </Link>
           )}
         </nav>
 
         <div className="flex items-center gap-2">
           {rightSlot}
-          <a
+          <Link
             href="/inbox"
             className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
             aria-label="Inbox"
           >
             <Mail className="w-4 h-4" />
-          </a>
-          <a
+          </Link>
+          <Link
             href="/settings"
             className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
             aria-label="Settings"
           >
             <Settings className="w-4 h-4" />
-          </a>
+          </Link>
           <IdentityButton />
         </div>
       </div>
