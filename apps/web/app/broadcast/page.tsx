@@ -172,6 +172,9 @@ export default function BroadcastPage() {
   const [manifestSignerPubkey, setManifestSignerPubkey] = useState<string | null>(null);
   const [topicsCsv, setTopicsCsv] = useState("");
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftLoadedRef = useRef(false);
+  const draftSaveReady = useRef(false);
+  const initRef = useRef(false);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDeviceId, setVideoDeviceId] = useState<string>("");
@@ -196,43 +199,18 @@ export default function BroadcastPage() {
   const [storedSession, setStoredSession] = useState<StoredBroadcastSession | null>(null);
 
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     setOrigin(window.location.origin);
-  }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/manifest/identity", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json().catch(() => null)) as any;
-        const pk = typeof data?.pubkey === "string" ? data.pubkey.trim() : "";
-        if (!pk) return;
-        if (cancelled) return;
-        setManifestSignerPubkey(pk);
-      } catch {
-        // ignore (manifest service is optional)
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    mediaStreamRef.current = mediaStream;
-  }, [mediaStream]);
-
-  useEffect(() => {
     try {
       const raw = localStorage.getItem("dstream_broadcast_session_v1");
       if (raw) setStoredSession(JSON.parse(raw));
     } catch {
       // ignore
     }
-  }, []);
 
-  useEffect(() => {
     try {
       const raw = localStorage.getItem("dstream_broadcast_include_audio_v1");
       if (raw === "1") setIncludeAudio(true);
@@ -240,14 +218,24 @@ export default function BroadcastPage() {
     } catch {
       // ignore
     }
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/manifest/identity", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => null)) as any;
+        const pk = typeof data?.pubkey === "string" ? data.pubkey.trim() : "";
+        if (!pk) return;
+        setManifestSignerPubkey(pk);
+      } catch {
+        // ignore (manifest service is optional)
+      }
+    })();
   }, []);
+
   useEffect(() => {
-    try {
-      localStorage.setItem("dstream_broadcast_include_audio_v1", includeAudio ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  }, [includeAudio]);
+    mediaStreamRef.current = mediaStream;
+  }, [mediaStream]);
 
   const clearStoredSession = useCallback(() => {
     try {
@@ -260,8 +248,9 @@ export default function BroadcastPage() {
 
   // Restore draft stream metadata (best-effort).
   useEffect(() => {
-    if (draftLoaded) return;
+    if (draftLoadedRef.current) return;
     if (social.isLoading) return;
+    draftLoadedRef.current = true;
     try {
       const raw = localStorage.getItem("dstream_broadcast_draft_v1");
       if (!raw) {
@@ -320,10 +309,15 @@ export default function BroadcastPage() {
     } finally {
       setDraftLoaded(true);
     }
-  }, [draftLoaded, social.isLoading, social.settings.paymentDefaults.stakeNote, social.settings.paymentDefaults.stakeXmr, social.settings.paymentDefaults.xmrTipAddress]);
+  }, [social.isLoading, social.settings.paymentDefaults.stakeNote, social.settings.paymentDefaults.stakeXmr, social.settings.paymentDefaults.xmrTipAddress]);
 
   useEffect(() => {
     if (!draftLoaded) return;
+    // Skip the save triggered by the initial draft load to avoid cascading updates.
+    if (!draftSaveReady.current) {
+      draftSaveReady.current = true;
+      return;
+    }
     try {
       localStorage.setItem(
         "dstream_broadcast_draft_v1",
@@ -706,11 +700,7 @@ export default function BroadcastPage() {
   ]);
 
   useEffect(() => {
-    if (status !== "live") {
-      setHlsStep("idle");
-      setHlsLastCode(null);
-      return;
-    }
+    if (status !== "live") return;
     if (!originStreamId) return;
 
     let cancelled = false;
@@ -1253,7 +1243,11 @@ export default function BroadcastPage() {
                     <input
                       type="checkbox"
                       checked={includeAudio}
-                      onChange={(e) => setIncludeAudio(e.target.checked)}
+                      onChange={(e) => {
+                        const v = e.target.checked;
+                        setIncludeAudio(v);
+                        try { localStorage.setItem("dstream_broadcast_include_audio_v1", v ? "1" : "0"); } catch {}
+                      }}
                       className="accent-blue-500"
                       disabled={status === "connecting" || status === "live"}
                     />
@@ -1422,7 +1416,7 @@ export default function BroadcastPage() {
 
           <div className="space-y-6">
             <div className="h-[520px]">
-              <ChatBox streamPubkey={identity?.pubkey ?? ""} streamId={streamId} />
+              {draftLoaded && <ChatBox streamPubkey={identity?.pubkey ?? ""} streamId={streamId} />}
             </div>
 
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3 text-sm text-neutral-300">

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { finalizeEvent, generateSecretKey, getPublicKey, nip04, nip19, type Event as NostrToolsEvent } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@/lib/encoding";
 
@@ -169,8 +169,12 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     locals: {}
   });
   const [isLoading, setIsLoading] = useState(true);
+  const loadedRef = useRef(false);
+  const saveRef = useRef(false);
 
   useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     try {
       const v2 = localStorage.getItem(STORAGE_KEY_V2);
       const parsedV2 = v2 ? toStoreV2(JSON.parse(v2)) : null;
@@ -178,24 +182,36 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         setStore(parsedV2);
       } else {
         const migrated = migrateFromV1(localStorage.getItem(STORAGE_KEY_V1));
-        if (migrated) setStore(migrated);
+        if (migrated) {
+          setStore(migrated);
+          try {
+            localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
+            localStorage.removeItem(STORAGE_KEY_V1);
+          } catch {}
+        }
       }
     } catch {
       // ignore
     } finally {
+      saveRef.current = true;
       setIsLoading(false);
     }
   }, []);
 
+  // Persist store changes after initial load.
+  const prevStoreJson = useRef("");
   useEffect(() => {
-    if (isLoading) return;
+    if (!saveRef.current) return;
+    const json = JSON.stringify(store);
+    if (json === prevStoreJson.current) return;
+    prevStoreJson.current = json;
     try {
-      localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(store));
+      localStorage.setItem(STORAGE_KEY_V2, json);
       localStorage.removeItem(STORAGE_KEY_V1);
     } catch {
       // ignore
     }
-  }, [isLoading, store]);
+  }, [store]);
 
   const identity = useMemo<Identity | null>(() => {
     if (!store.active) return null;

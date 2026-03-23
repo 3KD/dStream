@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createDefaultSocialState,
   makeStreamFavoriteKey,
@@ -122,14 +122,21 @@ function tryMigrateLegacyState(parsed: any): SocialStateV1 | null {
 export function SocialProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SocialStateV1>(() => createDefaultSocialState());
   const [isLoading, setIsLoading] = useState(true);
+  const loadedRef = useRef(false);
+
+  const saveRef = useRef(false);
 
   useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const existing = parseSocialState(raw);
         if (existing) {
           setState(existing);
+          // No need to save — data already in localStorage.
+          saveRef.current = true;
           return;
         }
 
@@ -138,7 +145,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           const migrated = tryMigrateLegacyState(parsed);
           if (migrated) {
             setState(migrated);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch {}
+            saveRef.current = true;
             return;
           }
         } catch {
@@ -153,22 +161,28 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (legacyP2P !== null) fresh.settings.p2pAssistEnabled = legacyP2P;
 
       setState(fresh);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)); } catch {}
     } catch {
       setState(createDefaultSocialState());
     } finally {
+      saveRef.current = true;
       setIsLoading(false);
     }
   }, []);
 
+  // Persist state changes after initial load.
+  const prevStateJson = useRef("");
   useEffect(() => {
-    if (isLoading) return;
+    if (!saveRef.current) return;
+    const json = JSON.stringify(state);
+    if (json === prevStateJson.current) return;
+    prevStateJson.current = json;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, json);
     } catch {
       // ignore
     }
-  }, [isLoading, state]);
+  }, [state]);
 
   const sets = useMemo(() => {
     return {
@@ -346,13 +360,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   );
 
   const resetAll = useCallback(() => {
-    const next = createDefaultSocialState();
-    setState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+    setState(createDefaultSocialState());
   }, []);
 
   const value = useMemo<SocialContextValue>(

@@ -46,9 +46,11 @@ async function verifyNip05(pubkey: string, nip05: string): Promise<boolean> {
   }
 }
 
+const EMPTY_PUBKEYS: string[] = [];
+
 export function useNostrProfiles(pubkeysInput: string[]) {
   const relays = useMemo(() => getNostrRelays(), []);
-  const pubkeys = useMemo(() => {
+  const pubkeysKey = useMemo(() => {
     const out: string[] = [];
     for (const raw of pubkeysInput ?? []) {
       const value = (raw ?? "").trim().toLowerCase();
@@ -56,14 +58,15 @@ export function useNostrProfiles(pubkeysInput: string[]) {
       if (out.includes(value)) continue;
       out.push(value);
     }
-    return out;
+    return out.join(",");
   }, [pubkeysInput]);
+  const pubkeys = useMemo(() => pubkeysKey ? pubkeysKey.split(",") : EMPTY_PUBKEYS, [pubkeysKey]);
 
   const [profilesByPubkey, setProfilesByPubkey] = useState<Record<string, NostrProfileWithVerification>>({});
 
   useEffect(() => {
     if (pubkeys.length === 0) {
-      setProfilesByPubkey({});
+      setProfilesByPubkey((prev) => Object.keys(prev).length === 0 ? prev : {});
       return;
     }
 

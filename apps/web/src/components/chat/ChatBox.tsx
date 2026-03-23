@@ -55,7 +55,7 @@ export function ChatBox({
           !moderation.remoteMuted.has(message.pubkey) &&
           !moderation.remoteBlocked.has(message.pubkey)
       ),
-    [messages, moderation.remoteBlocked, moderation.remoteMuted, social]
+    [messages, moderation.remoteBlocked, moderation.remoteMuted, social.isMuted, social.isBlocked]
   );
 
   const hiddenCount = messages.length - visibleMessages.length;
@@ -110,7 +110,7 @@ export function ChatBox({
       }
       setModerationBusy(targetPubkey, false);
     },
-    [canModerate, moderation, setModerationBusy, social]
+    [canModerate, moderation, setModerationBusy, social.addBlocked, social.addMuted, social.removeBlocked, social.removeMuted]
   );
 
   const handleToggleModerator = useCallback(
@@ -239,7 +239,7 @@ export function ChatBox({
       showNotice("Unblocked locally.");
       return true;
     },
-    [canModerate, canWhisper, moderation, sendMessage, sendWhisper, showNotice, social, streamPubkey]
+    [canModerate, canWhisper, moderation, sendMessage, sendWhisper, showNotice, social.addBlocked, social.addMuted, social.removeBlocked, social.removeMuted, social.setAlias, streamPubkey]
   );
 
   return (

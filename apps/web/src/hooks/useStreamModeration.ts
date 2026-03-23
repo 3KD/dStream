@@ -58,16 +58,16 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
   const rolesSeenRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
+    if (!streamPubkey || !streamId || !isHex64(streamPubkey)) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setActionsByAuthorTarget({});
     setRoleByTarget({});
     actionsSeenRef.current = new Map();
     rolesSeenRef.current = new Map();
-
-    if (!streamPubkey || !streamId || !isHex64(streamPubkey)) {
-      setIsLoading(false);
-      return;
-    }
 
     const streamTag = `${NOSTR_KINDS.STREAM_ANNOUNCE}:${streamPubkey}:${streamId}`;
     const filters: Filter[] = [
