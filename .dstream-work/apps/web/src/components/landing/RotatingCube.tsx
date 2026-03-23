@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import {
+  Bitcoin,
   ShieldCheck,
   Unlock,
-  Users,
   EyeOff,
   Network,
   Globe,
@@ -13,56 +13,52 @@ import {
   Music,
   Camera,
   Gamepad,
-  Flag,
   type LucideIcon
 } from "lucide-react";
 
 export const WORDS = [
   "Decentralized",
-  "Unstoppable",
   "P2P",
-  "Ownerless",
+  "Independent",
   "Private",
-  "Permissionless",
   "Global",
+  "Trustless",
   "Journalism",
   "Activism",
   "Music",
   "Gamer",
   "Influencer",
-  "Independent"
+  "Unstoppable"
 ];
 
-const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: string }> = {
+const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: string; iconClassName?: string; strokeWidth?: number }> = {
   Decentralized: { img: "/logo_trimmed.png", color: "text-purple-400" },
-  Unstoppable: { icon: ShieldCheck, color: "text-green-400" },
-  Permissionless: { icon: Unlock, color: "text-yellow-400" },
-  Ownerless: { icon: Users, color: "text-blue-400" },
-  Private: { icon: EyeOff, color: "text-red-400" },
   P2P: { icon: Network, color: "text-cyan-400" },
+  Independent: { icon: Bitcoin, color: "text-orange-400", iconClassName: "-scale-x-100" },
+  Private: { icon: EyeOff, color: "text-red-400" },
   Global: { icon: Globe, color: "text-emerald-400" },
+  Trustless: { icon: Unlock, color: "text-yellow-400" },
   Journalism: { icon: PenTool, color: "text-orange-400" },
   Activism: { icon: Megaphone, color: "text-pink-400" },
   Music: { icon: Music, color: "text-violet-400" },
-  Influencer: { icon: Camera, color: "text-rose-400" },
   Gamer: { icon: Gamepad, color: "text-lime-400" },
-  Independent: { icon: Flag, color: "text-amber-400" }
+  Influencer: { icon: Camera, color: "text-rose-400" },
+  Unstoppable: { icon: ShieldCheck, color: "text-green-400" }
 };
 
 export const WORD_COLORS_HEX: Record<string, string> = {
   Decentralized: "#ffffff",
-  Unstoppable: "#4ade80",
-  Permissionless: "#facc15",
-  Ownerless: "#60a5fa",
-  Private: "#f87171",
   P2P: "#22d3ee",
+  Independent: "#f97316",
+  Private: "#f87171",
   Global: "#34d399",
+  Trustless: "#facc15",
   Journalism: "#fb923c",
   Activism: "#f472b6",
   Music: "#a78bfa",
-  Influencer: "#fb7185",
   Gamer: "#a3e635",
-  Independent: "#fbbf24"
+  Influencer: "#fb7185",
+  Unstoppable: "#4ade80"
 };
 
 interface RotatingCubeProps {
@@ -72,7 +68,6 @@ interface RotatingCubeProps {
 const ROTATE_TRANSITION_MS = 1200;
 const LIFT_TOTAL_MS = 2500;
 const WORD_CHANGE_INTERVAL_MS = 3900;
-const INITIAL_WORD_HOLD_MS = Math.max(WORD_CHANGE_INTERVAL_MS - ROTATE_TRANSITION_MS, 0);
 
 export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   const [rotationCount, setRotationCount] = useState(0);
@@ -85,7 +80,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
     WORDS[1]
   ]);
 
-  const nextWordIndexRef = useRef(2);
+  const nextWordIndexRef = useRef(4);
   const rotationCountRef = useRef(0);
 
   useEffect(() => {
@@ -95,7 +90,11 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   }, [rotationCount, faces, onWordChange]);
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     const runCycle = () => {
+      if (cancelled) return;
       const currentRotation = rotationCountRef.current;
       const faceSequence = [0, 3, 2, 1];
       const backIdx = faceSequence[(currentRotation + 2) % 4];
@@ -109,26 +108,26 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
 
       setIsLifted(true);
 
-      rotateTimer = setTimeout(() => {
+      setTimeout(() => {
+        if (cancelled) return;
         rotationCountRef.current += 1;
         setRotationCount(rotationCountRef.current);
       }, ROTATE_TRANSITION_MS);
 
-      liftTimer = setTimeout(() => {
+      setTimeout(() => {
+        if (cancelled) return;
         setIsLifted(false);
       }, LIFT_TOTAL_MS);
 
-      cycleTimer = setTimeout(runCycle, WORD_CHANGE_INTERVAL_MS);
+      timer = setTimeout(runCycle, WORD_CHANGE_INTERVAL_MS);
     };
 
-    let cycleTimer: ReturnType<typeof setTimeout> | null = setTimeout(runCycle, INITIAL_WORD_HOLD_MS);
-    let rotateTimer: ReturnType<typeof setTimeout> | null = null;
-    let liftTimer: ReturnType<typeof setTimeout> | null = null;
+    // Hold the first word for 1s before starting rotations.
+    timer = setTimeout(runCycle, 1000);
 
     return () => {
-      if (cycleTimer) clearTimeout(cycleTimer);
-      if (rotateTimer) clearTimeout(rotateTimer);
-      if (liftTimer) clearTimeout(liftTimer);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -159,7 +158,12 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
                 />
               ) : (
                 <span className="w-12 h-12 md:w-20 md:h-20 flex-shrink-0 flex items-center justify-center">
-                  {WIcon && <WIcon className="w-12 h-12 md:w-20 md:h-20" />}
+                  {WIcon && (
+                    <WIcon
+                      className={`w-12 h-12 md:w-20 md:h-20 ${wIconConfig?.iconClassName ?? ""}`}
+                      strokeWidth={wIconConfig?.strokeWidth ?? 2}
+                    />
+                  )}
                 </span>
               )}
               <span>{word}</span>
@@ -209,7 +213,8 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
                 ) : (
                   Icon && (
                     <Icon
-                      className={`w-12 h-12 md:w-20 md:h-20 flex-shrink-0 ${wordIconConfig?.color ?? ""}`}
+                      strokeWidth={wordIconConfig?.strokeWidth ?? 2}
+                      className={`w-12 h-12 md:w-20 md:h-20 flex-shrink-0 ${wordIconConfig?.color ?? ""} ${wordIconConfig?.iconClassName ?? ""}`}
                       aria-hidden="true"
                     />
                   )
