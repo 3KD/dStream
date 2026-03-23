@@ -173,7 +173,7 @@ export function RotatingCube({ onWordChange, visualMode = "disco" }: RotatingCub
     WORDS[1]
   ]);
 
-  const nextWordIndexRef = useRef(2);
+  const nextWordIndexRef = useRef(4);
   const rotationCountRef = useRef(0);
   const [edgeBaseValues, setEdgeBaseValues] = useState<number[]>(() => buildSeededEdgeValues(42));
   const [edgeValues, setEdgeValues] = useState<number[]>(() => buildSeededEdgeValues(77));
@@ -201,7 +201,11 @@ export function RotatingCube({ onWordChange, visualMode = "disco" }: RotatingCub
   }, [isPsychedelic, edgeBaseValues, chaosEnabled]);
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     const runCycle = () => {
+      if (cancelled) return;
       const currentRotation = rotationCountRef.current;
       const faceSequence = [0, 3, 2, 1];
       const backIdx = faceSequence[(currentRotation + 2) % 4];
@@ -216,21 +220,26 @@ export function RotatingCube({ onWordChange, visualMode = "disco" }: RotatingCub
       setIsLifted(true);
 
       setTimeout(() => {
+        if (cancelled) return;
         rotationCountRef.current += 1;
         setRotationCount(rotationCountRef.current);
       }, 1200);
 
       setTimeout(() => {
+        if (cancelled) return;
         setIsLifted(false);
       }, 2500);
+
+      // Schedule next cycle after this one completes (total cycle = 3900ms).
+      timer = setTimeout(runCycle, 3900);
     };
 
-    const timeout = setTimeout(runCycle, 1000);
-    const interval = setInterval(runCycle, 3900);
+    // First rotation after 1s pause to let the initial word be visible.
+    timer = setTimeout(runCycle, 1000);
 
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
