@@ -65,9 +65,9 @@ interface RotatingCubeProps {
   onWordChange?: (word: string) => void;
 }
 
-const ROTATE_TRANSITION_MS = 1200;
-const LIFT_TOTAL_MS = 2500;
-const WORD_CHANGE_INTERVAL_MS = 3900;
+const ROTATE_TRANSITION_MS = 1000;
+const LIFT_TOTAL_MS = 3200;
+const WORD_CHANGE_INTERVAL_MS = 5000;
 
 export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   const [rotationCount, setRotationCount] = useState(0);
@@ -108,12 +108,9 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
 
       setIsLifted(true);
 
-      // Trigger rotation almost immediately so lift + rotate animate together
-      setTimeout(() => {
-        if (cancelled) return;
-        rotationCountRef.current += 1;
-        setRotationCount(rotationCountRef.current);
-      }, 50);
+      // Trigger rotation immediately so lift + rotate animate together
+      rotationCountRef.current += 1;
+      setRotationCount(rotationCountRef.current);
 
       setTimeout(() => {
         if (cancelled) return;

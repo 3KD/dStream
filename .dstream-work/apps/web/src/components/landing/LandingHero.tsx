@@ -26,7 +26,7 @@ export function LandingHero({
       <div className="text-5xl md:text-8xl font-black tracking-tighter flex flex-col items-center justify-center gap-6">
         <RotatingCube onWordChange={setCurrentWord} />
         <span
-          className="pb-[0.2em] transition-colors duration-[2000ms] ease-in-out"
+          className="pb-[0.2em] transition-colors duration-500 ease-in-out"
           style={{ color: WORD_COLORS_HEX[currentWord] || "#a855f7" }}
         >
           Streaming

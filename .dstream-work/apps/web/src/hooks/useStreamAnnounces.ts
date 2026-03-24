@@ -168,6 +168,7 @@ function chooseBetterStream(current: StreamAnnounce, candidate: StreamAnnounce, 
 }
 
 function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): StreamAnnounce[] {
+  // First pass: dedup by canonical stream key (URL-based)
   const byCanonical = new Map<string, StreamAnnounce>();
   for (const stream of streams) {
     const canonical = canonicalStreamKey(stream);
@@ -176,7 +177,22 @@ function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): Str
     const existing = byCanonical.get(key);
     byCanonical.set(key, existing ? chooseBetterStream(existing, stream, nowSec) : stream);
   }
-  return Array.from(byCanonical.values());
+
+  // Second pass: dedup by pubkey + title to collapse repeat announcements
+  // (e.g. same person creating many events with different d-tags but same stream)
+  const byPubkeyTitle = new Map<string, StreamAnnounce>();
+  for (const stream of byCanonical.values()) {
+    const normalizedTitle = (stream.title || "").trim().toLowerCase();
+    if (!normalizedTitle) {
+      // Untitled streams: keep all, keyed uniquely
+      byPubkeyTitle.set(`${stream.pubkey}::notitle::${stream.streamId}`, stream);
+      continue;
+    }
+    const key = `${stream.pubkey.toLowerCase()}::title::${normalizedTitle}`;
+    const existing = byPubkeyTitle.get(key);
+    byPubkeyTitle.set(key, existing ? chooseBetterStream(existing, stream, nowSec) : stream);
+  }
+  return Array.from(byPubkeyTitle.values());
 }
 
 function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number, hintGraceCutoffSec: number): StreamAnnounce {
@@ -199,21 +215,22 @@ function sortStreamsStable(
   orderMeta: Map<string, StreamOrderMeta>
 ) {
   return streams.slice().sort((a, b) => {
+    // Live streams first
     const aLive = a.status === "live";
     const bLive = b.status === "live";
     if (aLive !== bLive) return aLive ? -1 : 1;
 
+    // Primary: insertion order (seq) — keeps cards stable as relay data arrives
     const keyA = makeStreamKey(a.pubkey, a.streamId);
     const keyB = makeStreamKey(b.pubkey, b.streamId);
     const aMeta = orderMeta.get(keyA);
     const bMeta = orderMeta.get(keyB);
-    const rankA = aMeta?.firstSeenAt ?? a.createdAt;
-    const rankB = bMeta?.firstSeenAt ?? b.createdAt;
-    if (rankA !== rankB) return rankB - rankA;
-
     const seqA = aMeta?.seq ?? Number.MAX_SAFE_INTEGER;
     const seqB = bMeta?.seq ?? Number.MAX_SAFE_INTEGER;
     if (seqA !== seqB) return seqA - seqB;
+
+    // Fallback: newest first
+    if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
 
     return keyA.localeCompare(keyB);
   });
