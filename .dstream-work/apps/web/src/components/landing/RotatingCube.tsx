@@ -65,9 +65,10 @@ interface RotatingCubeProps {
   onWordChange?: (word: string) => void;
 }
 
-const ROTATE_TRANSITION_MS = 1000;
-const LIFT_TOTAL_MS = 3200;
-const WORD_CHANGE_INTERVAL_MS = 5000;
+const TRANSITION_MS = 800;       // CSS transition duration for each move
+const HOLD_MS = 1800;            // How long the word displays (flat, no motion)
+const LIFT_DELAY_MS = 200;       // Pause after lift before rotating
+const DROP_DELAY_MS = 200;       // Pause after rotation before dropping
 
 export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   const [rotationCount, setRotationCount] = useState(0);
@@ -93,12 +94,17 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
+    const schedule = (fn: () => void, ms: number) => {
+      timer = setTimeout(() => { if (!cancelled) fn(); }, ms);
+    };
+
     const runCycle = () => {
       if (cancelled) return;
+
+      // Swap the back face to the next word BEFORE lifting
       const currentRotation = rotationCountRef.current;
       const faceSequence = [0, 3, 2, 1];
       const backIdx = faceSequence[(currentRotation + 2) % 4];
-
       setFaces((prev) => {
         const next = [...prev] as [string, string, string, string];
         next[backIdx] = WORDS[nextWordIndexRef.current % WORDS.length];
@@ -106,22 +112,26 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
         return next;
       });
 
+      // Step 1: Lift up
       setIsLifted(true);
 
-      // Trigger rotation immediately so lift + rotate animate together
-      rotationCountRef.current += 1;
-      setRotationCount(rotationCountRef.current);
+      // Step 2: After lift completes + small pause, rotate
+      schedule(() => {
+        rotationCountRef.current += 1;
+        setRotationCount(rotationCountRef.current);
 
-      setTimeout(() => {
-        if (cancelled) return;
-        setIsLifted(false);
-      }, LIFT_TOTAL_MS);
+        // Step 3: After rotation completes + small pause, drop down
+        schedule(() => {
+          setIsLifted(false);
 
-      timer = setTimeout(runCycle, WORD_CHANGE_INTERVAL_MS);
+          // Step 4: After drop completes, hold the word, then start next cycle
+          schedule(runCycle, TRANSITION_MS + HOLD_MS);
+        }, TRANSITION_MS + DROP_DELAY_MS);
+      }, TRANSITION_MS + LIFT_DELAY_MS);
     };
 
-    // Hold the first word for 1s before starting rotations.
-    timer = setTimeout(runCycle, 1000);
+    // Hold the first word, then start
+    schedule(runCycle, HOLD_MS + 500);
 
     return () => {
       cancelled = true;
@@ -174,7 +184,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
         className="machined-cube"
         style={{
           transform: `translateZ(${liftZ}) rotateX(${rotateX}deg)`,
-          transition: `transform ${ROTATE_TRANSITION_MS}ms ease-in-out`
+          transition: `transform ${TRANSITION_MS}ms ease-in-out`
         }}
       >
         {faces.map((word, i) => {
@@ -198,7 +208,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
               style={{
                 backgroundColor: "#0a0a0a",
                 transition: "opacity 0s, background 0.2s, box-shadow 0.2s",
-                transitionDelay: isLeaving ? `${ROTATE_TRANSITION_MS - 100}ms` : "0ms"
+                transitionDelay: isLeaving ? `${TRANSITION_MS - 100}ms` : "0ms"
               }}
             >
               <span className="machined-text flex flex-row items-center whitespace-nowrap gap-3 md:gap-5">
