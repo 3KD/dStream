@@ -131,12 +131,15 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
         };
 
         // Initial delay then start cycling
-        const timeout = setTimeout(runCycle, 1000);
-        const interval = setInterval(runCycle, 3900); // 1.2s Lift + 1.2s Rotate + 1.2s Descend (starts at 2.5s) + 200ms pause = 3.9s
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const timeout = setTimeout(() => {
+            runCycle();
+            interval = setInterval(runCycle, 3900);
+        }, 1000);
 
         return () => {
             clearTimeout(timeout);
-            clearInterval(interval);
+            if (interval) clearInterval(interval);
         };
     }, []); // EMPTY dependency array - interval created only once
 
