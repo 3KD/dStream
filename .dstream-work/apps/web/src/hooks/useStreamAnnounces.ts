@@ -180,11 +180,18 @@ function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): Str
 }
 
 function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number, hintGraceCutoffSec: number): StreamAnnounce {
-  if (stream.status !== "live") return stream;
-  if (stream.createdAt >= staleCutoffSec) return stream;
-  const hasStreamingHint = isLikelyLivePlayableMediaUrl(stream.streaming);
-  if (hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) return stream;
-  return { ...stream, status: "ended" };
+  if (stream.status === "live") {
+    if (stream.createdAt >= staleCutoffSec) return stream;
+    const hasStreamingHint = isLikelyLivePlayableMediaUrl(stream.streaming);
+    if (hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) return stream;
+    return { ...stream, status: "ended" };
+  }
+  // Promote "ended" back to "live" when the stream has a live-looking HLS URL
+  // Many 24/7 streams send "ended" events but keep streaming
+  if (stream.status === "ended" && isLikelyLivePlayableMediaUrl(stream.streaming)) {
+    return { ...stream, status: "live" };
+  }
+  return stream;
 }
 
 function sortStreamsStable(
