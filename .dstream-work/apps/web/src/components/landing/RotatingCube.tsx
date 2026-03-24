@@ -90,7 +90,14 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   }, [rotationCount, faces, onWordChange]);
 
   useEffect(() => {
+    let cancelled = false;
+    let liftTimer: ReturnType<typeof setTimeout> | null = null;
+    let rotateTimer: ReturnType<typeof setTimeout> | null = null;
+    let dropTimer: ReturnType<typeof setTimeout> | null = null;
+    let nextTimer: ReturnType<typeof setTimeout> | null = null;
+
     const runCycle = () => {
+      if (cancelled) return;
       const currentRotation = rotationCountRef.current;
       const faceSequence = [0, 3, 2, 1];
       const backIdx = faceSequence[(currentRotation + 2) % 4];
@@ -104,22 +111,28 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
 
       setIsLifted(true);
 
-      setTimeout(() => {
+      rotateTimer = setTimeout(() => {
+        if (cancelled) return;
         rotationCountRef.current += 1;
         setRotationCount(rotationCountRef.current);
       }, ROTATE_TRANSITION_MS);
 
-      setTimeout(() => {
+      dropTimer = setTimeout(() => {
+        if (cancelled) return;
         setIsLifted(false);
       }, LIFT_TOTAL_MS);
+
+      nextTimer = setTimeout(runCycle, WORD_CHANGE_INTERVAL_MS);
     };
 
-    const timeout = setTimeout(runCycle, 1000);
-    const interval = setInterval(runCycle, WORD_CHANGE_INTERVAL_MS);
+    liftTimer = setTimeout(runCycle, 1000);
 
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
+      cancelled = true;
+      if (liftTimer) clearTimeout(liftTimer);
+      if (rotateTimer) clearTimeout(rotateTimer);
+      if (dropTimer) clearTimeout(dropTimer);
+      if (nextTimer) clearTimeout(nextTimer);
     };
   }, []);
 
