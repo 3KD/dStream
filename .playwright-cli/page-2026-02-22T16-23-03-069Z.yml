@@ -1,0 +1,163 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e7]:
+          - link "dStream Logo Stream" [ref=e8] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e9]
+            - generic [ref=e10]: Stream
+          - navigation [ref=e11]:
+            - generic [ref=e12]:
+              - link "Browse" [ref=e13] [cursor=pointer]:
+                - /url: /browse
+              - link "Guilds" [ref=e14] [cursor=pointer]:
+                - /url: /guilds
+              - link "Inbox" [ref=e15] [cursor=pointer]:
+                - /url: /inbox
+              - link "Moderation" [ref=e16] [cursor=pointer]:
+                - /url: /moderation
+              - link "Settings" [ref=e17] [cursor=pointer]:
+                - /url: /settings
+              - link "Visuals" [ref=e18] [cursor=pointer]:
+                - /url: /dev/visuals
+          - button "Open search" [ref=e20]:
+            - img [ref=e21]
+      - main [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e29]:
+              - generic: Loading…
+              - button "Tap for sound" [ref=e32]
+              - generic [ref=e34]:
+                - generic [ref=e35]:
+                  - generic [ref=e36]:
+                    - generic [ref=e37]: Volume
+                    - slider "Volume" [ref=e38]: "0"
+                    - generic [ref=e39]: 0%
+                  - generic [ref=e40]:
+                    - generic [ref=e41]: Quality
+                    - combobox "Quality" [ref=e42]:
+                      - option "Auto" [selected]
+                - generic [ref=e43]:
+                  - generic "Stability mode (HLS preferred). Enable low-latency mode to try WHEP." [ref=e44]:
+                    - checkbox "Low-latency mode" [ref=e45]
+                    - generic [ref=e46]: Low-latency mode
+                  - button "PiP" [disabled] [ref=e47]
+                  - button "Fullscreen" [ref=e48]
+                - generic [ref=e49]:
+                  - generic [ref=e50]: "Quality: Auto"
+                  - button "Favorite stream" [ref=e51]:
+                    - img [ref=e52]
+            - generic [ref=e54]:
+              - generic [ref=e55]:
+                - heading "Live Stream" [level=1] [ref=e56]
+                - generic [ref=e57]: npub1qhnqzk03u…6q30lht3 / synthdragon-chill
+                - generic [ref=e58]: Playing live stream path.
+              - generic [ref=e59]:
+                - generic [ref=e60]: About
+                - paragraph [ref=e61]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+                - generic [ref=e62]: "Playback URL: /api/hls/05e60159f1e0a6cb64fa573fc1ebe35f985a975defe7d75603fdb9e8cfd38334--synthdragon-chill/index.m3u8"
+            - generic [ref=e63]:
+              - generic [ref=e64]:
+                - generic [ref=e65]:
+                  - generic [ref=e66]:
+                    - generic [ref=e67]:
+                      - text: "Host mode: P2P Economy (T=6)"
+                      - generic [ref=e68]: active 0 · queued 0
+                    - generic [ref=e69]: "Queue status: not in active/standby set (enable presence to join FCFS queue)."
+                  - generic [ref=e70]:
+                    - generic [ref=e71]: Archived Broadcasts (VOD)
+                    - generic [ref=e72]: "Visibility: Public"
+                    - generic [ref=e73]: Broadcaster disabled VOD archive and DVR controls for this stream.
+                - generic [ref=e74]:
+                  - button "Report stream" [ref=e75]:
+                    - img [ref=e76]
+                    - text: Stream
+                  - button "Report creator" [ref=e78]:
+                    - img [ref=e79]
+                    - text: Creator
+              - generic [ref=e81]:
+                - generic [ref=e82] [cursor=pointer]:
+                  - checkbox "Share presence" [checked] [ref=e83]
+                  - text: Share presence
+                - generic [ref=e84] [cursor=pointer]:
+                  - checkbox "P2P assist" [checked] [ref=e85]
+                  - text: P2P assist
+                - generic [ref=e86]: Connect identity to publish.
+          - generic [ref=e88]:
+            - generic [ref=e89]:
+              - generic [ref=e90]:
+                - generic [ref=e91]: Chat
+                - generic [ref=e92]: syncing moderation…
+              - generic [ref=e93]: 0 msgs
+            - generic [ref=e96]: No messages yet
+            - generic [ref=e97]: Connect an identity to chat.
+    - contentinfo [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - generic [ref=e102]:
+              - img "dStream logo" [ref=e103]
+              - generic [ref=e104]: dStream Protocol
+            - paragraph [ref=e105]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+            - paragraph [ref=e106]:
+              - img [ref=e107]
+              - img [ref=e110]
+              - text: Production docs reflect live stack behavior
+          - generic [ref=e112]:
+            - paragraph [ref=e113]:
+              - img [ref=e114]
+              - text: Protocol
+            - generic [ref=e119]:
+              - link "Whitepaper" [ref=e120] [cursor=pointer]:
+                - /url: /whitepaper
+              - link "Documentation" [ref=e121] [cursor=pointer]:
+                - /url: /docs
+              - link "Use Cases" [ref=e122] [cursor=pointer]:
+                - /url: /use-cases
+              - link "Donate" [ref=e123] [cursor=pointer]:
+                - /url: /donate
+              - link "Analytics" [ref=e124] [cursor=pointer]:
+                - /url: /analytics
+              - link "Terms" [ref=e125] [cursor=pointer]:
+                - /url: /terms
+              - link "Privacy" [ref=e126] [cursor=pointer]:
+                - /url: /privacy
+              - link "Community Guidelines" [ref=e127] [cursor=pointer]:
+                - /url: /community-guidelines
+          - generic [ref=e128]:
+            - paragraph [ref=e129]:
+              - img [ref=e130]
+              - text: Build
+            - generic [ref=e133]:
+              - link "Broadcast" [ref=e134] [cursor=pointer]:
+                - /url: /broadcast
+              - link "Browse" [ref=e135] [cursor=pointer]:
+                - /url: /browse
+              - link "Settings" [ref=e136] [cursor=pointer]:
+                - /url: /settings
+              - link "Mobile Bootstrap" [ref=e137] [cursor=pointer]:
+                - /url: /mobile/bootstrap
+          - generic [ref=e138]:
+            - paragraph [ref=e139]: Support
+            - generic [ref=e140]:
+              - link "Support Hub" [ref=e141] [cursor=pointer]:
+                - /url: /support
+              - link "Donate" [ref=e142] [cursor=pointer]:
+                - /url: /donate
+                - img [ref=e143]
+                - text: Donate
+              - link "GitHub" [ref=e145] [cursor=pointer]:
+                - /url: https://github.com/3KD/dStream
+                - text: GitHub
+                - img [ref=e146]
+            - generic [ref=e150]: "Wallet plugin setup: Settings → Wallet Integrations"
+            - link "Report abuse or policy violations" [ref=e151] [cursor=pointer]:
+              - /url: /community-guidelines
+            - generic [ref=e152]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+        - generic [ref=e153]:
+          - generic [ref=e154]: © dStream
+          - generic [ref=e155]: Decentralized by default. Operated by independent nodes.
+  - button "Open Next.js Dev Tools" [ref=e161] [cursor=pointer]:
+    - img [ref=e162]

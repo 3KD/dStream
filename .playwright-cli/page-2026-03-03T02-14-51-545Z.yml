@@ -1,0 +1,111 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]:
+          - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e8]
+            - generic [ref=e9]: Stream
+          - navigation [ref=e10]:
+            - link "Browse" [ref=e11] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e12] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e13] [cursor=pointer]:
+              - /url: /inbox
+            - link "Moderation" [ref=e14] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e15] [cursor=pointer]:
+              - /url: /settings
+          - button "Identity" [ref=e86]:
+            - img [ref=e87]
+            - generic [ref=e90]: Identity
+      - main [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - generic [ref=e23]:
+              - generic:
+                - generic:
+                  - generic:
+                    - button "Pause"
+                    - generic:
+                      - slider "Seek": "39.65"
+                      - generic: 0:39 / 0:55
+                    - generic: Buffering…
+                    - button "Tap for sound"
+                    - generic:
+                      - generic: Volume
+                      - button "Volume 0 0%": Unmute
+                      - slider "Volume": "0"
+                      - generic: 0%
+                    - generic "Stability mode (HLS preferred). Enable low-latency mode to try WHEP.":
+                      - checkbox "Low-latency mode"
+                      - generic: Low-latency mode
+                    - button "PiP" [disabled]
+                    - button "Background Off"
+                    - button "Fullscreen"
+                    - button "Back to Live"
+                    - generic:
+                      - generic: Quality
+                      - combobox "Quality":
+                        - option "Auto" [selected]
+                        - option "Unknown"
+                    - generic:
+                      - button "Favorite stream":
+                        - img
+            - generic [ref=e34]:
+              - generic [ref=e40]:
+                - generic [ref=e41]:
+                  - heading "Synthdragon Radio — CHILL" [level=1] [ref=e91]
+                  - generic [ref=e43]:
+                    - button "npub1qhnqzk03u…6q30lht3" [ref=e44]
+                    - generic [ref=e45]: / synthdragon-chill
+                  - generic [ref=e46]:
+                    - generic [ref=e47]: Playing live stream path.
+                    - link "Playback URL" [ref=e48] [cursor=pointer]:
+                      - /url: https://hls.synthdragonradio.com/hls/chill/index.m3u8
+                    - button "Copy playback URL" [ref=e49]:
+                      - img [ref=e50]
+                - generic [ref=e53]:
+                  - generic [ref=e54]: About
+                  - paragraph [ref=e55]: 24/7 synthwave, ambient retrowave, and cosmic soundscapes. Frozen Nebula vibes.
+              - generic [ref=e57]:
+                - generic [ref=e58]: viewers ≈ 0
+                - button "Presence On" [pressed] [ref=e59]
+                - button "P2P Assist On" [pressed] [ref=e60]
+                - generic [ref=e61]: Connect identity to publish.
+          - generic [ref=e93]:
+            - generic [ref=e95]:
+              - generic [ref=e96]: Chat
+              - generic "Connected" [ref=e97]
+            - generic [ref=e99]: No messages yet
+            - generic [ref=e100]: Connect an identity to chat.
+    - contentinfo [ref=e62]:
+      - generic [ref=e63]:
+        - generic [ref=e64]:
+          - generic [ref=e65]:
+            - img "dStream logo" [ref=e66]
+            - generic [ref=e67]: dStream Rebuild
+          - paragraph [ref=e68]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e69]:
+          - paragraph [ref=e70]: Protocol
+          - link "Whitepaper" [ref=e71] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e72] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e73] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e74]:
+          - paragraph [ref=e75]: Support
+          - link "Donate" [ref=e76] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e77]
+            - text: Donate
+          - link "GitHub" [ref=e79] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e80]:
+            - img [ref=e81]
+            - img [ref=e84]
+            - text: Updated for the current rebuild architecture
+  - alert [ref=e101]

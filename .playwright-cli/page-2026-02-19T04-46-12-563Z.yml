@@ -1,0 +1,1914 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e57]:
+      - banner [ref=e58]:
+        - generic [ref=e59]:
+          - link "dStream Logo Stream" [ref=e60] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e61]
+            - generic [ref=e62]: Stream
+          - navigation [ref=e63]:
+            - link "Browse" [ref=e64] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e65] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e66] [cursor=pointer]:
+              - /url: /inbox
+            - link "Broadcast" [ref=e67] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Dashboard" [ref=e68] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Profile" [ref=e69] [cursor=pointer]:
+              - /url: /profile
+            - link "Moderation" [ref=e70] [cursor=pointer]:
+              - /url: /moderation
+            - link "Guidelines" [ref=e71] [cursor=pointer]:
+              - /url: /community-guidelines
+            - link "Settings" [ref=e72] [cursor=pointer]:
+              - /url: /settings
+          - group [ref=e75]:
+            - generic "Identity" [ref=e76] [cursor=pointer]:
+              - generic [ref=e77]:
+                - img [ref=e78]
+                - generic [ref=e81]: Identity
+      - main [ref=e82]:
+        - generic [ref=e83]:
+          - heading "Browse" [level=1] [ref=e84]
+          - generic [ref=e85]:
+            - generic [ref=e86] [cursor=pointer]:
+              - checkbox "Favorites only" [ref=e87]
+              - text: Favorites only
+            - generic [ref=e88] [cursor=pointer]:
+              - checkbox "Live only" [ref=e89]
+              - text: Live only
+            - generic [ref=e90] [cursor=pointer]:
+              - checkbox "Curated only" [ref=e91]
+              - text: Curated only
+            - generic [ref=e92] [cursor=pointer]:
+              - checkbox "Mature" [ref=e93]
+              - text: Mature
+            - link "Guilds" [ref=e94] [cursor=pointer]:
+              - /url: /guilds
+            - link "Home" [ref=e95] [cursor=pointer]:
+              - /url: /
+        - generic [ref=e96]:
+          - link "ScardustTV 24/7 ⚡️ Live Quick play with PiP controls Report stream ScardustTV 24/7 ⚡️ Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e97] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/4e2d2a37-e537-4610-89ca-4e9b3455f70a
+            - generic [ref=e98]:
+              - img "ScardustTV 24/7 ⚡️" [ref=e99]
+              - generic [ref=e100]: Live
+              - button "Quick play with PiP controls" [ref=e101]: Quick Play
+              - button "Report stream" [ref=e102]:
+                - img [ref=e103]
+                - text: Report
+            - generic [ref=e105]:
+              - generic [ref=e106]:
+                - heading "ScardustTV 24/7 ⚡️" [level=3] [ref=e107]
+                - button "Favorite stream" [ref=e108]:
+                  - img [ref=e109]
+              - paragraph [ref=e111]: npub1eaz6dwsnv…jsqarcgz
+          - link "NoGood Radio Live Quick play with PiP controls Report stream NoGood Radio Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e112] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/537a365c-f1ec-44ac-af10-22d14a7319fb
+            - generic [ref=e113]:
+              - img "NoGood Radio" [ref=e114]
+              - generic [ref=e115]: Live
+              - button "Quick play with PiP controls" [ref=e116]: Quick Play
+              - button "Report stream" [ref=e117]:
+                - img [ref=e118]
+                - text: Report
+            - generic [ref=e120]:
+              - generic [ref=e121]:
+                - heading "NoGood Radio" [level=3] [ref=e122]
+                - button "Favorite stream" [ref=e123]:
+                  - img [ref=e124]
+              - paragraph [ref=e126]: npub1eaz6dwsnv…jsqarcgz
+          - link "Test Offline Quick play with PiP controls Report stream Test Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e127] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/2a1f1ff2-9ada-4cab-ba54-0af97a7bee51
+            - generic [ref=e128]:
+              - img "Test" [ref=e129]
+              - generic [ref=e130]: Offline
+              - button "Quick play with PiP controls" [ref=e131]: Offline
+              - button "Report stream" [ref=e132]:
+                - img [ref=e133]
+                - text: Report
+            - generic [ref=e135]:
+              - generic [ref=e136]:
+                - heading "Test" [level=3] [ref=e137]
+                - button "Favorite stream" [ref=e138]:
+                  - img [ref=e139]
+              - paragraph [ref=e141]: npub1eaz6dwsnv…jsqarcgz
+          - link "National Unity Week in Vanuatu Offline Quick play with PiP controls Report stream National Unity Week in Vanuatu Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e142] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/be6c1148-11a0-4e47-8614-933923b4138f
+            - generic [ref=e143]:
+              - img "National Unity Week in Vanuatu" [ref=e144]
+              - generic [ref=e145]: Offline
+              - button "Quick play with PiP controls" [ref=e146]: Offline
+              - button "Report stream" [ref=e147]:
+                - img [ref=e148]
+                - text: Report
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - heading "National Unity Week in Vanuatu" [level=3] [ref=e152]
+                - button "Favorite stream" [ref=e153]:
+                  - img [ref=e154]
+              - paragraph [ref=e156]: npub1eaz6dwsnv…jsqarcgz
+          - link "Open room Offline Quick play with PiP controls Report stream Open room Favorite stream npub18nrphx787…0qqyqp0w" [ref=e157] [cursor=pointer]:
+            - /url: /watch/npub18nrphx7876sx0w0zmtw9z367qgjuzf5x98jrudzpkzyejgsclp0qqyqp0w/1771465507579
+            - generic [ref=e158]:
+              - img "Open room" [ref=e159]
+              - generic [ref=e160]: Offline
+              - button "Quick play with PiP controls" [ref=e161]: Offline
+              - button "Report stream" [ref=e162]:
+                - img [ref=e163]
+                - text: Report
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - heading "Open room" [level=3] [ref=e167]
+                - button "Favorite stream" [ref=e168]:
+                  - img [ref=e169]
+              - paragraph [ref=e171]: npub18nrphx787…0qqyqp0w
+          - link "National Unity Week in Vanuatu Offline Quick play with PiP controls Report stream National Unity Week in Vanuatu Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e172] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/d273e76e-8179-4d64-82a0-4b12be1de559
+            - generic [ref=e173]:
+              - img "National Unity Week in Vanuatu" [ref=e174]
+              - generic [ref=e175]: Offline
+              - button "Quick play with PiP controls" [ref=e176]: Offline
+              - button "Report stream" [ref=e177]:
+                - img [ref=e178]
+                - text: Report
+            - generic [ref=e180]:
+              - generic [ref=e181]:
+                - heading "National Unity Week in Vanuatu" [level=3] [ref=e182]
+                - button "Favorite stream" [ref=e183]:
+                  - img [ref=e184]
+              - paragraph [ref=e186]: npub1eaz6dwsnv…jsqarcgz
+          - link "Live Quick play with PiP controls Report stream 0b8d4df7-3109-4456-88b9-3f12d771d3ae Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e187] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/0b8d4df7-3109-4456-88b9-3f12d771d3ae
+            - generic [ref=e188]:
+              - img [ref=e189]
+              - generic [ref=e191]: Live
+              - button "Quick play with PiP controls" [ref=e192]: Quick Play
+              - button "Report stream" [ref=e193]:
+                - img [ref=e194]
+                - text: Report
+            - generic [ref=e196]:
+              - generic [ref=e197]:
+                - heading "0b8d4df7-3109-4456-88b9-3f12d771d3ae" [level=3] [ref=e198]
+                - button "Favorite stream" [ref=e199]:
+                  - img [ref=e200]
+              - paragraph [ref=e202]: npub1sh0cy25xt…0sghnh3u
+          - link "1e7ca77f-cbaa-46b5-a2f9-d03da11c3d8e Offline Quick play with PiP controls Report stream 1e7ca77f-cbaa-46b5-a2f9-d03da11c3d8e Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e203] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/1e7ca77f-cbaa-46b5-a2f9-d03da11c3d8e
+            - generic [ref=e204]:
+              - img "1e7ca77f-cbaa-46b5-a2f9-d03da11c3d8e" [ref=e205]
+              - generic [ref=e206]: Offline
+              - button "Quick play with PiP controls" [ref=e207]: Offline
+              - button "Report stream" [ref=e208]:
+                - img [ref=e209]
+                - text: Report
+            - generic [ref=e211]:
+              - generic [ref=e212]:
+                - heading "1e7ca77f-cbaa-46b5-a2f9-d03da11c3d8e" [level=3] [ref=e213]
+                - button "Favorite stream" [ref=e214]:
+                  - img [ref=e215]
+              - paragraph [ref=e217]: npub1eaz6dwsnv…jsqarcgz
+          - link "Offline Quick play with PiP controls Report stream 175e124e-405d-45fc-83c3-c6299db8a214 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e218] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/175e124e-405d-45fc-83c3-c6299db8a214
+            - generic [ref=e219]:
+              - img [ref=e220]
+              - generic [ref=e222]: Offline
+              - button "Quick play with PiP controls" [ref=e223]: Offline
+              - button "Report stream" [ref=e224]:
+                - img [ref=e225]
+                - text: Report
+            - generic [ref=e227]:
+              - generic [ref=e228]:
+                - heading "175e124e-405d-45fc-83c3-c6299db8a214" [level=3] [ref=e229]
+                - button "Favorite stream" [ref=e230]:
+                  - img [ref=e231]
+              - paragraph [ref=e233]: npub1sh0cy25xt…0sghnh3u
+          - link "les Lundi Malin des copains de Copin Offline Quick play with PiP controls Report stream les Lundi Malin des copains de Copin Favorite stream npub1dkv2e30rt…jskf0aac" [ref=e234] [cursor=pointer]:
+            - /url: /watch/npub1dkv2e30rtytkt48ds9n5hxtgk58lah7t2tm8wzy3qls4kkwq3zjskf0aac/1771442466846
+            - generic [ref=e235]:
+              - img "les Lundi Malin des copains de Copin" [ref=e236]
+              - generic [ref=e237]: Offline
+              - button "Quick play with PiP controls" [ref=e238]: Offline
+              - button "Report stream" [ref=e239]:
+                - img [ref=e240]
+                - text: Report
+            - generic [ref=e242]:
+              - generic [ref=e243]:
+                - heading "les Lundi Malin des copains de Copin" [level=3] [ref=e244]
+                - button "Favorite stream" [ref=e245]:
+                  - img [ref=e246]
+              - paragraph [ref=e248]: npub1dkv2e30rt…jskf0aac
+          - link "191ac7b8-3f5c-488d-9422-3cb37dc827db Offline Quick play with PiP controls Report stream 191ac7b8-3f5c-488d-9422-3cb37dc827db Favorite stream npub17639hplhu…gs3ruks2" [ref=e249] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/191ac7b8-3f5c-488d-9422-3cb37dc827db
+            - generic [ref=e250]:
+              - img "191ac7b8-3f5c-488d-9422-3cb37dc827db" [ref=e251]
+              - generic [ref=e252]: Offline
+              - button "Quick play with PiP controls" [ref=e253]: Offline
+              - button "Report stream" [ref=e254]:
+                - img [ref=e255]
+                - text: Report
+            - generic [ref=e257]:
+              - generic [ref=e258]:
+                - heading "191ac7b8-3f5c-488d-9422-3cb37dc827db" [level=3] [ref=e259]
+                - button "Favorite stream" [ref=e260]:
+                  - img [ref=e261]
+              - paragraph [ref=e263]: npub17639hplhu…gs3ruks2
+          - 'link "Offline Quick play with PiP controls Report stream EXPOSED: Is America silently Adding To The Strategic Bitcoin Reserve? | EP 1443 Favorite stream npub1s8hfgutgm…wsswjdhr" [ref=e264] [cursor=pointer]':
+            - /url: /watch/npub1s8hfgutgmvhepxy4m020w9f57szqqd2htavp2m568qpdrh2x0cwsswjdhr/7e8915d6-68fc-493d-834b-e4a924a65924
+            - generic [ref=e265]:
+              - img [ref=e266]
+              - generic [ref=e268]: Offline
+              - button "Quick play with PiP controls" [ref=e269]: Offline
+              - button "Report stream" [ref=e270]:
+                - img [ref=e271]
+                - text: Report
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - 'heading "EXPOSED: Is America silently Adding To The Strategic Bitcoin Reserve? | EP 1443" [level=3] [ref=e275]'
+                - button "Favorite stream" [ref=e276]:
+                  - img [ref=e277]
+              - paragraph [ref=e279]: npub1s8hfgutgm…wsswjdhr
+          - link "look mom i'm a fighter pilot.. Offline Quick play with PiP controls Report stream look mom i'm a fighter pilot.. Favorite stream npub16dy4h0qp4…lsf7n34y" [ref=e280] [cursor=pointer]:
+            - /url: /watch/npub16dy4h0qp4jpzjdhw0z2r6rd4ja5z0r8cxnmr6634d7zcy0m3y8lsf7n34y/f9521011-acb1-4feb-acb3-df4f4320a638
+            - generic [ref=e281]:
+              - img "look mom i'm a fighter pilot.." [ref=e282]
+              - generic [ref=e283]: Offline
+              - button "Quick play with PiP controls" [ref=e284]: Offline
+              - button "Report stream" [ref=e285]:
+                - img [ref=e286]
+                - text: Report
+            - generic [ref=e288]:
+              - generic [ref=e289]:
+                - heading "look mom i'm a fighter pilot.." [level=3] [ref=e290]
+                - button "Favorite stream" [ref=e291]:
+                  - img [ref=e292]
+              - paragraph [ref=e294]: npub16dy4h0qp4…lsf7n34y
+          - link "Offline Quick play with PiP controls Report stream 7aec5ab1-c6ac-445f-acac-d797e134c319 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e295] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/7aec5ab1-c6ac-445f-acac-d797e134c319
+            - generic [ref=e296]:
+              - img [ref=e297]
+              - generic [ref=e299]: Offline
+              - button "Quick play with PiP controls" [ref=e300]: Offline
+              - button "Report stream" [ref=e301]:
+                - img [ref=e302]
+                - text: Report
+            - generic [ref=e304]:
+              - generic [ref=e305]:
+                - heading "7aec5ab1-c6ac-445f-acac-d797e134c319" [level=3] [ref=e306]
+                - button "Favorite stream" [ref=e307]:
+                  - img [ref=e308]
+              - paragraph [ref=e310]: npub1sh0cy25xt…0sghnh3u
+          - link "Offline Quick play with PiP controls Report stream Public Domain Classics Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e311] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/open-classics
+            - generic [ref=e312]:
+              - img [ref=e313]
+              - generic [ref=e315]: Offline
+              - button "Quick play with PiP controls" [ref=e316]: Offline
+              - button "Report stream" [ref=e317]:
+                - img [ref=e318]
+                - text: Report
+            - generic [ref=e320]:
+              - generic [ref=e321]:
+                - heading "Public Domain Classics" [level=3] [ref=e322]
+                - button "Favorite stream" [ref=e323]:
+                  - img [ref=e324]
+              - paragraph [ref=e326]: npub1g5x50sqva…rstl0t6z
+          - link "Offline Quick play with PiP controls Report stream QuakeWatch 24/7 Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e327] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/quakewatch
+            - generic [ref=e328]:
+              - img [ref=e329]
+              - generic [ref=e331]: Offline
+              - button "Quick play with PiP controls" [ref=e332]: Offline
+              - button "Report stream" [ref=e333]:
+                - img [ref=e334]
+                - text: Report
+            - generic [ref=e336]:
+              - generic [ref=e337]:
+                - heading "QuakeWatch 24/7" [level=3] [ref=e338]
+                - button "Favorite stream" [ref=e339]:
+                  - img [ref=e340]
+              - paragraph [ref=e342]: npub1g5x50sqva…rstl0t6z
+          - link "Offline Quick play with PiP controls Report stream Public Data Briefing Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e343] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/public-briefing
+            - generic [ref=e344]:
+              - img [ref=e345]
+              - generic [ref=e347]: Offline
+              - button "Quick play with PiP controls" [ref=e348]: Offline
+              - button "Report stream" [ref=e349]:
+                - img [ref=e350]
+                - text: Report
+            - generic [ref=e352]:
+              - generic [ref=e353]:
+                - heading "Public Data Briefing" [level=3] [ref=e354]
+                - button "Favorite stream" [ref=e355]:
+                  - img [ref=e356]
+              - paragraph [ref=e358]: npub1g5x50sqva…rstl0t6z
+          - link "Offline Quick play with PiP controls Report stream Global Weather Loop Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e359] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/global-weather
+            - generic [ref=e360]:
+              - img [ref=e361]
+              - generic [ref=e363]: Offline
+              - button "Quick play with PiP controls" [ref=e364]: Offline
+              - button "Report stream" [ref=e365]:
+                - img [ref=e366]
+                - text: Report
+            - generic [ref=e368]:
+              - generic [ref=e369]:
+                - heading "Global Weather Loop" [level=3] [ref=e370]
+                - button "Favorite stream" [ref=e371]:
+                  - img [ref=e372]
+              - paragraph [ref=e374]: npub1g5x50sqva…rstl0t6z
+          - link "Offline Quick play with PiP controls Report stream Open Education Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e375] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/open-education
+            - generic [ref=e376]:
+              - img [ref=e377]
+              - generic [ref=e379]: Offline
+              - button "Quick play with PiP controls" [ref=e380]: Offline
+              - button "Report stream" [ref=e381]:
+                - img [ref=e382]
+                - text: Report
+            - generic [ref=e384]:
+              - generic [ref=e385]:
+                - heading "Open Education" [level=3] [ref=e386]
+                - button "Favorite stream" [ref=e387]:
+                  - img [ref=e388]
+              - paragraph [ref=e390]: npub1g5x50sqva…rstl0t6z
+          - link "Offline Quick play with PiP controls Report stream Open Music Radio Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e391] [cursor=pointer]:
+            - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/open-music
+            - generic [ref=e392]:
+              - img [ref=e393]
+              - generic [ref=e395]: Offline
+              - button "Quick play with PiP controls" [ref=e396]: Offline
+              - button "Report stream" [ref=e397]:
+                - img [ref=e398]
+                - text: Report
+            - generic [ref=e400]:
+              - generic [ref=e401]:
+                - heading "Open Music Radio" [level=3] [ref=e402]
+                - button "Favorite stream" [ref=e403]:
+                  - img [ref=e404]
+              - paragraph [ref=e406]: npub1g5x50sqva…rstl0t6z
+          - link "Good Morning, Maria! Offline Quick play with PiP controls Report stream Good Morning, Maria! Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e407] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/73d3f26a-0b14-4b5a-81aa-41ce9f4a0b66
+            - generic [ref=e408]:
+              - img "Good Morning, Maria!" [ref=e409]
+              - generic [ref=e410]: Offline
+              - button "Quick play with PiP controls" [ref=e411]: Offline
+              - button "Report stream" [ref=e412]:
+                - img [ref=e413]
+                - text: Report
+            - generic [ref=e415]:
+              - generic [ref=e416]:
+                - heading "Good Morning, Maria!" [level=3] [ref=e417]
+                - button "Favorite stream" [ref=e418]:
+                  - img [ref=e419]
+              - paragraph [ref=e421]: npub1eaz6dwsnv…jsqarcgz
+          - link "Saddle up, it's time to soar Offline Quick play with PiP controls Report stream Saddle up, it's time to soar Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e422] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/b28eff12-6db3-433d-bdbb-391a7a59304c
+            - generic [ref=e423]:
+              - img "Saddle up, it's time to soar" [ref=e424]
+              - generic [ref=e425]: Offline
+              - button "Quick play with PiP controls" [ref=e426]: Offline
+              - button "Report stream" [ref=e427]:
+                - img [ref=e428]
+                - text: Report
+            - generic [ref=e430]:
+              - generic [ref=e431]:
+                - heading "Saddle up, it's time to soar" [level=3] [ref=e432]
+                - button "Favorite stream" [ref=e433]:
+                  - img [ref=e434]
+              - paragraph [ref=e436]: npub1eaz6dwsnv…jsqarcgz
+          - link "Synthdragon Radio — HAPPY Offline Quick play with PiP controls Report stream Synthdragon Radio — HAPPY Favorite stream npub1qhnqzk03u…6q30lht3" [ref=e437] [cursor=pointer]:
+            - /url: /watch/npub1qhnqzk03uznvke862ulur6lrt7v9496aalnaw4srlku73n7nsv6q30lht3/synthdragon-happy
+            - generic [ref=e438]:
+              - img "Synthdragon Radio — HAPPY" [ref=e439]
+              - generic [ref=e440]: Offline
+              - button "Quick play with PiP controls" [ref=e441]: Offline
+              - button "Report stream" [ref=e442]:
+                - img [ref=e443]
+                - text: Report
+            - generic [ref=e445]:
+              - generic [ref=e446]:
+                - heading "Synthdragon Radio — HAPPY" [level=3] [ref=e447]
+                - button "Favorite stream" [ref=e448]:
+                  - img [ref=e449]
+              - paragraph [ref=e451]: npub1qhnqzk03u…6q30lht3
+          - link "Synthdragon Radio — FIERCE Offline Quick play with PiP controls Report stream Synthdragon Radio — FIERCE Favorite stream npub1qhnqzk03u…6q30lht3" [ref=e452] [cursor=pointer]:
+            - /url: /watch/npub1qhnqzk03uznvke862ulur6lrt7v9496aalnaw4srlku73n7nsv6q30lht3/synthdragon-fierce
+            - generic [ref=e453]:
+              - img "Synthdragon Radio — FIERCE" [ref=e454]
+              - generic [ref=e455]: Offline
+              - button "Quick play with PiP controls" [ref=e456]: Offline
+              - button "Report stream" [ref=e457]:
+                - img [ref=e458]
+                - text: Report
+            - generic [ref=e460]:
+              - generic [ref=e461]:
+                - heading "Synthdragon Radio — FIERCE" [level=3] [ref=e462]
+                - button "Favorite stream" [ref=e463]:
+                  - img [ref=e464]
+              - paragraph [ref=e466]: npub1qhnqzk03u…6q30lht3
+          - link "Synthdragon Radio — CHILL Offline Quick play with PiP controls Report stream Synthdragon Radio — CHILL Favorite stream npub1qhnqzk03u…6q30lht3" [ref=e467] [cursor=pointer]:
+            - /url: /watch/npub1qhnqzk03uznvke862ulur6lrt7v9496aalnaw4srlku73n7nsv6q30lht3/synthdragon-chill
+            - generic [ref=e468]:
+              - img "Synthdragon Radio — CHILL" [ref=e469]
+              - generic [ref=e470]: Offline
+              - button "Quick play with PiP controls" [ref=e471]: Offline
+              - button "Report stream" [ref=e472]:
+                - img [ref=e473]
+                - text: Report
+            - generic [ref=e475]:
+              - generic [ref=e476]:
+                - heading "Synthdragon Radio — CHILL" [level=3] [ref=e477]
+                - button "Favorite stream" [ref=e478]:
+                  - img [ref=e479]
+              - paragraph [ref=e481]: npub1qhnqzk03u…6q30lht3
+          - link "Offline Quick play with PiP controls Report stream 6d239a1b-e0c4-424e-99ce-98e05c819d9d Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e482] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/6d239a1b-e0c4-424e-99ce-98e05c819d9d
+            - generic [ref=e483]:
+              - img [ref=e484]
+              - generic [ref=e486]: Offline
+              - button "Quick play with PiP controls" [ref=e487]: Offline
+              - button "Report stream" [ref=e488]:
+                - img [ref=e489]
+                - text: Report
+            - generic [ref=e491]:
+              - generic [ref=e492]:
+                - heading "6d239a1b-e0c4-424e-99ce-98e05c819d9d" [level=3] [ref=e493]
+                - button "Favorite stream" [ref=e494]:
+                  - img [ref=e495]
+              - paragraph [ref=e497]: npub1sh0cy25xt…0sghnh3u
+          - link "Offline Quick play with PiP controls Report stream b2702d26-9159-41a3-a97a-9395723974c7 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e498] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/b2702d26-9159-41a3-a97a-9395723974c7
+            - generic [ref=e499]:
+              - img [ref=e500]
+              - generic [ref=e502]: Offline
+              - button "Quick play with PiP controls" [ref=e503]: Offline
+              - button "Report stream" [ref=e504]:
+                - img [ref=e505]
+                - text: Report
+            - generic [ref=e507]:
+              - generic [ref=e508]:
+                - heading "b2702d26-9159-41a3-a97a-9395723974c7" [level=3] [ref=e509]
+                - button "Favorite stream" [ref=e510]:
+                  - img [ref=e511]
+              - paragraph [ref=e513]: npub1sh0cy25xt…0sghnh3u
+          - link "Angor Community Call Offline Quick play with PiP controls Report stream Angor Community Call Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e514] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/1239bca4-a34b-443e-ac02-517f31c287b7
+            - generic [ref=e515]:
+              - img "Angor Community Call" [ref=e516]
+              - generic [ref=e517]: Offline
+              - button "Quick play with PiP controls" [ref=e518]: Offline
+              - button "Report stream" [ref=e519]:
+                - img [ref=e520]
+                - text: Report
+            - generic [ref=e522]:
+              - generic [ref=e523]:
+                - heading "Angor Community Call" [level=3] [ref=e524]
+                - button "Favorite stream" [ref=e525]:
+                  - img [ref=e526]
+              - paragraph [ref=e528]: npub1eaz6dwsnv…jsqarcgz
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e529] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/a3e5a6b9-acd9-41d3-b4b3-acfc3634451d
+            - generic [ref=e530]:
+              - img "A little private time with you... ✨" [ref=e531]
+              - generic [ref=e532]: Offline
+              - button "Quick play with PiP controls" [ref=e533]: Offline
+              - button "Report stream" [ref=e534]:
+                - img [ref=e535]
+                - text: Report
+            - generic [ref=e537]:
+              - generic [ref=e538]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e539]
+                - button "Favorite stream" [ref=e540]:
+                  - img [ref=e541]
+              - paragraph [ref=e543]: npub17639hplhu…gs3ruks2
+          - link "Offline Quick play with PiP controls Report stream 43b4d968-4968-49e9-99e5-ff0ad24d90fc Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e544] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/43b4d968-4968-49e9-99e5-ff0ad24d90fc
+            - generic [ref=e545]:
+              - img [ref=e546]
+              - generic [ref=e548]: Offline
+              - button "Quick play with PiP controls" [ref=e549]: Offline
+              - button "Report stream" [ref=e550]:
+                - img [ref=e551]
+                - text: Report
+            - generic [ref=e553]:
+              - generic [ref=e554]:
+                - heading "43b4d968-4968-49e9-99e5-ff0ad24d90fc" [level=3] [ref=e555]
+                - button "Favorite stream" [ref=e556]:
+                  - img [ref=e557]
+              - paragraph [ref=e559]: npub1sh0cy25xt…0sghnh3u
+          - link "Offline Quick play with PiP controls Report stream c264a839-54bd-4055-958b-bd1f2afc64fa Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e560] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/c264a839-54bd-4055-958b-bd1f2afc64fa
+            - generic [ref=e561]:
+              - img [ref=e562]
+              - generic [ref=e564]: Offline
+              - button "Quick play with PiP controls" [ref=e565]: Offline
+              - button "Report stream" [ref=e566]:
+                - img [ref=e567]
+                - text: Report
+            - generic [ref=e569]:
+              - generic [ref=e570]:
+                - heading "c264a839-54bd-4055-958b-bd1f2afc64fa" [level=3] [ref=e571]
+                - button "Favorite stream" [ref=e572]:
+                  - img [ref=e573]
+              - paragraph [ref=e575]: npub1sh0cy25xt…0sghnh3u
+          - link "The Kalimera Show Offline Quick play with PiP controls Report stream The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e576] [cursor=pointer]:
+            - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1771401594
+            - generic [ref=e577]:
+              - img "The Kalimera Show" [ref=e578]
+              - generic [ref=e579]: Offline
+              - button "Quick play with PiP controls" [ref=e580]: Offline
+              - button "Report stream" [ref=e581]:
+                - img [ref=e582]
+                - text: Report
+            - generic [ref=e584]:
+              - generic [ref=e585]:
+                - heading "The Kalimera Show" [level=3] [ref=e586]
+                - button "Favorite stream" [ref=e587]:
+                  - img [ref=e588]
+              - paragraph [ref=e590]: npub1q33jywkl8…esjymqu0
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e591] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/f9306a4e-48e4-4b0b-ab01-369801cc63bf
+            - generic [ref=e592]:
+              - img "A little private time with you... ✨" [ref=e593]
+              - generic [ref=e594]: Offline
+              - button "Quick play with PiP controls" [ref=e595]: Offline
+              - button "Report stream" [ref=e596]:
+                - img [ref=e597]
+                - text: Report
+            - generic [ref=e599]:
+              - generic [ref=e600]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e601]
+                - button "Favorite stream" [ref=e602]:
+                  - img [ref=e603]
+              - paragraph [ref=e605]: npub17639hplhu…gs3ruks2
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e606] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/c9b6873a-c52c-4d87-a3ea-c79ea389353e
+            - generic [ref=e607]:
+              - img "A little private time with you... ✨" [ref=e608]
+              - generic [ref=e609]: Offline
+              - button "Quick play with PiP controls" [ref=e610]: Offline
+              - button "Report stream" [ref=e611]:
+                - img [ref=e612]
+                - text: Report
+            - generic [ref=e614]:
+              - generic [ref=e615]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e616]
+                - button "Favorite stream" [ref=e617]:
+                  - img [ref=e618]
+              - paragraph [ref=e620]: npub17639hplhu…gs3ruks2
+          - link "The Hangout Offline Quick play with PiP controls Report stream The Hangout Favorite stream npub1pdeqh93yl…qsm70wdx" [ref=e621] [cursor=pointer]:
+            - /url: /watch/npub1pdeqh93yltvmugyc73xwm25a5e9a0k2jgaw4alrk20478puc4xqsm70wdx/1771370284851
+            - generic [ref=e622]:
+              - img "The Hangout" [ref=e623]
+              - generic [ref=e624]: Offline
+              - button "Quick play with PiP controls" [ref=e625]: Offline
+              - button "Report stream" [ref=e626]:
+                - img [ref=e627]
+                - text: Report
+            - generic [ref=e629]:
+              - generic [ref=e630]:
+                - heading "The Hangout" [level=3] [ref=e631]
+                - button "Favorite stream" [ref=e632]:
+                  - img [ref=e633]
+              - paragraph [ref=e635]: npub1pdeqh93yl…qsm70wdx
+          - link "Test Offline Quick play with PiP controls Report stream Test Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e636] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/d027990d-486f-4fab-bf08-a5660ffd8261
+            - generic [ref=e637]:
+              - img "Test" [ref=e638]
+              - generic [ref=e639]: Offline
+              - button "Quick play with PiP controls" [ref=e640]: Offline
+              - button "Report stream" [ref=e641]:
+                - img [ref=e642]
+                - text: Report
+            - generic [ref=e644]:
+              - generic [ref=e645]:
+                - heading "Test" [level=3] [ref=e646]
+                - button "Favorite stream" [ref=e647]:
+                  - img [ref=e648]
+              - paragraph [ref=e650]: npub1eaz6dwsnv…jsqarcgz
+          - link "National Unity Week in Vanuatu Offline Quick play with PiP controls Report stream National Unity Week in Vanuatu Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e651] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/ccd06537-95c7-470a-aeff-48d186ca3ef2
+            - generic [ref=e652]:
+              - img "National Unity Week in Vanuatu" [ref=e653]
+              - generic [ref=e654]: Offline
+              - button "Quick play with PiP controls" [ref=e655]: Offline
+              - button "Report stream" [ref=e656]:
+                - img [ref=e657]
+                - text: Report
+            - generic [ref=e659]:
+              - generic [ref=e660]:
+                - heading "National Unity Week in Vanuatu" [level=3] [ref=e661]
+                - button "Favorite stream" [ref=e662]:
+                  - img [ref=e663]
+              - paragraph [ref=e665]: npub1eaz6dwsnv…jsqarcgz
+          - link "b6b73194-7868-458d-9906-14241bb32e13 Offline Quick play with PiP controls Report stream b6b73194-7868-458d-9906-14241bb32e13 Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e666] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/b6b73194-7868-458d-9906-14241bb32e13
+            - generic [ref=e667]:
+              - img "b6b73194-7868-458d-9906-14241bb32e13" [ref=e668]
+              - generic [ref=e669]: Offline
+              - button "Quick play with PiP controls" [ref=e670]: Offline
+              - button "Report stream" [ref=e671]:
+                - img [ref=e672]
+                - text: Report
+            - generic [ref=e674]:
+              - generic [ref=e675]:
+                - heading "b6b73194-7868-458d-9906-14241bb32e13" [level=3] [ref=e676]
+                - button "Favorite stream" [ref=e677]:
+                  - img [ref=e678]
+              - paragraph [ref=e680]: npub1eaz6dwsnv…jsqarcgz
+          - link "National Unity Week in Vanuatu Offline Quick play with PiP controls Report stream National Unity Week in Vanuatu Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e681] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/9c5e5487-5ed5-428b-b726-84b3837a1ede
+            - generic [ref=e682]:
+              - img "National Unity Week in Vanuatu" [ref=e683]
+              - generic [ref=e684]: Offline
+              - button "Quick play with PiP controls" [ref=e685]: Offline
+              - button "Report stream" [ref=e686]:
+                - img [ref=e687]
+                - text: Report
+            - generic [ref=e689]:
+              - generic [ref=e690]:
+                - heading "National Unity Week in Vanuatu" [level=3] [ref=e691]
+                - button "Favorite stream" [ref=e692]:
+                  - img [ref=e693]
+              - paragraph [ref=e695]: npub1eaz6dwsnv…jsqarcgz
+          - 'link "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Offline Quick play with PiP controls Report stream Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Favorite stream npub14kw5ygpl6…xs04j7y0" [ref=e696] [cursor=pointer]':
+            - /url: /watch/npub14kw5ygpl6fyqagh9cnrytyaqyacg46lzkq42vz7hk8txdk49kzxs04j7y0/1b142eff-b849-41a9-8560-ba2111ad2769
+            - generic [ref=e697]:
+              - 'img "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [ref=e698]'
+              - generic [ref=e699]: Offline
+              - button "Quick play with PiP controls" [ref=e700]: Offline
+              - button "Report stream" [ref=e701]:
+                - img [ref=e702]
+                - text: Report
+            - generic [ref=e704]:
+              - generic [ref=e705]:
+                - 'heading "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [level=3] [ref=e706]'
+                - button "Favorite stream" [ref=e707]:
+                  - img [ref=e708]
+              - paragraph [ref=e710]: npub14kw5ygpl6…xs04j7y0
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e711] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/e01c0112-6bdf-4492-8574-de3219493d9a
+            - generic [ref=e712]:
+              - img "A little private time with you... ✨" [ref=e713]
+              - generic [ref=e714]: Offline
+              - button "Quick play with PiP controls" [ref=e715]: Offline
+              - button "Report stream" [ref=e716]:
+                - img [ref=e717]
+                - text: Report
+            - generic [ref=e719]:
+              - generic [ref=e720]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e721]
+                - button "Favorite stream" [ref=e722]:
+                  - img [ref=e723]
+              - paragraph [ref=e725]: npub17639hplhu…gs3ruks2
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e726] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/065896dc-ebe8-43c4-bbe7-7d7c7e80ad6b
+            - generic [ref=e727]:
+              - img "A little private time with you... ✨" [ref=e728]
+              - generic [ref=e729]: Offline
+              - button "Quick play with PiP controls" [ref=e730]: Offline
+              - button "Report stream" [ref=e731]:
+                - img [ref=e732]
+                - text: Report
+            - generic [ref=e734]:
+              - generic [ref=e735]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e736]
+                - button "Favorite stream" [ref=e737]:
+                  - img [ref=e738]
+              - paragraph [ref=e740]: npub17639hplhu…gs3ruks2
+          - link "Foxhole Offline Quick play with PiP controls Report stream Foxhole Favorite stream npub17639hplhu…gs3ruks2" [ref=e741] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/2451ad2f-f7c0-4973-a0e7-fcb5998d5463
+            - generic [ref=e742]:
+              - img "Foxhole" [ref=e743]
+              - generic [ref=e744]: Offline
+              - button "Quick play with PiP controls" [ref=e745]: Offline
+              - button "Report stream" [ref=e746]:
+                - img [ref=e747]
+                - text: Report
+            - generic [ref=e749]:
+              - generic [ref=e750]:
+                - heading "Foxhole" [level=3] [ref=e751]
+                - button "Favorite stream" [ref=e752]:
+                  - img [ref=e753]
+              - paragraph [ref=e755]: npub17639hplhu…gs3ruks2
+          - link "Bioshock - Remastered Offline Quick play with PiP controls Report stream Bioshock - Remastered Favorite stream npub17639hplhu…gs3ruks2" [ref=e756] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/c08cb33c-b4c6-499b-89a3-3511338da44d
+            - generic [ref=e757]:
+              - img "Bioshock - Remastered" [ref=e758]
+              - generic [ref=e759]: Offline
+              - button "Quick play with PiP controls" [ref=e760]: Offline
+              - button "Report stream" [ref=e761]:
+                - img [ref=e762]
+                - text: Report
+            - generic [ref=e764]:
+              - generic [ref=e765]:
+                - heading "Bioshock - Remastered" [level=3] [ref=e766]
+                - button "Favorite stream" [ref=e767]:
+                  - img [ref=e768]
+              - paragraph [ref=e770]: npub17639hplhu…gs3ruks2
+          - 'link "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Offline Quick play with PiP controls Report stream Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Favorite stream npub14kw5ygpl6…xs04j7y0" [ref=e771] [cursor=pointer]':
+            - /url: /watch/npub14kw5ygpl6fyqagh9cnrytyaqyacg46lzkq42vz7hk8txdk49kzxs04j7y0/ebf89d6d-da58-4f9a-9475-c551aff2573b
+            - generic [ref=e772]:
+              - 'img "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [ref=e773]'
+              - generic [ref=e774]: Offline
+              - button "Quick play with PiP controls" [ref=e775]: Offline
+              - button "Report stream" [ref=e776]:
+                - img [ref=e777]
+                - text: Report
+            - generic [ref=e779]:
+              - generic [ref=e780]:
+                - 'heading "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [level=3] [ref=e781]'
+                - button "Favorite stream" [ref=e782]:
+                  - img [ref=e783]
+              - paragraph [ref=e785]: npub14kw5ygpl6…xs04j7y0
+          - link "4dd25087-6ec4-433b-954e-d0d8a9abce7d Offline Quick play with PiP controls Report stream 4dd25087-6ec4-433b-954e-d0d8a9abce7d Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e786] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/4dd25087-6ec4-433b-954e-d0d8a9abce7d
+            - generic [ref=e787]:
+              - img "4dd25087-6ec4-433b-954e-d0d8a9abce7d" [ref=e788]
+              - generic [ref=e789]: Offline
+              - button "Quick play with PiP controls" [ref=e790]: Offline
+              - button "Report stream" [ref=e791]:
+                - img [ref=e792]
+                - text: Report
+            - generic [ref=e794]:
+              - generic [ref=e795]:
+                - heading "4dd25087-6ec4-433b-954e-d0d8a9abce7d" [level=3] [ref=e796]
+                - button "Favorite stream" [ref=e797]:
+                  - img [ref=e798]
+              - paragraph [ref=e800]: npub1eaz6dwsnv…jsqarcgz
+          - link "To The Mountain Offline Quick play with PiP controls Report stream To The Mountain Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e801] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/0c488066-6bc0-48c8-95e2-8fc2c9c0970b
+            - generic [ref=e802]:
+              - img "To The Mountain" [ref=e803]
+              - generic [ref=e804]: Offline
+              - button "Quick play with PiP controls" [ref=e805]: Offline
+              - button "Report stream" [ref=e806]:
+                - img [ref=e807]
+                - text: Report
+            - generic [ref=e809]:
+              - generic [ref=e810]:
+                - heading "To The Mountain" [level=3] [ref=e811]
+                - button "Favorite stream" [ref=e812]:
+                  - img [ref=e813]
+              - paragraph [ref=e815]: npub1eaz6dwsnv…jsqarcgz
+          - link "Offline Quick play with PiP controls Report stream Esto es una prueba xd Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e816] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/6fc07b11-ed57-4540-b6c8-d65d0e78876b
+            - generic [ref=e817]:
+              - img [ref=e818]
+              - generic [ref=e820]: Offline
+              - button "Quick play with PiP controls" [ref=e821]: Offline
+              - button "Report stream" [ref=e822]:
+                - img [ref=e823]
+                - text: Report
+            - generic [ref=e825]:
+              - generic [ref=e826]:
+                - heading "Esto es una prueba xd" [level=3] [ref=e827]
+                - button "Favorite stream" [ref=e828]:
+                  - img [ref=e829]
+              - paragraph [ref=e831]: npub1eaz6dwsnv…jsqarcgz
+          - 'link "Dota: GGEZ Offline Quick play with PiP controls Report stream Dota: GGEZ Favorite stream npub16eamszwuv…nqhzj7su" [ref=e832] [cursor=pointer]':
+            - /url: /watch/npub16eamszwuv2grqeq4tp0erj268f5vuf5t3trfnavppquf38fcv9nqhzj7su/local_019c6d10-6fbe-71bb-8929-9fbbe0a8d086
+            - generic [ref=e833]:
+              - 'img "Dota: GGEZ" [ref=e834]'
+              - generic [ref=e835]: Offline
+              - button "Quick play with PiP controls" [ref=e836]: Offline
+              - button "Report stream" [ref=e837]:
+                - img [ref=e838]
+                - text: Report
+            - generic [ref=e840]:
+              - generic [ref=e841]:
+                - 'heading "Dota: GGEZ" [level=3] [ref=e842]'
+                - button "Favorite stream" [ref=e843]:
+                  - img [ref=e844]
+              - paragraph [ref=e846]: npub16eamszwuv…nqhzj7su
+          - 'link "Dota: GGEZ Offline Quick play with PiP controls Report stream Dota: GGEZ Favorite stream npub16eamszwuv…nqhzj7su" [ref=e847] [cursor=pointer]':
+            - /url: /watch/npub16eamszwuv2grqeq4tp0erj268f5vuf5t3trfnavppquf38fcv9nqhzj7su/local_019c6bfd-163c-7516-837e-3f18b7e765ee
+            - generic [ref=e848]:
+              - 'img "Dota: GGEZ" [ref=e849]'
+              - generic [ref=e850]: Offline
+              - button "Quick play with PiP controls" [ref=e851]: Offline
+              - button "Report stream" [ref=e852]:
+                - img [ref=e853]
+                - text: Report
+            - generic [ref=e855]:
+              - generic [ref=e856]:
+                - 'heading "Dota: GGEZ" [level=3] [ref=e857]'
+                - button "Favorite stream" [ref=e858]:
+                  - img [ref=e859]
+              - paragraph [ref=e861]: npub16eamszwuv…nqhzj7su
+          - link "Uncharted - Legacy of Thieves Collection Offline Quick play with PiP controls Report stream Uncharted - Legacy of Thieves Collection Favorite stream npub17639hplhu…gs3ruks2" [ref=e862] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/e8725b2c-750b-4dc4-a67c-33c440f4e901
+            - generic [ref=e863]:
+              - img "Uncharted - Legacy of Thieves Collection" [ref=e864]
+              - generic [ref=e865]: Offline
+              - button "Quick play with PiP controls" [ref=e866]: Offline
+              - button "Report stream" [ref=e867]:
+                - img [ref=e868]
+                - text: Report
+            - generic [ref=e870]:
+              - generic [ref=e871]:
+                - heading "Uncharted - Legacy of Thieves Collection" [level=3] [ref=e872]
+                - button "Favorite stream" [ref=e873]:
+                  - img [ref=e874]
+              - paragraph [ref=e876]: npub17639hplhu…gs3ruks2
+          - link "A little private time with you... ✨ Offline Quick play with PiP controls Report stream A little private time with you... ✨ Favorite stream npub17639hplhu…gs3ruks2" [ref=e877] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/28814c47-ee03-457f-9d7f-6bc92bab9145
+            - generic [ref=e878]:
+              - img "A little private time with you... ✨" [ref=e879]
+              - generic [ref=e880]: Offline
+              - button "Quick play with PiP controls" [ref=e881]: Offline
+              - button "Report stream" [ref=e882]:
+                - img [ref=e883]
+                - text: Report
+            - generic [ref=e885]:
+              - generic [ref=e886]:
+                - heading "A little private time with you... ✨" [level=3] [ref=e887]
+                - button "Favorite stream" [ref=e888]:
+                  - img [ref=e889]
+              - paragraph [ref=e891]: npub17639hplhu…gs3ruks2
+          - link "Offline Quick play with PiP controls Report stream Did Quantum DESTROY Bitcoins 12 year Bull run?! | EP 1442 Favorite stream npub1s8hfgutgm…wsswjdhr" [ref=e892] [cursor=pointer]:
+            - /url: /watch/npub1s8hfgutgmvhepxy4m020w9f57szqqd2htavp2m568qpdrh2x0cwsswjdhr/5d959b68-7298-428e-a4d8-71a63191afa2
+            - generic [ref=e893]:
+              - img [ref=e894]
+              - generic [ref=e896]: Offline
+              - button "Quick play with PiP controls" [ref=e897]: Offline
+              - button "Report stream" [ref=e898]:
+                - img [ref=e899]
+                - text: Report
+            - generic [ref=e901]:
+              - generic [ref=e902]:
+                - heading "Did Quantum DESTROY Bitcoins 12 year Bull run?! | EP 1442" [level=3] [ref=e903]
+                - button "Favorite stream" [ref=e904]:
+                  - img [ref=e905]
+              - paragraph [ref=e907]: npub1s8hfgutgm…wsswjdhr
+          - link "another day with this lame lightsaber.. Offline Quick play with PiP controls Report stream another day with this lame lightsaber.. Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e908] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/44f7d62b-dfb7-4226-a522-2b5ba9c4acb9
+            - generic [ref=e909]:
+              - img "another day with this lame lightsaber.." [ref=e910]
+              - generic [ref=e911]: Offline
+              - button "Quick play with PiP controls" [ref=e912]: Offline
+              - button "Report stream" [ref=e913]:
+                - img [ref=e914]
+                - text: Report
+            - generic [ref=e916]:
+              - generic [ref=e917]:
+                - heading "another day with this lame lightsaber.." [level=3] [ref=e918]
+                - button "Favorite stream" [ref=e919]:
+                  - img [ref=e920]
+              - paragraph [ref=e922]: npub1sh0cy25xt…0sghnh3u
+          - link "Removing the biggest risk in Bitcoin Offline Quick play with PiP controls Report stream Removing the biggest risk in Bitcoin Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e923] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/0a629782-f1a0-4054-ac1b-0af6cf860f54
+            - generic [ref=e924]:
+              - img "Removing the biggest risk in Bitcoin" [ref=e925]
+              - generic [ref=e926]: Offline
+              - button "Quick play with PiP controls" [ref=e927]: Offline
+              - button "Report stream" [ref=e928]:
+                - img [ref=e929]
+                - text: Report
+            - generic [ref=e931]:
+              - generic [ref=e932]:
+                - heading "Removing the biggest risk in Bitcoin" [level=3] [ref=e933]
+                - button "Favorite stream" [ref=e934]:
+                  - img [ref=e935]
+              - paragraph [ref=e937]: npub1eaz6dwsnv…jsqarcgz
+          - link "Warframe Offline Quick play with PiP controls Report stream Warframe Favorite stream npub17639hplhu…gs3ruks2" [ref=e938] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/de035ada-7ae4-485f-9e67-cbcfb2c7fa09
+            - generic [ref=e939]:
+              - img "Warframe" [ref=e940]
+              - generic [ref=e941]: Offline
+              - button "Quick play with PiP controls" [ref=e942]: Offline
+              - button "Report stream" [ref=e943]:
+                - img [ref=e944]
+                - text: Report
+            - generic [ref=e946]:
+              - generic [ref=e947]:
+                - heading "Warframe" [level=3] [ref=e948]
+                - button "Favorite stream" [ref=e949]:
+                  - img [ref=e950]
+              - paragraph [ref=e952]: npub17639hplhu…gs3ruks2
+          - link "Chilled Gaming Offline Quick play with PiP controls Report stream Chilled Gaming Favorite stream npub17639hplhu…gs3ruks2" [ref=e953] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/94381a2b-7fd6-42c9-8d3c-78c4e50c6766
+            - generic [ref=e954]:
+              - img "Chilled Gaming" [ref=e955]
+              - generic [ref=e956]: Offline
+              - button "Quick play with PiP controls" [ref=e957]: Offline
+              - button "Report stream" [ref=e958]:
+                - img [ref=e959]
+                - text: Report
+            - generic [ref=e961]:
+              - generic [ref=e962]:
+                - heading "Chilled Gaming" [level=3] [ref=e963]
+                - button "Favorite stream" [ref=e964]:
+                  - img [ref=e965]
+              - paragraph [ref=e967]: npub17639hplhu…gs3ruks2
+          - link "sunday.. gaming.. Offline Quick play with PiP controls Report stream sunday.. gaming.. Favorite stream npub16dy4h0qp4…lsf7n34y" [ref=e968] [cursor=pointer]:
+            - /url: /watch/npub16dy4h0qp4jpzjdhw0z2r6rd4ja5z0r8cxnmr6634d7zcy0m3y8lsf7n34y/4a5b6106-8680-43ca-8798-02d7cbf6380f
+            - generic [ref=e969]:
+              - img "sunday.. gaming.." [ref=e970]
+              - generic [ref=e971]: Offline
+              - button "Quick play with PiP controls" [ref=e972]: Offline
+              - button "Report stream" [ref=e973]:
+                - img [ref=e974]
+                - text: Report
+            - generic [ref=e976]:
+              - generic [ref=e977]:
+                - heading "sunday.. gaming.." [level=3] [ref=e978]
+                - button "Favorite stream" [ref=e979]:
+                  - img [ref=e980]
+              - paragraph [ref=e982]: npub16dy4h0qp4…lsf7n34y
+          - link "Offline Quick play with PiP controls Report stream 365291a7-f0c7-406c-901b-89b0d05f77d3 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e983] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/365291a7-f0c7-406c-901b-89b0d05f77d3
+            - generic [ref=e984]:
+              - img [ref=e985]
+              - generic [ref=e987]: Offline
+              - button "Quick play with PiP controls" [ref=e988]: Offline
+              - button "Report stream" [ref=e989]:
+                - img [ref=e990]
+                - text: Report
+            - generic [ref=e992]:
+              - generic [ref=e993]:
+                - heading "365291a7-f0c7-406c-901b-89b0d05f77d3" [level=3] [ref=e994]
+                - button "Favorite stream" [ref=e995]:
+                  - img [ref=e996]
+              - paragraph [ref=e998]: npub1sh0cy25xt…0sghnh3u
+          - link "Ghosts n Goblins Resurrection Offline Quick play with PiP controls Report stream Ghosts n Goblins Resurrection Favorite stream npub17639hplhu…gs3ruks2" [ref=e999] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/e20a1edf-a692-48e1-85ff-695f542d4b94
+            - generic [ref=e1000]:
+              - img "Ghosts n Goblins Resurrection" [ref=e1001]
+              - generic [ref=e1002]: Offline
+              - button "Quick play with PiP controls" [ref=e1003]: Offline
+              - button "Report stream" [ref=e1004]:
+                - img [ref=e1005]
+                - text: Report
+            - generic [ref=e1007]:
+              - generic [ref=e1008]:
+                - heading "Ghosts n Goblins Resurrection" [level=3] [ref=e1009]
+                - button "Favorite stream" [ref=e1010]:
+                  - img [ref=e1011]
+              - paragraph [ref=e1013]: npub17639hplhu…gs3ruks2
+          - link "Offline Quick play with PiP controls Report stream 4c1e5f2e-6432-4fd0-9f74-96e7afca64b1 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e1014] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/4c1e5f2e-6432-4fd0-9f74-96e7afca64b1
+            - generic [ref=e1015]:
+              - img [ref=e1016]
+              - generic [ref=e1018]: Offline
+              - button "Quick play with PiP controls" [ref=e1019]: Offline
+              - button "Report stream" [ref=e1020]:
+                - img [ref=e1021]
+                - text: Report
+            - generic [ref=e1023]:
+              - generic [ref=e1024]:
+                - heading "4c1e5f2e-6432-4fd0-9f74-96e7afca64b1" [level=3] [ref=e1025]
+                - button "Favorite stream" [ref=e1026]:
+                  - img [ref=e1027]
+              - paragraph [ref=e1029]: npub1sh0cy25xt…0sghnh3u
+          - link "test Offline Quick play with PiP controls Report stream test Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1030] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/f39c6722-184a-4f80-8cff-18a2bc12d7b9
+            - generic [ref=e1031]:
+              - img "test" [ref=e1032]
+              - generic [ref=e1033]: Offline
+              - button "Quick play with PiP controls" [ref=e1034]: Offline
+              - button "Report stream" [ref=e1035]:
+                - img [ref=e1036]
+                - text: Report
+            - generic [ref=e1038]:
+              - generic [ref=e1039]:
+                - heading "test" [level=3] [ref=e1040]
+                - button "Favorite stream" [ref=e1041]:
+                  - img [ref=e1042]
+              - paragraph [ref=e1044]: npub1eaz6dwsnv…jsqarcgz
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1045] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/f89ca8d7-b271-4f23-a164-f6cf2b150570
+            - generic [ref=e1046]:
+              - img "Suhail" [ref=e1047]
+              - generic [ref=e1048]: Offline
+              - button "Quick play with PiP controls" [ref=e1049]: Offline
+              - button "Report stream" [ref=e1050]:
+                - img [ref=e1051]
+                - text: Report
+            - generic [ref=e1053]:
+              - generic [ref=e1054]:
+                - heading "Suhail" [level=3] [ref=e1055]
+                - button "Favorite stream" [ref=e1056]:
+                  - img [ref=e1057]
+              - paragraph [ref=e1059]: npub1eaz6dwsnv…jsqarcgz
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1060] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/187b094a-3bf1-4856-9bae-ea0ed00981b3
+            - generic [ref=e1061]:
+              - img "Suhail" [ref=e1062]
+              - generic [ref=e1063]: Offline
+              - button "Quick play with PiP controls" [ref=e1064]: Offline
+              - button "Report stream" [ref=e1065]:
+                - img [ref=e1066]
+                - text: Report
+            - generic [ref=e1068]:
+              - generic [ref=e1069]:
+                - heading "Suhail" [level=3] [ref=e1070]
+                - button "Favorite stream" [ref=e1071]:
+                  - img [ref=e1072]
+              - paragraph [ref=e1074]: npub1eaz6dwsnv…jsqarcgz
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1075] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/197b67fe-1cf2-4b4c-bdd6-00b368562349
+            - generic [ref=e1076]:
+              - img "Suhail" [ref=e1077]
+              - generic [ref=e1078]: Offline
+              - button "Quick play with PiP controls" [ref=e1079]: Offline
+              - button "Report stream" [ref=e1080]:
+                - img [ref=e1081]
+                - text: Report
+            - generic [ref=e1083]:
+              - generic [ref=e1084]:
+                - heading "Suhail" [level=3] [ref=e1085]
+                - button "Favorite stream" [ref=e1086]:
+                  - img [ref=e1087]
+              - paragraph [ref=e1089]: npub1eaz6dwsnv…jsqarcgz
+          - link "Offline Quick play with PiP controls Report stream 2fec12ab-4acf-4efb-b98f-aa145e52d98d Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e1090] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/2fec12ab-4acf-4efb-b98f-aa145e52d98d
+            - generic [ref=e1091]:
+              - img [ref=e1092]
+              - generic [ref=e1094]: Offline
+              - button "Quick play with PiP controls" [ref=e1095]: Offline
+              - button "Report stream" [ref=e1096]:
+                - img [ref=e1097]
+                - text: Report
+            - generic [ref=e1099]:
+              - generic [ref=e1100]:
+                - heading "2fec12ab-4acf-4efb-b98f-aa145e52d98d" [level=3] [ref=e1101]
+                - button "Favorite stream" [ref=e1102]:
+                  - img [ref=e1103]
+              - paragraph [ref=e1105]: npub1sh0cy25xt…0sghnh3u
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1106] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/d335db7d-145a-42ec-8819-7455e35a9c88
+            - generic [ref=e1107]:
+              - img "Suhail" [ref=e1108]
+              - generic [ref=e1109]: Offline
+              - button "Quick play with PiP controls" [ref=e1110]: Offline
+              - button "Report stream" [ref=e1111]:
+                - img [ref=e1112]
+                - text: Report
+            - generic [ref=e1114]:
+              - generic [ref=e1115]:
+                - heading "Suhail" [level=3] [ref=e1116]
+                - button "Favorite stream" [ref=e1117]:
+                  - img [ref=e1118]
+              - paragraph [ref=e1120]: npub1eaz6dwsnv…jsqarcgz
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1121] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/e02866d5-ce77-4e4d-9a80-8baf077f1331
+            - generic [ref=e1122]:
+              - img "Suhail" [ref=e1123]
+              - generic [ref=e1124]: Offline
+              - button "Quick play with PiP controls" [ref=e1125]: Offline
+              - button "Report stream" [ref=e1126]:
+                - img [ref=e1127]
+                - text: Report
+            - generic [ref=e1129]:
+              - generic [ref=e1130]:
+                - heading "Suhail" [level=3] [ref=e1131]
+                - button "Favorite stream" [ref=e1132]:
+                  - img [ref=e1133]
+              - paragraph [ref=e1135]: npub1eaz6dwsnv…jsqarcgz
+          - link "Get in the Van, there’s no time to explain! Offline Quick play with PiP controls Report stream Get in the Van, there’s no time to explain! Favorite stream npub1c4jkwa7kr…nqdde32j" [ref=e1136] [cursor=pointer]:
+            - /url: /watch/npub1c4jkwa7krv6raxvf67vr6rtk34alkrnhpwqxqz677heqwm44e7nqdde32j/1771284062966
+            - generic [ref=e1137]:
+              - img "Get in the Van, there’s no time to explain!" [ref=e1138]
+              - generic [ref=e1139]: Offline
+              - button "Quick play with PiP controls" [ref=e1140]: Offline
+              - button "Report stream" [ref=e1141]:
+                - img [ref=e1142]
+                - text: Report
+            - generic [ref=e1144]:
+              - generic [ref=e1145]:
+                - heading "Get in the Van, there’s no time to explain!" [level=3] [ref=e1146]
+                - button "Favorite stream" [ref=e1147]:
+                  - img [ref=e1148]
+              - paragraph [ref=e1150]: npub1c4jkwa7kr…nqdde32j
+          - link "National Unity Week in Vanuatu Offline Quick play with PiP controls Report stream National Unity Week in Vanuatu Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1151] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/40f81de8-2e81-4a6b-b9d8-ab99eb9c06df
+            - generic [ref=e1152]:
+              - img "National Unity Week in Vanuatu" [ref=e1153]
+              - generic [ref=e1154]: Offline
+              - button "Quick play with PiP controls" [ref=e1155]: Offline
+              - button "Report stream" [ref=e1156]:
+                - img [ref=e1157]
+                - text: Report
+            - generic [ref=e1159]:
+              - generic [ref=e1160]:
+                - heading "National Unity Week in Vanuatu" [level=3] [ref=e1161]
+                - button "Favorite stream" [ref=e1162]:
+                  - img [ref=e1163]
+              - paragraph [ref=e1165]: npub1eaz6dwsnv…jsqarcgz
+          - link "Test Offline Quick play with PiP controls Report stream Test Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1166] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/2892c60f-59ac-4657-ac0b-b577a2a6c1fe
+            - generic [ref=e1167]:
+              - img "Test" [ref=e1168]
+              - generic [ref=e1169]: Offline
+              - button "Quick play with PiP controls" [ref=e1170]: Offline
+              - button "Report stream" [ref=e1171]:
+                - img [ref=e1172]
+                - text: Report
+            - generic [ref=e1174]:
+              - generic [ref=e1175]:
+                - heading "Test" [level=3] [ref=e1176]
+                - button "Favorite stream" [ref=e1177]:
+                  - img [ref=e1178]
+              - paragraph [ref=e1180]: npub1eaz6dwsnv…jsqarcgz
+          - link "Music Mondays with Richard Greaser | Paznia Radio Network Offline Quick play with PiP controls Report stream Music Mondays with Richard Greaser | Paznia Radio Network Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1181] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/11100928-774a-4309-b45b-110bcad62f77
+            - generic [ref=e1182]:
+              - img "Music Mondays with Richard Greaser | Paznia Radio Network" [ref=e1183]
+              - generic [ref=e1184]: Offline
+              - button "Quick play with PiP controls" [ref=e1185]: Offline
+              - button "Report stream" [ref=e1186]:
+                - img [ref=e1187]
+                - text: Report
+            - generic [ref=e1189]:
+              - generic [ref=e1190]:
+                - heading "Music Mondays with Richard Greaser | Paznia Radio Network" [level=3] [ref=e1191]
+                - button "Favorite stream" [ref=e1192]:
+                  - img [ref=e1193]
+              - paragraph [ref=e1195]: npub1eaz6dwsnv…jsqarcgz
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1196] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/1e92b3d0-c4bb-478a-a058-f6ef1d3ea163
+            - generic [ref=e1197]:
+              - img "Suhail" [ref=e1198]
+              - generic [ref=e1199]: Offline
+              - button "Quick play with PiP controls" [ref=e1200]: Offline
+              - button "Report stream" [ref=e1201]:
+                - img [ref=e1202]
+                - text: Report
+            - generic [ref=e1204]:
+              - generic [ref=e1205]:
+                - heading "Suhail" [level=3] [ref=e1206]
+                - button "Favorite stream" [ref=e1207]:
+                  - img [ref=e1208]
+              - paragraph [ref=e1210]: npub1eaz6dwsnv…jsqarcgz
+          - link "Bitcoin Talk 226 | เปิดแฟ้ม Epstein กับ Bitcoin Offline Quick play with PiP controls Report stream Bitcoin Talk 226 | เปิดแฟ้ม Epstein กับ Bitcoin Favorite stream npub1ejn774qah…mqdm97a5" [ref=e1211] [cursor=pointer]:
+            - /url: /watch/npub1ejn774qahqmgjsfajawy7634unk88y26yktvwuzp9kfgdeejx9mqdm97a5/10ccfb44-b76b-46bf-a576-289972d2f73c
+            - generic [ref=e1212]:
+              - img "Bitcoin Talk 226 | เปิดแฟ้ม Epstein กับ Bitcoin" [ref=e1213]
+              - generic [ref=e1214]: Offline
+              - button "Quick play with PiP controls" [ref=e1215]: Offline
+              - button "Report stream" [ref=e1216]:
+                - img [ref=e1217]
+                - text: Report
+            - generic [ref=e1219]:
+              - generic [ref=e1220]:
+                - heading "Bitcoin Talk 226 | เปิดแฟ้ม Epstein กับ Bitcoin" [level=3] [ref=e1221]
+                - button "Favorite stream" [ref=e1222]:
+                  - img [ref=e1223]
+              - paragraph [ref=e1225]: npub1ejn774qah…mqdm97a5
+          - link "To The Mountain Offline Quick play with PiP controls Report stream To The Mountain Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1226] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/4b597fce-55c5-460d-aadd-67d4744f4c70
+            - generic [ref=e1227]:
+              - img "To The Mountain" [ref=e1228]
+              - generic [ref=e1229]: Offline
+              - button "Quick play with PiP controls" [ref=e1230]: Offline
+              - button "Report stream" [ref=e1231]:
+                - img [ref=e1232]
+                - text: Report
+            - generic [ref=e1234]:
+              - generic [ref=e1235]:
+                - heading "To The Mountain" [level=3] [ref=e1236]
+                - button "Favorite stream" [ref=e1237]:
+                  - img [ref=e1238]
+              - paragraph [ref=e1240]: npub1eaz6dwsnv…jsqarcgz
+          - link "To The Mountain Offline Quick play with PiP controls Report stream To The Mountain Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1241] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/f01d9490-ea9b-4366-81fb-af3a5c5bc576
+            - generic [ref=e1242]:
+              - img "To The Mountain" [ref=e1243]
+              - generic [ref=e1244]: Offline
+              - button "Quick play with PiP controls" [ref=e1245]: Offline
+              - button "Report stream" [ref=e1246]:
+                - img [ref=e1247]
+                - text: Report
+            - generic [ref=e1249]:
+              - generic [ref=e1250]:
+                - heading "To The Mountain" [level=3] [ref=e1251]
+                - button "Favorite stream" [ref=e1252]:
+                  - img [ref=e1253]
+              - paragraph [ref=e1255]: npub1eaz6dwsnv…jsqarcgz
+          - link "b3e6d9da-830d-4443-af3f-bd1e63e29b8d Offline Quick play with PiP controls Report stream b3e6d9da-830d-4443-af3f-bd1e63e29b8d Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1256] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/b3e6d9da-830d-4443-af3f-bd1e63e29b8d
+            - generic [ref=e1257]:
+              - img "b3e6d9da-830d-4443-af3f-bd1e63e29b8d" [ref=e1258]
+              - generic [ref=e1259]: Offline
+              - button "Quick play with PiP controls" [ref=e1260]: Offline
+              - button "Report stream" [ref=e1261]:
+                - img [ref=e1262]
+                - text: Report
+            - generic [ref=e1264]:
+              - generic [ref=e1265]:
+                - heading "b3e6d9da-830d-4443-af3f-bd1e63e29b8d" [level=3] [ref=e1266]
+                - button "Favorite stream" [ref=e1267]:
+                  - img [ref=e1268]
+              - paragraph [ref=e1270]: npub1eaz6dwsnv…jsqarcgz
+          - link "Warframe Offline Quick play with PiP controls Report stream Warframe Favorite stream npub17639hplhu…gs3ruks2" [ref=e1271] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/fbe505f5-59cf-414d-98c8-ac780d15e165
+            - generic [ref=e1272]:
+              - img "Warframe" [ref=e1273]
+              - generic [ref=e1274]: Offline
+              - button "Quick play with PiP controls" [ref=e1275]: Offline
+              - button "Report stream" [ref=e1276]:
+                - img [ref=e1277]
+                - text: Report
+            - generic [ref=e1279]:
+              - generic [ref=e1280]:
+                - heading "Warframe" [level=3] [ref=e1281]
+                - button "Favorite stream" [ref=e1282]:
+                  - img [ref=e1283]
+              - paragraph [ref=e1285]: npub17639hplhu…gs3ruks2
+          - link "ArmA Reforger - Logistics Grind 🔞 Offline Quick play with PiP controls Report stream ArmA Reforger - Logistics Grind 🔞 Favorite stream npub17639hplhu…gs3ruks2" [ref=e1286] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/65183bfb-9a67-4137-beaf-b5526d513920
+            - generic [ref=e1287]:
+              - img "ArmA Reforger - Logistics Grind 🔞" [ref=e1288]
+              - generic [ref=e1289]: Offline
+              - button "Quick play with PiP controls" [ref=e1290]: Offline
+              - button "Report stream" [ref=e1291]:
+                - img [ref=e1292]
+                - text: Report
+            - generic [ref=e1294]:
+              - generic [ref=e1295]:
+                - heading "ArmA Reforger - Logistics Grind 🔞" [level=3] [ref=e1296]
+                - button "Favorite stream" [ref=e1297]:
+                  - img [ref=e1298]
+              - paragraph [ref=e1300]: npub17639hplhu…gs3ruks2
+          - link "Offline Quick play with PiP controls Report stream New stream key, who dis Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1301] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/1a5dbd07-de5f-4d68-ae8d-eee220126dc8
+            - generic [ref=e1302]:
+              - img [ref=e1303]
+              - generic [ref=e1305]: Offline
+              - button "Quick play with PiP controls" [ref=e1306]: Offline
+              - button "Report stream" [ref=e1307]:
+                - img [ref=e1308]
+                - text: Report
+            - generic [ref=e1310]:
+              - generic [ref=e1311]:
+                - heading "New stream key, who dis" [level=3] [ref=e1312]
+                - button "Favorite stream" [ref=e1313]:
+                  - img [ref=e1314]
+              - paragraph [ref=e1316]: npub1eaz6dwsnv…jsqarcgz
+          - link "les Lundi Malin des copains de Copin Offline Quick play with PiP controls Report stream les Lundi Malin des copains de Copin Favorite stream npub1dkv2e30rt…jskf0aac" [ref=e1317] [cursor=pointer]:
+            - /url: /watch/npub1dkv2e30rtytkt48ds9n5hxtgk58lah7t2tm8wzy3qls4kkwq3zjskf0aac/1771272122846
+            - generic [ref=e1318]:
+              - img "les Lundi Malin des copains de Copin" [ref=e1319]
+              - generic [ref=e1320]: Offline
+              - button "Quick play with PiP controls" [ref=e1321]: Offline
+              - button "Report stream" [ref=e1322]:
+                - img [ref=e1323]
+                - text: Report
+            - generic [ref=e1325]:
+              - generic [ref=e1326]:
+                - heading "les Lundi Malin des copains de Copin" [level=3] [ref=e1327]
+                - button "Favorite stream" [ref=e1328]:
+                  - img [ref=e1329]
+              - paragraph [ref=e1331]: npub1dkv2e30rt…jskf0aac
+          - link "Offline Quick play with PiP controls Report stream BRANDON GENTILE on THE Bitcoin Podcast Favorite stream npub1s8hfgutgm…wsswjdhr" [ref=e1332] [cursor=pointer]:
+            - /url: /watch/npub1s8hfgutgmvhepxy4m020w9f57szqqd2htavp2m568qpdrh2x0cwsswjdhr/d549eab9-904b-4fbd-aa80-2a407d4254b5
+            - generic [ref=e1333]:
+              - img [ref=e1334]
+              - generic [ref=e1336]: Offline
+              - button "Quick play with PiP controls" [ref=e1337]: Offline
+              - button "Report stream" [ref=e1338]:
+                - img [ref=e1339]
+                - text: Report
+            - generic [ref=e1341]:
+              - generic [ref=e1342]:
+                - heading "BRANDON GENTILE on THE Bitcoin Podcast" [level=3] [ref=e1343]
+                - button "Favorite stream" [ref=e1344]:
+                  - img [ref=e1345]
+              - paragraph [ref=e1347]: npub1s8hfgutgm…wsswjdhr
+          - link "Offline Quick play with PiP controls Report stream New stream key, who dis Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1348] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/322a53cc-50dd-402f-ba50-2c7a87395470
+            - generic [ref=e1349]:
+              - img [ref=e1350]
+              - generic [ref=e1352]: Offline
+              - button "Quick play with PiP controls" [ref=e1353]: Offline
+              - button "Report stream" [ref=e1354]:
+                - img [ref=e1355]
+                - text: Report
+            - generic [ref=e1357]:
+              - generic [ref=e1358]:
+                - heading "New stream key, who dis" [level=3] [ref=e1359]
+                - button "Favorite stream" [ref=e1360]:
+                  - img [ref=e1361]
+              - paragraph [ref=e1363]: npub1eaz6dwsnv…jsqarcgz
+          - link "To The Mountain Offline Quick play with PiP controls Report stream To The Mountain Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1364] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/68b8cd3a-0939-4424-97f0-0b699d328c33
+            - generic [ref=e1365]:
+              - img "To The Mountain" [ref=e1366]
+              - generic [ref=e1367]: Offline
+              - button "Quick play with PiP controls" [ref=e1368]: Offline
+              - button "Report stream" [ref=e1369]:
+                - img [ref=e1370]
+                - text: Report
+            - generic [ref=e1372]:
+              - generic [ref=e1373]:
+                - heading "To The Mountain" [level=3] [ref=e1374]
+                - button "Favorite stream" [ref=e1375]:
+                  - img [ref=e1376]
+              - paragraph [ref=e1378]: npub1eaz6dwsnv…jsqarcgz
+          - link "ScardustTV 24/7 ⚡️ Offline Quick play with PiP controls Report stream ScardustTV 24/7 ⚡️ Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1379] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/89c5a4c6-00d6-4190-a928-e377cfa1f607
+            - generic [ref=e1380]:
+              - img "ScardustTV 24/7 ⚡️" [ref=e1381]
+              - generic [ref=e1382]: Offline
+              - button "Quick play with PiP controls" [ref=e1383]: Offline
+              - button "Report stream" [ref=e1384]:
+                - img [ref=e1385]
+                - text: Report
+            - generic [ref=e1387]:
+              - generic [ref=e1388]:
+                - heading "ScardustTV 24/7 ⚡️" [level=3] [ref=e1389]
+                - button "Favorite stream" [ref=e1390]:
+                  - img [ref=e1391]
+              - paragraph [ref=e1393]: npub1eaz6dwsnv…jsqarcgz
+          - link "Warframe Offline Quick play with PiP controls Report stream Warframe Favorite stream npub17639hplhu…gs3ruks2" [ref=e1394] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/942ca40e-f673-488d-ac41-ff1fbcfc629f
+            - generic [ref=e1395]:
+              - img "Warframe" [ref=e1396]
+              - generic [ref=e1397]: Offline
+              - button "Quick play with PiP controls" [ref=e1398]: Offline
+              - button "Report stream" [ref=e1399]:
+                - img [ref=e1400]
+                - text: Report
+            - generic [ref=e1402]:
+              - generic [ref=e1403]:
+                - heading "Warframe" [level=3] [ref=e1404]
+                - button "Favorite stream" [ref=e1405]:
+                  - img [ref=e1406]
+              - paragraph [ref=e1408]: npub17639hplhu…gs3ruks2
+          - link "Offline Quick play with PiP controls Report stream NEW ASSET SEIZURE LAWS are SPREADING To The Rest of The World! | EP 1441 Favorite stream npub1s8hfgutgm…wsswjdhr" [ref=e1409] [cursor=pointer]:
+            - /url: /watch/npub1s8hfgutgmvhepxy4m020w9f57szqqd2htavp2m568qpdrh2x0cwsswjdhr/9e493138-7655-463e-a0eb-b7e348d505e0
+            - generic [ref=e1410]:
+              - img [ref=e1411]
+              - generic [ref=e1413]: Offline
+              - button "Quick play with PiP controls" [ref=e1414]: Offline
+              - button "Report stream" [ref=e1415]:
+                - img [ref=e1416]
+                - text: Report
+            - generic [ref=e1418]:
+              - generic [ref=e1419]:
+                - heading "NEW ASSET SEIZURE LAWS are SPREADING To The Rest of The World! | EP 1441" [level=3] [ref=e1420]
+                - button "Favorite stream" [ref=e1421]:
+                  - img [ref=e1422]
+              - paragraph [ref=e1424]: npub1s8hfgutgm…wsswjdhr
+          - link "Bitcoin not Crypto livestream Offline Quick play with PiP controls Report stream Bitcoin not Crypto livestream Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1425] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/c7ed290c-0e1b-4b12-9eeb-7d562d42c5a6
+            - generic [ref=e1426]:
+              - img "Bitcoin not Crypto livestream" [ref=e1427]
+              - generic [ref=e1428]: Offline
+              - button "Quick play with PiP controls" [ref=e1429]: Offline
+              - button "Report stream" [ref=e1430]:
+                - img [ref=e1431]
+                - text: Report
+            - generic [ref=e1433]:
+              - generic [ref=e1434]:
+                - heading "Bitcoin not Crypto livestream" [level=3] [ref=e1435]
+                - button "Favorite stream" [ref=e1436]:
+                  - img [ref=e1437]
+              - paragraph [ref=e1439]: npub1eaz6dwsnv…jsqarcgz
+          - link "Good Morning, Maria! Offline Quick play with PiP controls Report stream Good Morning, Maria! Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1440] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/530fb3c8-d8d1-490c-a527-5f2a36c38792
+            - generic [ref=e1441]:
+              - img "Good Morning, Maria!" [ref=e1442]
+              - generic [ref=e1443]: Offline
+              - button "Quick play with PiP controls" [ref=e1444]: Offline
+              - button "Report stream" [ref=e1445]:
+                - img [ref=e1446]
+                - text: Report
+            - generic [ref=e1448]:
+              - generic [ref=e1449]:
+                - heading "Good Morning, Maria!" [level=3] [ref=e1450]
+                - button "Favorite stream" [ref=e1451]:
+                  - img [ref=e1452]
+              - paragraph [ref=e1454]: npub1eaz6dwsnv…jsqarcgz
+          - link "donut, coffee & jedi lightsaber.. Offline Quick play with PiP controls Report stream donut, coffee & jedi lightsaber.. Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e1455] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/e421c131-3ce2-4551-a184-191c33efe06c
+            - generic [ref=e1456]:
+              - img "donut, coffee & jedi lightsaber.." [ref=e1457]
+              - generic [ref=e1458]: Offline
+              - button "Quick play with PiP controls" [ref=e1459]: Offline
+              - button "Report stream" [ref=e1460]:
+                - img [ref=e1461]
+                - text: Report
+            - generic [ref=e1463]:
+              - generic [ref=e1464]:
+                - heading "donut, coffee & jedi lightsaber.." [level=3] [ref=e1465]
+                - button "Favorite stream" [ref=e1466]:
+                  - img [ref=e1467]
+              - paragraph [ref=e1469]: npub1sh0cy25xt…0sghnh3u
+          - link "ScardustTV 24/7 ⚡️ Offline Quick play with PiP controls Report stream ScardustTV 24/7 ⚡️ Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1470] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/8764450f-e20e-42ee-9495-db5e35719ec1
+            - generic [ref=e1471]:
+              - img "ScardustTV 24/7 ⚡️" [ref=e1472]
+              - generic [ref=e1473]: Offline
+              - button "Quick play with PiP controls" [ref=e1474]: Offline
+              - button "Report stream" [ref=e1475]:
+                - img [ref=e1476]
+                - text: Report
+            - generic [ref=e1478]:
+              - generic [ref=e1479]:
+                - heading "ScardustTV 24/7 ⚡️" [level=3] [ref=e1480]
+                - button "Favorite stream" [ref=e1481]:
+                  - img [ref=e1482]
+              - paragraph [ref=e1484]: npub1eaz6dwsnv…jsqarcgz
+          - link "ScardustTV 24/7 ⚡️ Offline Quick play with PiP controls Report stream ScardustTV 24/7 ⚡️ Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1485] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/6c700b39-bcc3-4b84-ad51-253d985cdb67
+            - generic [ref=e1486]:
+              - img "ScardustTV 24/7 ⚡️" [ref=e1487]
+              - generic [ref=e1488]: Offline
+              - button "Quick play with PiP controls" [ref=e1489]: Offline
+              - button "Report stream" [ref=e1490]:
+                - img [ref=e1491]
+                - text: Report
+            - generic [ref=e1493]:
+              - generic [ref=e1494]:
+                - heading "ScardustTV 24/7 ⚡️" [level=3] [ref=e1495]
+                - button "Favorite stream" [ref=e1496]:
+                  - img [ref=e1497]
+              - paragraph [ref=e1499]: npub1eaz6dwsnv…jsqarcgz
+          - link "Something big is happening Offline Quick play with PiP controls Report stream Something big is happening Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1500] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/264709d3-28a0-434e-ad7c-66f902af96d0
+            - generic [ref=e1501]:
+              - img "Something big is happening" [ref=e1502]
+              - generic [ref=e1503]: Offline
+              - button "Quick play with PiP controls" [ref=e1504]: Offline
+              - button "Report stream" [ref=e1505]:
+                - img [ref=e1506]
+                - text: Report
+            - generic [ref=e1508]:
+              - generic [ref=e1509]:
+                - heading "Something big is happening" [level=3] [ref=e1510]
+                - button "Favorite stream" [ref=e1511]:
+                  - img [ref=e1512]
+              - paragraph [ref=e1514]: npub1eaz6dwsnv…jsqarcgz
+          - link "test Offline Quick play with PiP controls Report stream test Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1515] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/f3c4e6ac-d02e-4291-b61e-50fa4a16538b
+            - generic [ref=e1516]:
+              - img "test" [ref=e1517]
+              - generic [ref=e1518]: Offline
+              - button "Quick play with PiP controls" [ref=e1519]: Offline
+              - button "Report stream" [ref=e1520]:
+                - img [ref=e1521]
+                - text: Report
+            - generic [ref=e1523]:
+              - generic [ref=e1524]:
+                - heading "test" [level=3] [ref=e1525]
+                - button "Favorite stream" [ref=e1526]:
+                  - img [ref=e1527]
+              - paragraph [ref=e1529]: npub1eaz6dwsnv…jsqarcgz
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1530] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-b0fb41bfcc6a8aa577fa9b7d231f9261648cd011046596a6b62e31c656f134f2
+            - generic [ref=e1531]:
+              - img "Live from FreeXom Studio" [ref=e1532]
+              - generic [ref=e1533]: Offline
+              - button "Quick play with PiP controls" [ref=e1534]: Offline
+              - button "Report stream" [ref=e1535]:
+                - img [ref=e1536]
+                - text: Report
+            - generic [ref=e1538]:
+              - generic [ref=e1539]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1540]
+                - button "Favorite stream" [ref=e1541]:
+                  - img [ref=e1542]
+              - paragraph [ref=e1544]: npub1kra5r07vd…eqa0dmc5
+          - link "เหาฉลาม EP.4 Offline Quick play with PiP controls Report stream เหาฉลาม EP.4 Favorite stream npub16eamszwuv…nqhzj7su" [ref=e1545] [cursor=pointer]:
+            - /url: /watch/npub16eamszwuv2grqeq4tp0erj268f5vuf5t3trfnavppquf38fcv9nqhzj7su/lgm_019c66bf-1277-76fb-9e01-6edcdc656fbe
+            - generic [ref=e1546]:
+              - img "เหาฉลาม EP.4" [ref=e1547]
+              - generic [ref=e1548]: Offline
+              - button "Quick play with PiP controls" [ref=e1549]: Offline
+              - button "Report stream" [ref=e1550]:
+                - img [ref=e1551]
+                - text: Report
+            - generic [ref=e1553]:
+              - generic [ref=e1554]:
+                - heading "เหาฉลาม EP.4" [level=3] [ref=e1555]
+                - button "Favorite stream" [ref=e1556]:
+                  - img [ref=e1557]
+              - paragraph [ref=e1559]: npub16eamszwuv…nqhzj7su
+          - link "เหาฉลาม EP.4 Offline Quick play with PiP controls Report stream เหาฉลาม EP.4 Favorite stream npub16eamszwuv…nqhzj7su" [ref=e1560] [cursor=pointer]:
+            - /url: /watch/npub16eamszwuv2grqeq4tp0erj268f5vuf5t3trfnavppquf38fcv9nqhzj7su/lgm_019c66bb-41aa-7601-93ed-6359d916b38a
+            - generic [ref=e1561]:
+              - img "เหาฉลาม EP.4" [ref=e1562]
+              - generic [ref=e1563]: Offline
+              - button "Quick play with PiP controls" [ref=e1564]: Offline
+              - button "Report stream" [ref=e1565]:
+                - img [ref=e1566]
+                - text: Report
+            - generic [ref=e1568]:
+              - generic [ref=e1569]:
+                - heading "เหาฉลาม EP.4" [level=3] [ref=e1570]
+                - button "Favorite stream" [ref=e1571]:
+                  - img [ref=e1572]
+              - paragraph [ref=e1574]: npub16eamszwuv…nqhzj7su
+          - link "Suhail Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1575] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/29c9927f-2af8-4750-b2b3-cd06a7120f6c
+            - generic [ref=e1576]:
+              - img "Suhail" [ref=e1577]
+              - generic [ref=e1578]: Offline
+              - button "Quick play with PiP controls" [ref=e1579]: Offline
+              - button "Report stream" [ref=e1580]:
+                - img [ref=e1581]
+                - text: Report
+            - generic [ref=e1583]:
+              - generic [ref=e1584]:
+                - heading "Suhail" [level=3] [ref=e1585]
+                - button "Favorite stream" [ref=e1586]:
+                  - img [ref=e1587]
+              - paragraph [ref=e1589]: npub1eaz6dwsnv…jsqarcgz
+          - link "The Kalimera Show Offline Quick play with PiP controls Report stream The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e1590] [cursor=pointer]:
+            - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1771228778
+            - generic [ref=e1591]:
+              - img "The Kalimera Show" [ref=e1592]
+              - generic [ref=e1593]: Offline
+              - button "Quick play with PiP controls" [ref=e1594]: Offline
+              - button "Report stream" [ref=e1595]:
+                - img [ref=e1596]
+                - text: Report
+            - generic [ref=e1598]:
+              - generic [ref=e1599]:
+                - heading "The Kalimera Show" [level=3] [ref=e1600]
+                - button "Favorite stream" [ref=e1601]:
+                  - img [ref=e1602]
+              - paragraph [ref=e1604]: npub1q33jywkl8…esjymqu0
+          - link "NOSTRATI Offline Quick play with PiP controls Report stream NOSTRATI Favorite stream npub1kapktac65…xs6cl20q" [ref=e1605] [cursor=pointer]:
+            - /url: /watch/npub1kapktac65emapx9e5at04hrakuy8zp32xchdmc54l20q4vffyyxs6cl20q/1771203300134
+            - generic [ref=e1606]:
+              - img "NOSTRATI" [ref=e1607]
+              - generic [ref=e1608]: Offline
+              - button "Quick play with PiP controls" [ref=e1609]: Offline
+              - button "Report stream" [ref=e1610]:
+                - img [ref=e1611]
+                - text: Report
+            - generic [ref=e1613]:
+              - generic [ref=e1614]:
+                - heading "NOSTRATI" [level=3] [ref=e1615]
+                - button "Favorite stream" [ref=e1616]:
+                  - img [ref=e1617]
+              - paragraph [ref=e1619]: npub1kapktac65…xs6cl20q
+          - link "3f5b3921-fb0b-4aed-9dd5-ca46d189cf1f Offline Quick play with PiP controls Report stream 3f5b3921-fb0b-4aed-9dd5-ca46d189cf1f Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1620] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/3f5b3921-fb0b-4aed-9dd5-ca46d189cf1f
+            - generic [ref=e1621]:
+              - img "3f5b3921-fb0b-4aed-9dd5-ca46d189cf1f" [ref=e1622]
+              - generic [ref=e1623]: Offline
+              - button "Quick play with PiP controls" [ref=e1624]: Offline
+              - button "Report stream" [ref=e1625]:
+                - img [ref=e1626]
+                - text: Report
+            - generic [ref=e1628]:
+              - generic [ref=e1629]:
+                - heading "3f5b3921-fb0b-4aed-9dd5-ca46d189cf1f" [level=3] [ref=e1630]
+                - button "Favorite stream" [ref=e1631]:
+                  - img [ref=e1632]
+              - paragraph [ref=e1634]: npub1eaz6dwsnv…jsqarcgz
+          - link "Offline Quick play with PiP controls Report stream Suhail Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1635] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/7c98a170-1c3b-4f90-89d8-37466d7a305f
+            - generic [ref=e1636]:
+              - img [ref=e1637]
+              - generic [ref=e1639]: Offline
+              - button "Quick play with PiP controls" [ref=e1640]: Offline
+              - button "Report stream" [ref=e1641]:
+                - img [ref=e1642]
+                - text: Report
+            - generic [ref=e1644]:
+              - generic [ref=e1645]:
+                - heading "Suhail" [level=3] [ref=e1646]
+                - button "Favorite stream" [ref=e1647]:
+                  - img [ref=e1648]
+              - paragraph [ref=e1650]: npub1eaz6dwsnv…jsqarcgz
+          - link "nClub Offline Quick play with PiP controls Report stream nClub Favorite stream npub17639hplhu…gs3ruks2" [ref=e1651] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/d4099d40-9765-4f22-87b8-c246cf3869b4
+            - generic [ref=e1652]:
+              - img "nClub" [ref=e1653]
+              - generic [ref=e1654]: Offline
+              - button "Quick play with PiP controls" [ref=e1655]: Offline
+              - button "Report stream" [ref=e1656]:
+                - img [ref=e1657]
+                - text: Report
+            - generic [ref=e1659]:
+              - generic [ref=e1660]:
+                - heading "nClub" [level=3] [ref=e1661]
+                - button "Favorite stream" [ref=e1662]:
+                  - img [ref=e1663]
+              - paragraph [ref=e1665]: npub17639hplhu…gs3ruks2
+          - link "Livestream Offline Quick play with PiP controls Report stream Livestream Favorite stream npub1wrxa4uzma…fq28vqud" [ref=e1666] [cursor=pointer]:
+            - /url: /watch/npub1wrxa4uzmalgn4lf3kywzu4xj7d86mxcdnrlrhspwat92nr062jfq28vqud/livestream
+            - generic [ref=e1667]:
+              - img "Livestream" [ref=e1668]
+              - generic [ref=e1669]: Offline
+              - button "Quick play with PiP controls" [ref=e1670]: Offline
+              - button "Report stream" [ref=e1671]:
+                - img [ref=e1672]
+                - text: Report
+            - generic [ref=e1674]:
+              - generic [ref=e1675]:
+                - heading "Livestream" [level=3] [ref=e1676]
+                - button "Favorite stream" [ref=e1677]:
+                  - img [ref=e1678]
+              - paragraph [ref=e1680]: npub1wrxa4uzma…fq28vqud
+          - link "Offline Quick play with PiP controls Report stream 819b6698-8ab1-4ef6-91f1-d46bad57f9e7 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e1681] [cursor=pointer]:
+            - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/819b6698-8ab1-4ef6-91f1-d46bad57f9e7
+            - generic [ref=e1682]:
+              - img [ref=e1683]
+              - generic [ref=e1685]: Offline
+              - button "Quick play with PiP controls" [ref=e1686]: Offline
+              - button "Report stream" [ref=e1687]:
+                - img [ref=e1688]
+                - text: Report
+            - generic [ref=e1690]:
+              - generic [ref=e1691]:
+                - heading "819b6698-8ab1-4ef6-91f1-d46bad57f9e7" [level=3] [ref=e1692]
+                - button "Favorite stream" [ref=e1693]:
+                  - img [ref=e1694]
+              - paragraph [ref=e1696]: npub1sh0cy25xt…0sghnh3u
+          - link "Warframe Offline Quick play with PiP controls Report stream Warframe Favorite stream npub17639hplhu…gs3ruks2" [ref=e1697] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/ac6287af-8da1-4161-9bd1-4160c0983682
+            - generic [ref=e1698]:
+              - img "Warframe" [ref=e1699]
+              - generic [ref=e1700]: Offline
+              - button "Quick play with PiP controls" [ref=e1701]: Offline
+              - button "Report stream" [ref=e1702]:
+                - img [ref=e1703]
+                - text: Report
+            - generic [ref=e1705]:
+              - generic [ref=e1706]:
+                - heading "Warframe" [level=3] [ref=e1707]
+                - button "Favorite stream" [ref=e1708]:
+                  - img [ref=e1709]
+              - paragraph [ref=e1711]: npub17639hplhu…gs3ruks2
+          - link "b61f403f-98f8-4d54-8e0e-0b1d4d2227df Offline Quick play with PiP controls Report stream b61f403f-98f8-4d54-8e0e-0b1d4d2227df Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1712] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/b61f403f-98f8-4d54-8e0e-0b1d4d2227df
+            - generic [ref=e1713]:
+              - img "b61f403f-98f8-4d54-8e0e-0b1d4d2227df" [ref=e1714]
+              - generic [ref=e1715]: Offline
+              - button "Quick play with PiP controls" [ref=e1716]: Offline
+              - button "Report stream" [ref=e1717]:
+                - img [ref=e1718]
+                - text: Report
+            - generic [ref=e1720]:
+              - generic [ref=e1721]:
+                - heading "b61f403f-98f8-4d54-8e0e-0b1d4d2227df" [level=3] [ref=e1722]
+                - button "Favorite stream" [ref=e1723]:
+                  - img [ref=e1724]
+              - paragraph [ref=e1726]: npub1eaz6dwsnv…jsqarcgz
+          - link "d38aed09-065c-47a2-abdb-5a7f13dda456 Offline Quick play with PiP controls Report stream d38aed09-065c-47a2-abdb-5a7f13dda456 Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1727] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/d38aed09-065c-47a2-abdb-5a7f13dda456
+            - generic [ref=e1728]:
+              - img "d38aed09-065c-47a2-abdb-5a7f13dda456" [ref=e1729]
+              - generic [ref=e1730]: Offline
+              - button "Quick play with PiP controls" [ref=e1731]: Offline
+              - button "Report stream" [ref=e1732]:
+                - img [ref=e1733]
+                - text: Report
+            - generic [ref=e1735]:
+              - generic [ref=e1736]:
+                - heading "d38aed09-065c-47a2-abdb-5a7f13dda456" [level=3] [ref=e1737]
+                - button "Favorite stream" [ref=e1738]:
+                  - img [ref=e1739]
+              - paragraph [ref=e1741]: npub1eaz6dwsnv…jsqarcgz
+          - link "(TH) ผมโมโหมาก ผมขอโทษจริง ๆ Offline Quick play with PiP controls Report stream (TH) ผมโมโหมาก ผมขอโทษจริง ๆ Favorite stream npub13kxrwvtvh…nslw5kr4" [ref=e1742] [cursor=pointer]:
+            - /url: /watch/npub13kxrwvtvhh4rtsan66r8rplquhpc87rjsruf69xaka54n0a3z4nslw5kr4/ece7ee08-c9fe-4121-aefc-5ba31e426af8
+            - generic [ref=e1743]:
+              - img "(TH) ผมโมโหมาก ผมขอโทษจริง ๆ" [ref=e1744]
+              - generic [ref=e1745]: Offline
+              - button "Quick play with PiP controls" [ref=e1746]: Offline
+              - button "Report stream" [ref=e1747]:
+                - img [ref=e1748]
+                - text: Report
+            - generic [ref=e1750]:
+              - generic [ref=e1751]:
+                - heading "(TH) ผมโมโหมาก ผมขอโทษจริง ๆ" [level=3] [ref=e1752]
+                - button "Favorite stream" [ref=e1753]:
+                  - img [ref=e1754]
+              - paragraph [ref=e1756]: npub13kxrwvtvh…nslw5kr4
+          - link "f0993517-e1c1-4841-a69f-9dd172963983 Offline Quick play with PiP controls Report stream f0993517-e1c1-4841-a69f-9dd172963983 Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1757] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/f0993517-e1c1-4841-a69f-9dd172963983
+            - generic [ref=e1758]:
+              - img "f0993517-e1c1-4841-a69f-9dd172963983" [ref=e1759]
+              - generic [ref=e1760]: Offline
+              - button "Quick play with PiP controls" [ref=e1761]: Offline
+              - button "Report stream" [ref=e1762]:
+                - img [ref=e1763]
+                - text: Report
+            - generic [ref=e1765]:
+              - generic [ref=e1766]:
+                - heading "f0993517-e1c1-4841-a69f-9dd172963983" [level=3] [ref=e1767]
+                - button "Favorite stream" [ref=e1768]:
+                  - img [ref=e1769]
+              - paragraph [ref=e1771]: npub1eaz6dwsnv…jsqarcgz
+          - 'link "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Offline Quick play with PiP controls Report stream Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup Favorite stream npub14kw5ygpl6…xs04j7y0" [ref=e1772] [cursor=pointer]':
+            - /url: /watch/npub14kw5ygpl6fyqagh9cnrytyaqyacg46lzkq42vz7hk8txdk49kzxs04j7y0/be6c526f-a5f8-4f85-8fa3-43be7e79c04c
+            - generic [ref=e1773]:
+              - 'img "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [ref=e1774]'
+              - generic [ref=e1775]: Offline
+              - button "Quick play with PiP controls" [ref=e1776]: Offline
+              - button "Report stream" [ref=e1777]:
+                - img [ref=e1778]
+                - text: Report
+            - generic [ref=e1780]:
+              - generic [ref=e1781]:
+                - 'heading "Sunday Brunch 6: Guest Host OpenMike with Tatum Turnup" [level=3] [ref=e1782]'
+                - button "Favorite stream" [ref=e1783]:
+                  - img [ref=e1784]
+              - paragraph [ref=e1786]: npub14kw5ygpl6…xs04j7y0
+          - link "DOTA before Bed Offline Quick play with PiP controls Report stream DOTA before Bed Favorite stream npub17639hplhu…gs3ruks2" [ref=e1787] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/391aae1a-f32b-4d43-95ef-32e80aca7678
+            - generic [ref=e1788]:
+              - img "DOTA before Bed" [ref=e1789]
+              - generic [ref=e1790]: Offline
+              - button "Quick play with PiP controls" [ref=e1791]: Offline
+              - button "Report stream" [ref=e1792]:
+                - img [ref=e1793]
+                - text: Report
+            - generic [ref=e1795]:
+              - generic [ref=e1796]:
+                - heading "DOTA before Bed" [level=3] [ref=e1797]
+                - button "Favorite stream" [ref=e1798]:
+                  - img [ref=e1799]
+              - paragraph [ref=e1801]: npub17639hplhu…gs3ruks2
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1802] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771180445883
+            - generic [ref=e1803]:
+              - img "Live from FreeXom Studio" [ref=e1804]
+              - generic [ref=e1805]: Offline
+              - button "Quick play with PiP controls" [ref=e1806]: Offline
+              - button "Report stream" [ref=e1807]:
+                - img [ref=e1808]
+                - text: Report
+            - generic [ref=e1810]:
+              - generic [ref=e1811]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1812]
+                - button "Favorite stream" [ref=e1813]:
+                  - img [ref=e1814]
+              - paragraph [ref=e1816]: npub1kra5r07vd…eqa0dmc5
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1817] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771180374069
+            - generic [ref=e1818]:
+              - img "Live from FreeXom Studio" [ref=e1819]
+              - generic [ref=e1820]: Offline
+              - button "Quick play with PiP controls" [ref=e1821]: Offline
+              - button "Report stream" [ref=e1822]:
+                - img [ref=e1823]
+                - text: Report
+            - generic [ref=e1825]:
+              - generic [ref=e1826]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1827]
+                - button "Favorite stream" [ref=e1828]:
+                  - img [ref=e1829]
+              - paragraph [ref=e1831]: npub1kra5r07vd…eqa0dmc5
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1832] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771180250644
+            - generic [ref=e1833]:
+              - img "Live from FreeXom Studio" [ref=e1834]
+              - generic [ref=e1835]: Offline
+              - button "Quick play with PiP controls" [ref=e1836]: Offline
+              - button "Report stream" [ref=e1837]:
+                - img [ref=e1838]
+                - text: Report
+            - generic [ref=e1840]:
+              - generic [ref=e1841]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1842]
+                - button "Favorite stream" [ref=e1843]:
+                  - img [ref=e1844]
+              - paragraph [ref=e1846]: npub1kra5r07vd…eqa0dmc5
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1847] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771178958958
+            - generic [ref=e1848]:
+              - img "Live from FreeXom Studio" [ref=e1849]
+              - generic [ref=e1850]: Offline
+              - button "Quick play with PiP controls" [ref=e1851]: Offline
+              - button "Report stream" [ref=e1852]:
+                - img [ref=e1853]
+                - text: Report
+            - generic [ref=e1855]:
+              - generic [ref=e1856]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1857]
+                - button "Favorite stream" [ref=e1858]:
+                  - img [ref=e1859]
+              - paragraph [ref=e1861]: npub1kra5r07vd…eqa0dmc5
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1862] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771178886749
+            - generic [ref=e1863]:
+              - img "Live from FreeXom Studio" [ref=e1864]
+              - generic [ref=e1865]: Offline
+              - button "Quick play with PiP controls" [ref=e1866]: Offline
+              - button "Report stream" [ref=e1867]:
+                - img [ref=e1868]
+                - text: Report
+            - generic [ref=e1870]:
+              - generic [ref=e1871]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1872]
+                - button "Favorite stream" [ref=e1873]:
+                  - img [ref=e1874]
+              - paragraph [ref=e1876]: npub1kra5r07vd…eqa0dmc5
+          - link "bed2244a-4a79-4071-bdbd-a49ba3cf8ee8 Offline Quick play with PiP controls Report stream bed2244a-4a79-4071-bdbd-a49ba3cf8ee8 Favorite stream npub1eaz6dwsnv…jsqarcgz" [ref=e1877] [cursor=pointer]:
+            - /url: /watch/npub1eaz6dwsnvwkha5sn5puwwyxjgy26uusundrm684lg3vw4ma5c2jsqarcgz/bed2244a-4a79-4071-bdbd-a49ba3cf8ee8
+            - generic [ref=e1878]:
+              - img "bed2244a-4a79-4071-bdbd-a49ba3cf8ee8" [ref=e1879]
+              - generic [ref=e1880]: Offline
+              - button "Quick play with PiP controls" [ref=e1881]: Offline
+              - button "Report stream" [ref=e1882]:
+                - img [ref=e1883]
+                - text: Report
+            - generic [ref=e1885]:
+              - generic [ref=e1886]:
+                - heading "bed2244a-4a79-4071-bdbd-a49ba3cf8ee8" [level=3] [ref=e1887]
+                - button "Favorite stream" [ref=e1888]:
+                  - img [ref=e1889]
+              - paragraph [ref=e1891]: npub1eaz6dwsnv…jsqarcgz
+          - link "Live from FreeXom Studio Offline Quick play with PiP controls Report stream Live from FreeXom Studio Favorite stream npub1kra5r07vd…eqa0dmc5" [ref=e1892] [cursor=pointer]:
+            - /url: /watch/npub1kra5r07vd2922al6nd7jx8ujv9jge5q3q3jedf4k9ccuv4h3xneqa0dmc5/freexom-live-1771178373714
+            - generic [ref=e1893]:
+              - img "Live from FreeXom Studio" [ref=e1894]
+              - generic [ref=e1895]: Offline
+              - button "Quick play with PiP controls" [ref=e1896]: Offline
+              - button "Report stream" [ref=e1897]:
+                - img [ref=e1898]
+                - text: Report
+            - generic [ref=e1900]:
+              - generic [ref=e1901]:
+                - heading "Live from FreeXom Studio" [level=3] [ref=e1902]
+                - button "Favorite stream" [ref=e1903]:
+                  - img [ref=e1904]
+              - paragraph [ref=e1906]: npub1kra5r07vd…eqa0dmc5
+          - link "MilSim Gaming with the gang... 🔞 Offline Quick play with PiP controls Report stream MilSim Gaming with the gang... 🔞 Favorite stream npub17639hplhu…gs3ruks2" [ref=e1907] [cursor=pointer]:
+            - /url: /watch/npub17639hplhu7lvnf53udu9rvd40fa5n7sqhdp39qpsxqp28672fzgs3ruks2/44f75c75-5a46-41bc-a6ae-48509a31fc48
+            - generic [ref=e1908]:
+              - img "MilSim Gaming with the gang... 🔞" [ref=e1909]
+              - generic [ref=e1910]: Offline
+              - button "Quick play with PiP controls" [ref=e1911]: Offline
+              - button "Report stream" [ref=e1912]:
+                - img [ref=e1913]
+                - text: Report
+            - generic [ref=e1915]:
+              - generic [ref=e1916]:
+                - heading "MilSim Gaming with the gang... 🔞" [level=3] [ref=e1917]
+                - button "Favorite stream" [ref=e1918]:
+                  - img [ref=e1919]
+              - paragraph [ref=e1921]: npub17639hplhu…gs3ruks2
+    - contentinfo [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - img "dStream logo" [ref=e9]
+            - generic [ref=e10]: dStream Protocol
+          - paragraph [ref=e11]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+          - paragraph [ref=e12]:
+            - img [ref=e13]
+            - img [ref=e16]
+            - text: Production docs reflect live stack behavior
+        - generic [ref=e18]:
+          - paragraph [ref=e19]:
+            - img [ref=e20]
+            - text: Protocol
+          - link "Whitepaper" [ref=e25] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e26] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e27] [cursor=pointer]:
+            - /url: /use-cases
+          - link "Donate" [ref=e28] [cursor=pointer]:
+            - /url: /donate
+          - link "Analytics" [ref=e29] [cursor=pointer]:
+            - /url: /analytics
+          - link "Terms" [ref=e30] [cursor=pointer]:
+            - /url: /terms
+          - link "Privacy" [ref=e31] [cursor=pointer]:
+            - /url: /privacy
+          - link "Community Guidelines" [ref=e32] [cursor=pointer]:
+            - /url: /community-guidelines
+        - generic [ref=e33]:
+          - paragraph [ref=e34]:
+            - img [ref=e35]
+            - text: Build
+          - link "Broadcast" [ref=e38] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Browse" [ref=e39] [cursor=pointer]:
+            - /url: /browse
+          - link "Settings" [ref=e40] [cursor=pointer]:
+            - /url: /settings
+          - link "Profile" [ref=e41] [cursor=pointer]:
+            - /url: /profile
+          - link "Mobile Bootstrap" [ref=e42] [cursor=pointer]:
+            - /url: /mobile/bootstrap
+        - generic [ref=e43]:
+          - paragraph [ref=e44]: Support
+          - link "Donate" [ref=e45] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e46]
+            - text: Donate
+          - generic [ref=e48]: "Wallet plugin setup: Settings → Wallet Integrations"
+          - link "Report abuse or policy violations" [ref=e49] [cursor=pointer]:
+            - /url: /community-guidelines
+          - link "GitHub" [ref=e50] [cursor=pointer]:
+            - /url: https://github.com/3KD/dStream
+            - text: GitHub
+            - img [ref=e51]
+          - generic [ref=e55]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+  - alert [ref=e56]

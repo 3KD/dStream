@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 import { subscribeMany } from "@/lib/nostr";
 
 interface UseStreamAnnouncesOptions {
+  enabled?: boolean;
   liveOnly?: boolean;
   limit?: number;
   includeHidden?: boolean;
@@ -15,11 +17,12 @@ interface UseStreamAnnouncesOptions {
 }
 
 const LIVE_STALE_SEC = 6 * 60 * 60;
+const LIVE_HINT_GRACE_DEFAULT_SEC = 72 * 60 * 60;
 const LIVE_HINT_GRACE_SEC = (() => {
   const raw = Number(process.env.NEXT_PUBLIC_STREAM_LIVE_HINT_GRACE_SEC ?? "");
-  if (!Number.isFinite(raw)) return 7 * 24 * 60 * 60;
+  if (!Number.isFinite(raw)) return LIVE_HINT_GRACE_DEFAULT_SEC;
   const parsed = Math.floor(raw);
-  if (parsed < LIVE_STALE_SEC) return 7 * 24 * 60 * 60;
+  if (parsed < LIVE_STALE_SEC) return LIVE_STALE_SEC;
   return parsed;
 })();
 const LIVE_PRUNE_INTERVAL_MS = 15_000;
@@ -131,6 +134,7 @@ function streamQualityScore(stream: StreamAnnounce, nowSec: number): number {
   if (url.includes("--")) score += 3;
   if (url.includes("/index.m3u8") || url.endsWith(".m3u8")) score += 2;
   if (url.includes("trycloudflare.com") || url.includes("host.docker.internal") || url.includes("localhost")) score -= 8;
+  if (!isLikelyLivePlayableMediaUrl(stream.streaming)) score -= 10;
   if (image) score += 4;
   const ageSec = Math.max(0, nowSec - stream.createdAt);
   if (ageSec <= 120) score += 3;
@@ -178,7 +182,7 @@ function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): Str
 function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number, hintGraceCutoffSec: number): StreamAnnounce {
   if (stream.status !== "live") return stream;
   if (stream.createdAt >= staleCutoffSec) return stream;
-  const hasStreamingHint = (stream.streaming ?? "").trim().length > 0;
+  const hasStreamingHint = isLikelyLivePlayableMediaUrl(stream.streaming);
   if (hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) return stream;
   return { ...stream, status: "ended" };
 }
@@ -506,6 +510,7 @@ function subscribeToDirectory(listener: () => void) {
 }
 
 export function useStreamAnnounces({
+  enabled = true,
   liveOnly = true,
   limit = 50,
   includeHidden = false,
@@ -526,13 +531,15 @@ export function useStreamAnnounces({
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     acquireDirectoryFeed(relays, operatorPubkeys);
     return () => {
       releaseDirectoryFeed();
     };
-  }, [relays, operatorPubkeys]);
+  }, [enabled, relays, operatorPubkeys]);
 
   const streams = useMemo(() => {
+    if (!enabled) return [];
     const normalizedViewerPubkey = (viewerPubkey ?? "").trim().toLowerCase();
     const allStreams = directorySnapshot.streams;
     const hiddenPubkeyPolicies = directorySnapshot.hiddenPubkeyPolicies;
@@ -542,13 +549,15 @@ export function useStreamAnnounces({
       return allStreams
         .filter((stream) => {
           if (!liveOnly) return true;
-          return stream.status === "live";
+          if (stream.status !== "live") return false;
+          return isLikelyLivePlayableMediaUrl(stream.streaming);
         })
         .slice(0, limit);
     }
     return allStreams
       .filter((stream) => {
         if (liveOnly && stream.status !== "live") return false;
+        if (liveOnly && !isLikelyLivePlayableMediaUrl(stream.streaming)) return false;
         if (!stream.discoverable) return false;
         if (!includeMature && stream.matureContent) return false;
         const streamPubkey = stream.pubkey.toLowerCase();
@@ -565,11 +574,11 @@ export function useStreamAnnounces({
         return true;
       })
       .slice(0, limit);
-  }, [directorySnapshot, includeHidden, includeMature, limit, liveOnly, viewerPubkey]);
+  }, [directorySnapshot, enabled, includeHidden, includeMature, limit, liveOnly, viewerPubkey]);
 
   return {
     streams,
-    isLoading: directorySnapshot.isLoading,
+    isLoading: enabled ? directorySnapshot.isLoading : false,
     liveCount: streams.length
   };
 }

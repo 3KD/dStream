@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>dStream Mobile</title>
+    <link rel="stylesheet" href="./mobile.css" />
+  </head>
+  <body>
+    <main class="screen">
+      <section class="card">
+        <h1>dStream mobile setup</h1>
+        <p>Configure your own edge node and relays. This app then launches your node directly.</p>
+
+        <section id="saved-panel" class="saved-panel" hidden>
+          <div class="saved-title">Saved configuration</div>
+          <div class="mono">Saved config: <span id="saved-config">none</span></div>
+          <div class="row">
+            <button class="primary" id="launch-existing" type="button">Launch saved config</button>
+            <button class="secondary" id="edit-config" type="button">Node &amp; Relays</button>
+            <button class="secondary" id="reset-config" type="button">Reset</button>
+          </div>
+        </section>
+
+        <form id="setup-form" class="field">
+          <div class="field">
+            <label for="edge-url">Edge node URL (your node by default)</label>
+            <input id="edge-url" name="edge-url" type="url" inputmode="url" autocomplete="url" placeholder="https://your-node.example" />
+          </div>
+
+          <div class="field">
+            <label for="relay-list">Relay list (comma or newline separated)</label>
+            <textarea id="relay-list" name="relay-list"></textarea>
+          </div>
+
+          <div class="row">
+            <button class="primary" type="submit">Save &amp; launch</button>
+            <button class="secondary" id="save-only" type="button">Save only</button>
+            <button class="secondary" id="cancel-edit" type="button" hidden>Cancel</button>
+          </div>
+        </form>
+
+        <div id="error" class="error" role="status" aria-live="polite"></div>
+        <div class="mono">Storage: <span id="storage-mode">loading…</span></div>
+      </section>
+    </main>
+
+    <script src="./mobile.js"></script>
+  </body>
+</html>

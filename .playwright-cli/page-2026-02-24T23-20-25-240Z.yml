@@ -1,0 +1,164 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e7]:
+        - link "dStream Logo Stream" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e9]
+          - generic [ref=e10]: Stream
+        - navigation [ref=e11]:
+          - generic [ref=e12]:
+            - link "Browse" [ref=e13] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e14] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e15] [cursor=pointer]:
+              - /url: /inbox
+            - link "Moderation" [ref=e16] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e17] [cursor=pointer]:
+              - /url: /settings
+        - button "Open search" [ref=e19]:
+          - img [ref=e20]
+    - main [ref=e24]:
+      - generic [ref=e25]: Resolving stream route from relays…
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e29]:
+            - generic [ref=e31]:
+              - generic:
+                - generic:
+                  - generic: Loading stream…
+              - generic:
+                - generic:
+                  - generic:
+                    - button "Play"
+                    - generic: Loading…
+                    - button "Tap for sound"
+                    - generic:
+                      - generic: Volume
+                      - button "Volume 0 0%": Unmute
+                      - slider "Volume": "0"
+                      - generic: 0%
+                    - generic:
+                      - checkbox "Low-latency mode"
+                      - generic: Low-latency mode
+                    - button "PiP" [disabled]
+                    - button "Background Audio"
+                    - button "Fullscreen"
+                    - generic:
+                      - generic: Quality
+                      - combobox "Quality":
+                        - option "Auto" [selected]
+            - generic: Live Stream
+          - generic [ref=e33]:
+            - generic [ref=e34]:
+              - generic [ref=e35]: Stream Details
+              - button "Hide stream details" [expanded] [ref=e36]:
+                - text: Collapse
+                - img [ref=e37]
+            - generic [ref=e40]:
+              - generic [ref=e41]:
+                - generic [ref=e42]:
+                  - generic [ref=e44]: U
+                  - heading "Live Stream" [level=1] [ref=e46]
+                - generic [ref=e47]:
+                  - generic [ref=e48]: Playing live stream path.
+                  - link "Playback URL" [ref=e49] [cursor=pointer]:
+                    - /url: /api/hls/synthdragon-chill/index.m3u8
+                    - text: Playback URL
+                    - img [ref=e50]
+                  - button "Copy playback URL" [ref=e54]:
+                    - img [ref=e55]
+              - generic [ref=e58]:
+                - generic [ref=e59]: About
+                - paragraph [ref=e60]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]: Chat
+              - generic [ref=e66]: syncing moderation…
+            - button "Collapse chat" [ref=e67]:
+              - img [ref=e68]
+          - generic [ref=e72]: No messages yet
+          - generic [ref=e73]: Connect an identity to chat.
+  - contentinfo [ref=e74]:
+    - generic [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - img "dStream logo" [ref=e79]
+            - generic [ref=e80]: dStream Protocol
+          - paragraph [ref=e81]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+          - paragraph [ref=e82]:
+            - img [ref=e83]
+            - img [ref=e86]
+            - text: Production docs reflect live stack behavior
+        - generic [ref=e88]:
+          - generic [ref=e89]:
+            - paragraph [ref=e90]:
+              - img [ref=e91]
+              - text: Protocol
+            - generic [ref=e96]:
+              - link "Whitepaper" [ref=e97] [cursor=pointer]:
+                - /url: /whitepaper
+              - link "Documentation" [ref=e98] [cursor=pointer]:
+                - /url: /docs
+              - link "Use Cases" [ref=e99] [cursor=pointer]:
+                - /url: /use-cases
+              - link "Donate" [ref=e100] [cursor=pointer]:
+                - /url: /donate
+              - link "Analytics" [ref=e101] [cursor=pointer]:
+                - /url: /analytics
+              - link "Terms" [ref=e102] [cursor=pointer]:
+                - /url: /terms
+              - link "Community Guidelines" [ref=e103] [cursor=pointer]:
+                - /url: /community-guidelines
+          - generic [ref=e104]:
+            - paragraph [ref=e105]:
+              - img [ref=e106]
+              - text: Build
+            - generic [ref=e109]:
+              - link "Broadcast" [ref=e110] [cursor=pointer]:
+                - /url: /broadcast
+              - link "Browse" [ref=e111] [cursor=pointer]:
+                - /url: /browse
+              - link "Settings" [ref=e112] [cursor=pointer]:
+                - /url: /settings
+              - link "Mobile Bootstrap" [ref=e113] [cursor=pointer]:
+                - /url: /mobile/bootstrap
+        - generic [ref=e114]:
+          - paragraph [ref=e115]: Support
+          - generic [ref=e116]:
+            - link "Support Hub" [ref=e117] [cursor=pointer]:
+              - /url: /support
+            - link "Donate" [ref=e118] [cursor=pointer]:
+              - /url: /donate
+              - img [ref=e119]
+              - text: Donate
+            - link "GitHub" [ref=e121] [cursor=pointer]:
+              - /url: https://github.com/3KD/dStream
+              - text: GitHub
+              - img [ref=e122]
+          - generic [ref=e126]:
+            - generic [ref=e127]: "XMR:"
+            - button "Copy Monero support address" [ref=e128]:
+              - generic [ref=e129]: 49zL3oidgJbD…GP6X5w42
+              - generic [ref=e130]: copy
+          - generic [ref=e131]:
+            - generic [ref=e132]: "BTC:"
+            - button "Copy Bitcoin support address" [ref=e133]:
+              - generic [ref=e134]: bc1qtldhxtrc…aeltyca9
+              - generic [ref=e135]: copy
+          - generic [ref=e136]:
+            - generic [ref=e137]: "ETH:"
+            - button "Copy Ethereum support address" [ref=e138]:
+              - generic [ref=e139]: 0xEBC2943b39…F23e0699
+              - generic [ref=e140]: copy
+          - generic [ref=e141]: "Wallet plugin setup: Settings → Wallet Integrations"
+          - link "Report abuse or policy violations" [ref=e142] [cursor=pointer]:
+            - /url: /community-guidelines
+          - generic [ref=e143]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+      - generic [ref=e144]:
+        - generic [ref=e145]: © dStream
+        - generic [ref=e146]: Decentralized by default. Operated by independent nodes.

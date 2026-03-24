@@ -1,0 +1,122 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]:
+          - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e8]
+            - generic [ref=e9]: Stream
+          - navigation [ref=e10]:
+            - link "Browse" [ref=e11] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e12] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e13] [cursor=pointer]:
+              - /url: /inbox
+            - link "Broadcast" [ref=e14] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Dashboard" [ref=e15] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Profile" [ref=e16] [cursor=pointer]:
+              - /url: /profile
+            - link "Moderation" [ref=e17] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e18] [cursor=pointer]:
+              - /url: /settings
+            - link "Visuals" [ref=e19] [cursor=pointer]:
+              - /url: /dev/visuals
+      - main [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - heading "Live Stream" [level=1] [ref=e25]
+            - generic [ref=e26]: npub1q7why7lw8…gq2km2vr / plebs-1772372684991-peaanf
+          - generic [ref=e27]:
+            - button "Favorite stream" [ref=e28]:
+              - img [ref=e29]
+            - link "Back to Browse" [ref=e31] [cursor=pointer]:
+              - /url: /browse
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - text: Viewers
+            - generic [ref=e34]: ≈ 0
+            - text: presence (approx)
+          - generic [ref=e35]:
+            - generic [ref=e36] [cursor=pointer]:
+              - checkbox "Share presence" [checked] [ref=e37]
+              - text: Share presence
+            - generic [ref=e38] [cursor=pointer]:
+              - checkbox "P2P assist" [checked] [ref=e39]
+              - text: P2P assist
+            - generic [ref=e40]: Connect identity to publish.
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]:
+              - generic: Loading…
+              - generic [ref=e46]:
+                - generic [ref=e47]:
+                  - generic [ref=e48]: Volume
+                  - slider "Volume" [ref=e49]: "0"
+                  - generic [ref=e50]: 0%
+                - generic [ref=e51]:
+                  - generic [ref=e52]: Quality
+                  - combobox "Quality" [ref=e53]:
+                    - option "Auto" [selected]
+                - generic [ref=e54]:
+                  - checkbox "Low-latency mode" [checked] [ref=e55]
+                  - generic [ref=e56]: Low-latency mode
+                - button "PiP" [disabled] [ref=e57]
+                - button "Fullscreen" [ref=e58]
+                - generic [ref=e59]: "Quality: Auto"
+            - generic [ref=e60]:
+              - generic [ref=e61]: About
+              - paragraph [ref=e62]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+              - generic [ref=e63]: "VOD: VOD Off"
+              - generic [ref=e64]: "Playback URL: /api/hls/079d727bee3d805e24758861ea4d028b2e6a37805f8db45bf8045bf900099650--plebs-1772372684991-peaanf/index.m3u8"
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - generic [ref=e68]:
+                - generic [ref=e69]: Chat
+                - generic [ref=e70]: syncing moderation…
+              - generic [ref=e71]: 0 msgs
+            - generic [ref=e73]: No messages yet
+            - generic [ref=e74]: Connect an identity to chat.
+    - contentinfo [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - img "dStream logo" [ref=e79]
+            - generic [ref=e80]: dStream Rebuild
+          - paragraph [ref=e81]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e82]:
+          - paragraph [ref=e83]: Protocol
+          - link "Whitepaper" [ref=e84] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e85] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e86] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e87]:
+          - paragraph [ref=e88]: Support
+          - link "Donate" [ref=e89] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e90]
+            - text: Donate
+          - link "GitHub" [ref=e92] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e93]:
+            - img [ref=e94]
+            - img [ref=e97]
+            - text: Updated for the current rebuild architecture
+  - generic [ref=e103] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e104]:
+      - img [ref=e105]
+    - generic [ref=e108]:
+      - button "Open issues overlay" [ref=e109]:
+        - generic [ref=e110]:
+          - generic [ref=e111]: "0"
+          - generic [ref=e112]: "1"
+        - generic [ref=e113]: Issue
+      - button "Collapse issues badge" [ref=e114]:
+        - img [ref=e115]
+  - alert [ref=e117]

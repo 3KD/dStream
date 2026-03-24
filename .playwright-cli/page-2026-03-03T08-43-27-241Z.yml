@@ -1,0 +1,656 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e29]:
+      - banner [ref=e30]:
+        - generic [ref=e31]:
+          - link "dStream Logo Stream" [ref=e32] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e33]
+            - generic [ref=e34]: Stream
+          - navigation [ref=e35]:
+            - link "Browse" [ref=e36] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e37] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e38] [cursor=pointer]:
+              - /url: /inbox
+            - link "Moderation" [ref=e39] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e40] [cursor=pointer]:
+              - /url: /settings
+          - button "Identity" [ref=e43]:
+            - img [ref=e44]
+            - generic [ref=e47]: Identity
+      - main [ref=e48]:
+        - generic [ref=e49]:
+          - heading "Browse" [level=1] [ref=e50]
+          - generic [ref=e51]:
+            - generic [ref=e52] [cursor=pointer]:
+              - checkbox "Favorites only" [ref=e53]
+              - text: Favorites only
+            - generic [ref=e54] [cursor=pointer]:
+              - checkbox "Curated only" [ref=e55]
+              - text: Curated only
+            - link "Guilds" [ref=e56] [cursor=pointer]:
+              - /url: /guilds
+            - link "VOD" [ref=e57] [cursor=pointer]:
+              - /url: /vod
+            - link "Home" [ref=e58] [cursor=pointer]:
+              - /url: /
+        - generic [ref=e59]:
+          - heading "Live Now (2)" [level=2] [ref=e60]
+          - generic [ref=e61]:
+            - link "Synthdragon Radio — CHILL Live Synthdragon Radio — CHILL Favorite stream npub1qhnqzk03u…6q30lht3" [ref=e62] [cursor=pointer]:
+              - /url: /watch/npub1qhnqzk03uznvke862ulur6lrt7v9496aalnaw4srlku73n7nsv6q30lht3/synthdragon-chill?u=https%3A%2F%2Fhls.synthdragonradio.com%2Fhls%2Fchill%2Findex.m3u8
+              - generic [ref=e63]:
+                - img "Synthdragon Radio — CHILL" [ref=e64]
+                - generic [ref=e65]: Live
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - heading "Synthdragon Radio — CHILL" [level=3] [ref=e68]
+                  - button "Favorite stream" [ref=e69]:
+                    - img [ref=e70]
+                - paragraph [ref=e72]: npub1qhnqzk03u…6q30lht3
+            - link "Synthdragon Radio — FIERCE Live Synthdragon Radio — FIERCE Favorite stream npub1qhnqzk03u…6q30lht3" [ref=e73] [cursor=pointer]:
+              - /url: /watch/npub1qhnqzk03uznvke862ulur6lrt7v9496aalnaw4srlku73n7nsv6q30lht3/synthdragon-fierce?u=https%3A%2F%2Fhls.synthdragonradio.com%2Fhls%2Ffierce%2Findex.m3u8
+              - generic [ref=e74]:
+                - img "Synthdragon Radio — FIERCE" [ref=e75]
+                - generic [ref=e76]: Live
+              - generic [ref=e77]:
+                - generic [ref=e78]:
+                  - heading "Synthdragon Radio — FIERCE" [level=3] [ref=e79]
+                  - button "Favorite stream" [ref=e80]:
+                    - img [ref=e81]
+                - paragraph [ref=e83]: npub1qhnqzk03u…6q30lht3
+        - generic [ref=e84]:
+          - heading "Replays (VOD) (51)" [level=2] [ref=e85]
+          - generic [ref=e86]:
+            - link "ABC Kids Public VOD ABC Kids Favorite stream npub1r0d8u8mnj…vs4rfsft" [ref=e87] [cursor=pointer]:
+              - /url: /watch/npub1r0d8u8mnj6769500nypnm28a9hpk9qg8jr0ehe30tygr3wuhcnvs4rfsft/abc-kids-mm9zls98?u=https%3A%2F%2Fc.mjh.nz%2Fabc-kids.m3u8
+              - generic [ref=e88]:
+                - img "ABC Kids" [ref=e89]
+                - generic [ref=e90]: Public VOD
+              - generic [ref=e91]:
+                - generic [ref=e92]:
+                  - heading "ABC Kids" [level=3] [ref=e93]
+                  - button "Favorite stream" [ref=e94]:
+                    - img [ref=e95]
+                - paragraph [ref=e97]: npub1r0d8u8mnj…vs4rfsft
+            - link "No thumbnail Public VOD อิรุงตุงนัง Bitcoin Talk ep.227 938995 Favorite stream npub1ejn774qah…mqdm97a5" [ref=e98] [cursor=pointer]:
+              - /url: /watch/npub1ejn774qahqmgjsfajawy7634unk88y26yktvwuzp9kfgdeejx9mqdm97a5/b6d4d1f3-0a58-4938-b8f6-2751874d82f2?u=https%3A%2F%2Fstream.notoshi.win%2Fe017bb5f-cdc4-4dba-a944-b1fa290e2b77.m3u8
+              - generic [ref=e99]:
+                - generic [ref=e100]: No thumbnail
+                - generic [ref=e101]: Public VOD
+              - generic [ref=e102]:
+                - generic [ref=e103]:
+                  - heading "อิรุงตุงนัง Bitcoin Talk ep.227 938995" [level=3] [ref=e104]
+                  - button "Favorite stream" [ref=e105]:
+                    - img [ref=e106]
+                - paragraph [ref=e108]: npub1ejn774qah…mqdm97a5
+            - link "No thumbnail Public VOD Morning Crypto 920 Favorite stream npub1atrrqav7x…yquawyga" [ref=e109] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772103610?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCukFw_KoXdfJbbbkZAx9mQ-DA77ZdguqZyLRNfRAoOOED1l3Coz0E17BPj02kngb2aS_FGdbS6q7qnladI82LA5rmr8aunDSyAuO7uXMSVPyq7r04SRuKxYlkWZK2lSPo4qvb53EFEYm9C74GkB0R9HExrfBRNs7lKDogw0Yxn3__JNzuIPE765MQr32nU2lTbkbd3vT5rI4dgVlLys0OPhUsdLxYUBnf1WMvQ8fps0VNxZV6n97bHg1UWrjr5Oo8aH0nwzxVDcKj5FCb6Kau3ZZ_hOkYtxBtQ5BwK7fcNTuh03b3LXlByuEVXqLaPj_TMENMryKCLrV3MXxmWkDv0gI_8xXNLqXUQ55vkMGNsYnK95VDwAuD2PxzQUNu045_mrztUyNiy6bJi3cYguTAmeW3ivVI9d33YMtcK892XjLvTxHyZ_AG412NP9Yk90JRGY0T3FjV5AC4dngf4LhBkTHQIt-FWAPAWlwJijKPCFB4nGD3IdX949dPju2TJE6PFBWbX5qeIr-XzzEFlMZRsN-DeeI3-ci0fWzSMcoyw41bxYpRrpfILqUXQw5nMyqtLq_vap5_icn-6jD34bNzD_JYDaMaY9G8v28sl_nu71fQsO8JsrJuDXyCaxAGX1662r31cnGuWiKdmMN2z99V1pcPnOnZPw4UrfgsVl_e-PeFJasnbtFcr08y7huKmjyozYbmVwaRbukK7UX6DHaOP0PQSiEM-phEXb1GbP5fe2rbmDc19fHuFy31-e3fGdEh9l23-p0OgGxlxiNuKalaZweDEjMX3nqCfUvz4WOn7l4gxTpRhjX8VppUJFZy5zOsa4PZ6t3aHgRdJ8fi5BusPbjFvPU7a12PnaE_dixW57Ygog0uBpfJLQPjS4ayZui3w_ohydHzJ_3AU3qE2oob12iBpSRyOEbIxW-UrF9jFhmuERtkcrMaL4FbbMKLnaK8SQ402vRpwbJoMwXE8fg9PYj5Usrh59uvmul2hoM5dKwMLOzOcZH8wCOIAEqCWV1LXdlc3QtMjDDDg.m3u8
+              - generic [ref=e110]:
+                - generic [ref=e111]: No thumbnail
+                - generic [ref=e112]: Public VOD
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - heading "Morning Crypto 920" [level=3] [ref=e115]
+                  - button "Favorite stream" [ref=e116]:
+                    - img [ref=e117]
+                - paragraph [ref=e119]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e120] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053860?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCoMG8KkfGGdPj3cMuVKzj0s64xnmwSM0QWWW06Q8-VUkqzOcLVuUVIRUS-RH62tFecAlkhnMIk72G-vD1GA7cnvr33wd70E01dpRmen5BeBXewcqEwW6bswQ43CLZQVVLnQWVVvIIqnB1VtXmmbhtgC76F1zTHhJmQ5JgKrD2pDI5kEt90HudqGai-i9LzSwJO9oStBr4nUTvN6gXMn4jK_B2M5lFAq5hoZN9RoFF6OtRYQ5ujyriPmZzHRem2_0AIiBE6h7t-ALMWwzE90QCiLn5t77OgZ78F0EOic_FtSGCoAuJyqwBJPK3yz8oAbEVk1-UgCrchqjxaaEynlqP_ANRXkzn3vAJsEsFg5KlEXSlAs4PPB6aDAP8wjbbv7O-y8Ie-aTUIeRyX7CwjbARzkhUwB2K3OHzFRVzimiCTvAyH6G1SHqS8npNs9Bobfz58shKd6mXqCkrDpFvVF24Reu5oRC0PUdX0LtU-9PTdLfXgPTZ-CSSptY-j5505gPPmC52VV4z3yg-CI4RUKJ5aOdS_fL2U7QD6xs-5MNus209LF7gayVPwgnj0Uo3alaONIryNCuDLr8gfVY5ra4FnLmqkUuKTkMWDNEuQVnX1X8DASqRkrj51jCRK8y4Qg-fk9NKLwnRg1nsqrhCP6LnfApwbEuSDsry-ZXbMUW-NsES6WrhIq1n9hqRsIZpPicoEAbFojI-BEGFAbFZeAPI0cacGi0J-WEqtjs4Zq4a6zeLkv3bX26FnGucHBnXo5Dv_2nsagqrz2-DWCeBnSr7byDzcXdeWHyKXzgsT215kYi4MFH_XruUCskjI0xyzM26yhn9ynQrxqRCs-jr40hW7Dz9xy_TyQzpdn9zcL7BmfFuULkzZ9bum2xwoMAUSU0RvT7A7SP2MxSjl61g0CgVnI6S4Oh-a7QvN5WxrP7067ik5oNA_Oa7jl2hwlvTaUuDbF5kPq-pQF0BfgFTAwFMo0-sIakJTAtwx5zGsKBmnDsCPzCpSeGOPNq3qkBwKsNBu9aby0UGgz48qBRw_xwNmRWtKkgASoJZXUtd2VzdC0yMMIO.m3u8
+              - generic [ref=e121]:
+                - img "MC Setup" [ref=e122]
+                - generic [ref=e123]: Public VOD
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - heading "MC Setup" [level=3] [ref=e126]
+                  - button "Favorite stream" [ref=e127]:
+                    - img [ref=e128]
+                - paragraph [ref=e130]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e131] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053870?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCoMG8KkfGGdPj3cMuVKzj0s64xnmwSM0QWWW06Q8-VUkqzOcLVuUVIRUS-RH62tFecAlkhnMIk72G-vD1GA7cnvr33wd70E01dpRmen5BeBXewcqEwW6bswQ43CLZQVVLnQWVVvIIqnB1VtXmmbhtgC76F1zTHhJmQ5JgKrD2pDI5kEt90HudqGai-i9LzSwJO9oStBr4nUTvN6gXMn4jK_B2M5lFAq5hoZN9RoFF6OtRYQ5ujyriPmZzHRem2_0AIiBE6h7t-ALMWwzE90QCiLn5t77OgZ78F0EOic_FtSGCoAuJyqwBJPK3yz8oAbEVk1-UgCrchqjxaaEynlqP_ANRXkzn3vAJsEsFg5KlEXSlAs4PPB6aDAP8wjbbv7O-y8Ie-aTUIeRyX7CwjbARzkhUwB2K3OHzFRVzimiCTvAyH6G1SHqS8npNs9Bobfz58shKd6mXqCkrDpFvVF24Reu5oRC0PUdX0LtU-9PTdLfXgPTZ-CSSptY-j5505gPPmC52VV4z3yg-CI4RUKJ5aOdS_fL2U7QD6xs-5MNus209LF7gayVPwgnj0Uo3alaONIryNCuDLr8gfVY5ra4FnLmqkUuKTkMWDNEuQVnX1X8DASqRkrj51jCRK8y4Qg-fk9NKLwnRg1nsqrhCP6LnfApwbEuSDsry-ZXbMUW-NsES6WrhIq1n9hqRsIZpPicoEAbFojI-BEGFAbFZeAPI0cacGi0J-WEqtjs4Zq4a6zeLkv3bX26FnGucHBnXo5Dv_2nsagqrz2-DWCeBnSr7byDzcXdeWHyKXzgsT215kYi4MFH_XruUCskjI0xyzM26yhn9ynQrxqRCs-jr40hW7Dz9xy_TyQzpdn9zcL7BmfFuULkzZ9bum2xwoMAUSU0RvT7A7SP2MxSjl61g0CgVnI6S4Oh-a7QvN5WxrP7067ik5oNA_Oa7jl2hwlvTaUuDbF5kPq-pQF0BfgFTAwFMo0-sIakJTAtwx5zGsKBmnDsCPzCpSeGOPNq3qkBwKsNBu9aby0UGgz48qBRw_xwNmRWtKkgASoJZXUtd2VzdC0yMMIO.m3u8
+              - generic [ref=e132]:
+                - img "MC Setup" [ref=e133]
+                - generic [ref=e134]: Public VOD
+              - generic [ref=e135]:
+                - generic [ref=e136]:
+                  - heading "MC Setup" [level=3] [ref=e137]
+                  - button "Favorite stream" [ref=e138]:
+                    - img [ref=e139]
+                - paragraph [ref=e141]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e142] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053892?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCoMG8KkfGGdPj3cMuVKzj0s64xnmwSM0QWWW06Q8-VUkqzOcLVuUVIRUS-RH62tFecAlkhnMIk72G-vD1GA7cnvr33wd70E01dpRmen5BeBXewcqEwW6bswQ43CLZQVVLnQWVVvIIqnB1VtXmmbhtgC76F1zTHhJmQ5JgKrD2pDI5kEt90HudqGai-i9LzSwJO9oStBr4nUTvN6gXMn4jK_B2M5lFAq5hoZN9RoFF6OtRYQ5ujyriPmZzHRem2_0AIiBE6h7t-ALMWwzE90QCiLn5t77OgZ78F0EOic_FtSGCoAuJyqwBJPK3yz8oAbEVk1-UgCrchqjxaaEynlqP_ANRXkzn3vAJsEsFg5KlEXSlAs4PPB6aDAP8wjbbv7O-y8Ie-aTUIeRyX7CwjbARzkhUwB2K3OHzFRVzimiCTvAyH6G1SHqS8npNs9Bobfz58shKd6mXqCkrDpFvVF24Reu5oRC0PUdX0LtU-9PTdLfXgPTZ-CSSptY-j5505gPPmC52VV4z3yg-CI4RUKJ5aOdS_fL2U7QD6xs-5MNus209LF7gayVPwgnj0Uo3alaONIryNCuDLr8gfVY5ra4FnLmqkUuKTkMWDNEuQVnX1X8DASqRkrj51jCRK8y4Qg-fk9NKLwnRg1nsqrhCP6LnfApwbEuSDsry-ZXbMUW-NsES6WrhIq1n9hqRsIZpPicoEAbFojI-BEGFAbFZeAPI0cacGi0J-WEqtjs4Zq4a6zeLkv3bX26FnGucHBnXo5Dv_2nsagqrz2-DWCeBnSr7byDzcXdeWHyKXzgsT215kYi4MFH_XruUCskjI0xyzM26yhn9ynQrxqRCs-jr40hW7Dz9xy_TyQzpdn9zcL7BmfFuULkzZ9bum2xwoMAUSU0RvT7A7SP2MxSjl61g0CgVnI6S4Oh-a7QvN5WxrP7067ik5oNA_Oa7jl2hwlvTaUuDbF5kPq-pQF0BfgFTAwFMo0-sIakJTAtwx5zGsKBmnDsCPzCpSeGOPNq3qkBwKsNBu9aby0UGgz48qBRw_xwNmRWtKkgASoJZXUtd2VzdC0yMMIO.m3u8
+              - generic [ref=e143]:
+                - img "MC Setup" [ref=e144]
+                - generic [ref=e145]: Public VOD
+              - generic [ref=e146]:
+                - generic [ref=e147]:
+                  - heading "MC Setup" [level=3] [ref=e148]
+                  - button "Favorite stream" [ref=e149]:
+                    - img [ref=e150]
+                - paragraph [ref=e152]: npub1atrrqav7x…yquawyga
+            - link "No thumbnail Public VOD Morning Crypto Favorite stream npub1atrrqav7x…yquawyga" [ref=e153] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772448251?u=https%3A%2F%2Frestreamer.eddieoz.com%2Fmemfs%2F85af1f20-f0b9-4e87-839f-df7c7d5a5406.m3u8
+              - generic [ref=e154]:
+                - generic [ref=e155]: No thumbnail
+                - generic [ref=e156]: Public VOD
+              - generic [ref=e157]:
+                - generic [ref=e158]:
+                  - heading "Morning Crypto" [level=3] [ref=e159]
+                  - button "Favorite stream" [ref=e160]:
+                    - img [ref=e161]
+                - paragraph [ref=e163]: npub1atrrqav7x…yquawyga
+            - link "Blade Runner (1982) https://image.tmdb.org/t/p/original/63N9uy8nd9j7Eog2axPQ8lbr3Wj.jpg Public VOD Blade Runner (1982) https://image.tmdb.org/t/p/original/63N9uy8nd9j7Eog2axPQ8lbr3Wj.jpg Favorite stream npub1jk9h2jsa8…xqc3lqz7" [ref=e164] [cursor=pointer]:
+              - /url: /watch/npub1jk9h2jsa8hjmtm9qlcca942473gnyhuynz5rmgve0dlu6hpeazxqc3lqz7/wp-1772448767879-swopg7?u=https%3A%2F%2Farchive.org%2Fdownload%2Fcinema-horror-sci-fi%2FBlade.Runner.1982.1080p.BluRay.x264-%255BYTS.AM%255D.mp4
+              - generic [ref=e165]:
+                - img "Blade Runner (1982) https://image.tmdb.org/t/p/original/63N9uy8nd9j7Eog2axPQ8lbr3Wj.jpg" [ref=e166]
+                - generic [ref=e167]: Public VOD
+              - generic [ref=e168]:
+                - generic [ref=e169]:
+                  - heading "Blade Runner (1982) https://image.tmdb.org/t/p/original/63N9uy8nd9j7Eog2axPQ8lbr3Wj.jpg" [level=3] [ref=e170]
+                  - button "Favorite stream" [ref=e171]:
+                    - img [ref=e172]
+                - paragraph [ref=e174]: npub1jk9h2jsa8…xqc3lqz7
+            - link "No thumbnail Public VOD The First Movie - Mewtwo Strikes Back Favorite stream npub17qhjn3jql…gq5nda3y" [ref=e175] [cursor=pointer]:
+              - /url: /watch/npub17qhjn3jqlgmqr2l8vuzx4z0vv7zwqc7f3hg2cx3mjr52u0nc0egq5nda3y/wp-1772082897279-2yowu?u=https%3A%2F%2Farchive.org%2Fdownload%2Fpokemon-kanto-movie-collection%2F1.%2520Pok%25C3%25A9mon%2520The%2520First%2520Movie%2520-%2520Mewtwo%2520Strikes%2520Back.mp4
+              - generic [ref=e176]:
+                - generic [ref=e177]: No thumbnail
+                - generic [ref=e178]: Public VOD
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - heading "The First Movie - Mewtwo Strikes Back" [level=3] [ref=e181]
+                  - button "Favorite stream" [ref=e182]:
+                    - img [ref=e183]
+                - paragraph [ref=e185]: npub17qhjn3jql…gq5nda3y
+            - link "The Kalimera Show Public VOD The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e186] [cursor=pointer]:
+              - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1772438384?u=https%3A%2F%2Fstream.mxtthxw.art%2Fhls%2Fstream.m3u8
+              - generic [ref=e187]:
+                - img "The Kalimera Show" [ref=e188]
+                - generic [ref=e189]: Public VOD
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - heading "The Kalimera Show" [level=3] [ref=e192]
+                  - button "Favorite stream" [ref=e193]:
+                    - img [ref=e194]
+                - paragraph [ref=e196]: npub1q33jywkl8…esjymqu0
+            - link "MARATHON! Public VOD MARATHON! Favorite stream npub1q7why7lw8…gq2km2vr" [ref=e197] [cursor=pointer]:
+              - /url: /watch/npub1q7why7lw8kq9ufr43ps75ngz3vhx5duqt7xmgklcq3dljqqfjegq2km2vr/plebs-1772372684991-peaanf?u=https%3A%2F%2Fcustomer-ku755s5l55fiy1lt.cloudflarestream.com%2F27fb7920f4f8bb90213cf7d621507034%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e198]:
+                - img "MARATHON!" [ref=e199]
+                - generic [ref=e200]: Public VOD
+              - generic [ref=e201]:
+                - generic [ref=e202]:
+                  - heading "MARATHON!" [level=3] [ref=e203]
+                  - button "Favorite stream" [ref=e204]:
+                    - img [ref=e205]
+                - paragraph [ref=e207]: npub1q7why7lw8…gq2km2vr
+            - link "Variety Gaming | Starting with Marathon Public VOD Variety Gaming | Starting with Marathon Favorite stream npub1q7why7lw8…gq2km2vr" [ref=e208] [cursor=pointer]:
+              - /url: /watch/npub1q7why7lw8kq9ufr43ps75ngz3vhx5duqt7xmgklcq3dljqqfjegq2km2vr/plebs-1772329828174-83rk69?u=https%3A%2F%2Fcustomer-ku755s5l55fiy1lt.cloudflarestream.com%2Ff544acfd852dd3f3262de165913f1577%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e209]:
+                - img "Variety Gaming | Starting with Marathon" [ref=e210]
+                - generic [ref=e211]: Public VOD
+              - generic [ref=e212]:
+                - generic [ref=e213]:
+                  - heading "Variety Gaming | Starting with Marathon" [level=3] [ref=e214]
+                  - button "Favorite stream" [ref=e215]:
+                    - img [ref=e216]
+                - paragraph [ref=e218]: npub1q7why7lw8…gq2km2vr
+            - link "(TH) ไลฟ์ให้(และขอ)คำปรึกษา เดือนกุมภาพันธ์ 2026 - Saltyman Consultant Public VOD (TH) ไลฟ์ให้(และขอ)คำปรึกษา เดือนกุมภาพันธ์ 2026 - Saltyman Consultant Favorite stream npub13kxrwvtvh…nslw5kr4" [ref=e219] [cursor=pointer]:
+              - /url: /watch/npub13kxrwvtvhh4rtsan66r8rplquhpc87rjsruf69xaka54n0a3z4nslw5kr4/2f1269eb-a9f0-49b7-9e58-9fe4016f04b3?u=https%3A%2F%2Fstream.notoshi.win%2Fmemfs%2Fe15eec3e-6b82-4fc1-ab7b-75a24e465977.m3u8
+              - generic [ref=e220]:
+                - img "(TH) ไลฟ์ให้(และขอ)คำปรึกษา เดือนกุมภาพันธ์ 2026 - Saltyman Consultant" [ref=e221]
+                - generic [ref=e222]: Public VOD
+              - generic [ref=e223]:
+                - generic [ref=e224]:
+                  - heading "(TH) ไลฟ์ให้(และขอ)คำปรึกษา เดือนกุมภาพันธ์ 2026 - Saltyman Consultant" [level=3] [ref=e225]
+                  - button "Favorite stream" [ref=e226]:
+                    - img [ref=e227]
+                - paragraph [ref=e229]: npub13kxrwvtvh…nslw5kr4
+            - link "No thumbnail Public VOD Morning Crypto 923 Favorite stream npub1atrrqav7x…yquawyga" [ref=e230] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772189878?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCoMGsPCMsT1eCbe12By0trD5CeCWeuH5MkIu2rAR4D68rPnLMtDqwoypDgt9gq4YqtvkL1yYMr5pW5t_P4coqb4iaU5iUWmgEAPnb1kbkL3hkztmQnXIeFRoE2FGPDdvDjdr7g1wpx4-YQXB_B87pDcqi7VSdSoA8DVAwxz_z5rh-CFQewP-CmGRLCyFpV28fI6NeAXr1b_UmmzQCnowO4laZgIiuFduwyogoG3PdQ-XNuv86LfpKc4G8_q8Y6_z-MRkd74bY1BgEG9elF6LdxJust83EjDw78Nhih8GymGI5j7l870MrwaPfL8dQA8YGemUOOErfq9RM0rpUpg_nm8tCRAbLlMgzSpgU8bbDunGSAsO6HaXQtrkMieyZYnFKjS-3H6XkhSgtT8NSDYC8Qu0b1Jm270WQ2PMA3zOf7KLycNj9FMFxaE_Ybmwuv2cEFqrJMVophabOlggRSpqntTTm0VfULkmTNGkvEL0r6YlIWk87a0o8pbgFhRnLGJZOumqqSV_iMv7l3nCbdm5NIxULY5aHIlUdNMNGFyslt34kYFIt6rJUr9WhqQ00VclsvlOaBblGfYW9vttAK-2Dt8hnjRe5Ugh_-ACVpSXc24KL9cmrCLEmxnEjCM4hOsgxGOmRVJbfKR4tO2IjJCyqH4SgyOpYjM93gggVpRRBWhBgQUBLtXHz9zdWHCmc0Q95yr38rTZQpZTivOGr0VZIHogTLdY4dnSqjSl-YVRhQwfLZ-jLjFS0RvzKYCGKmbOo2q7BYoyYyUp4nilbIHovEJyakwQEef0m22nBQYRCIIUxwi9VuYxV54NMGhOHW5RbhtLgupLSRRt0prW2dIj0ADynXd2Z6n96RZAaQmc7_YAWrFdyIbthgvxg_5BbXkcSoEtI09XHx8bkZDeP1DjOX-7WFSplWz6mTaxDI8xIesCR2nz7UJYcYXrPODAVUMJEgYr5OCqJ4d1gCK4pWMUav36ilAn1CpY9rSHnachJJj21BUO8yXt29f3sOP1BMH8G8EM3fYbGgwzkJdobRT1tWBYOU8gASoJZXUtd2VzdC0yMMQO.m3u8
+              - generic [ref=e231]:
+                - generic [ref=e232]: No thumbnail
+                - generic [ref=e233]: Public VOD
+              - generic [ref=e234]:
+                - generic [ref=e235]:
+                  - heading "Morning Crypto 923" [level=3] [ref=e236]
+                  - button "Favorite stream" [ref=e237]:
+                    - img [ref=e238]
+                - paragraph [ref=e240]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e241] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053997?u=https%3A%2F%2Feun13.playlist.live-video.net%2Fv1%2Fplaylist%2FCoMG8KkfGGdPj3cMuVKzj0s64xnmwSM0QWWW06Q8-VUkqzOcLVuUVIRUS-RH62tFecAlkhnMIk72G-vD1GA7cnvr33wd70E01dpRmen5BeBXewcqEwW6bswQ43CLZQVVLnQWVVvIIqnB1VtXmmbhtgC76F1zTHhJmQ5JgKrD2pDI5kEt90HudqGai-i9LzSwJO9oStBr4nUTvN6gXMn4jK_B2M5lFAq5hoZN9RoFF6OtRYQ5ujyriPmZzHRem2_0AIiBE6h7t-ALMWwzE90QCiLn5t77OgZ78F0EOic_FtSGCoAuJyqwBJPK3yz8oAbEVk1-UgCrchqjxaaEynlqP_ANRXkzn3vAJsEsFg5KlEXSlAs4PPB6aDAP8wjbbv7O-y8Ie-aTUIeRyX7CwjbARzkhUwB2K3OHzFRVzimiCTvAyH6G1SHqS8npNs9Bobfz58shKd6mXqCkrDpFvVF24Reu5oRC0PUdX0LtU-9PTdLfXgPTZ-CSSptY-j5505gPPmC52VV4z3yg-CI4RUKJ5aOdS_fL2U7QD6xs-5MNus209LF7gayVPwgnj0Uo3alaONIryNCuDLr8gfVY5ra4FnLmqkUuKTkMWDNEuQVnX1X8DASqRkrj51jCRK8y4Qg-fk9NKLwnRg1nsqrhCP6LnfApwbEuSDsry-ZXbMUW-NsES6WrhIq1n9hqRsIZpPicoEAbFojI-BEGFAbFZeAPI0cacGi0J-WEqtjs4Zq4a6zeLkv3bX26FnGucHBnXo5Dv_2nsagqrz2-DWCeBnSr7byDzcXdeWHyKXzgsT215kYi4MFH_XruUCskjI0xyzM26yhn9ynQrxqRCs-jr40hW7Dz9xy_TyQzpdn9zcL7BmfFuULkzZ9bum2xwoMAUSU0RvT7A7SP2MxSjl61g0CgVnI6S4Oh-a7QvN5WxrP7067ik5oNA_Oa7jl2hwlvTaUuDbF5kPq-pQF0BfgFTAwFMo0-sIakJTAtwx5zGsKBmnDsCPzCpSeGOPNq3qkBwKsNBu9aby0UGgz48qBRw_xwNmRWtKkgASoJZXUtd2VzdC0yMMIO.m3u8
+              - generic [ref=e242]:
+                - img "MC Setup" [ref=e243]
+                - generic [ref=e244]: Public VOD
+              - generic [ref=e245]:
+                - generic [ref=e246]:
+                  - heading "MC Setup" [level=3] [ref=e247]
+                  - button "Favorite stream" [ref=e248]:
+                    - img [ref=e249]
+                - paragraph [ref=e251]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e252] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053929?u=https%3A%2F%2Frestreamer.eddieoz.com%2Fmemfs%2F85af1f20-f0b9-4e87-839f-df7c7d5a5406.m3u8
+              - generic [ref=e253]:
+                - img "MC Setup" [ref=e254]
+                - generic [ref=e255]: Public VOD
+              - generic [ref=e256]:
+                - generic [ref=e257]:
+                  - heading "MC Setup" [level=3] [ref=e258]
+                  - button "Favorite stream" [ref=e259]:
+                    - img [ref=e260]
+                - paragraph [ref=e262]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e263] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772053501?u=https%3A%2F%2Frestreamer.eddieoz.com%2Fmemfs%2F85af1f20-f0b9-4e87-839f-df7c7d5a5406.m3u8
+              - generic [ref=e264]:
+                - img "MC Setup" [ref=e265]
+                - generic [ref=e266]: Public VOD
+              - generic [ref=e267]:
+                - generic [ref=e268]:
+                  - heading "MC Setup" [level=3] [ref=e269]
+                  - button "Favorite stream" [ref=e270]:
+                    - img [ref=e271]
+                - paragraph [ref=e273]: npub1atrrqav7x…yquawyga
+            - link "MC Setup Public VOD MC Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e274] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772050274?u=https%3A%2F%2Frestreamer.eddieoz.com%2Fmemfs%2F85af1f20-f0b9-4e87-839f-df7c7d5a5406.m3u8
+              - generic [ref=e275]:
+                - img "MC Setup" [ref=e276]
+                - generic [ref=e277]: Public VOD
+              - generic [ref=e278]:
+                - generic [ref=e279]:
+                  - heading "MC Setup" [level=3] [ref=e280]
+                  - button "Favorite stream" [ref=e281]:
+                    - img [ref=e282]
+                - paragraph [ref=e284]: npub1atrrqav7x…yquawyga
+            - link "Morning Crypto Setup Public VOD Morning Crypto Setup Favorite stream npub1atrrqav7x…yquawyga" [ref=e285] [cursor=pointer]:
+              - /url: /watch/npub1atrrqav7xyur93xszyaeuyyzy70mpmax488grndfaz3kddyc3dyquawyga/1772050113?u=https%3A%2F%2Frestreamer.eddieoz.com%2Fmemfs%2F85af1f20-f0b9-4e87-839f-df7c7d5a5406.m3u8
+              - generic [ref=e286]:
+                - img "Morning Crypto Setup" [ref=e287]
+                - generic [ref=e288]: Public VOD
+              - generic [ref=e289]:
+                - generic [ref=e290]:
+                  - heading "Morning Crypto Setup" [level=3] [ref=e291]
+                  - button "Favorite stream" [ref=e292]:
+                    - img [ref=e293]
+                - paragraph [ref=e295]: npub1atrrqav7x…yquawyga
+            - link "The Kalimera Show Public VOD The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e296] [cursor=pointer]:
+              - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1772006392?u=https%3A%2F%2Fstream.mxtthxw.art%2Fhls%2Fstream.m3u8
+              - generic [ref=e297]:
+                - img "The Kalimera Show" [ref=e298]
+                - generic [ref=e299]: Public VOD
+              - generic [ref=e300]:
+                - generic [ref=e301]:
+                  - heading "The Kalimera Show" [level=3] [ref=e302]
+                  - button "Favorite stream" [ref=e303]:
+                    - img [ref=e304]
+                - paragraph [ref=e306]: npub1q33jywkl8…esjymqu0
+            - link "The Kalimera Show Public VOD The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e307] [cursor=pointer]:
+              - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1771919975?u=https%3A%2F%2Fstream.mxtthxw.art%2Fhls%2Fstream.m3u8
+              - generic [ref=e308]:
+                - img "The Kalimera Show" [ref=e309]
+                - generic [ref=e310]: Public VOD
+              - generic [ref=e311]:
+                - generic [ref=e312]:
+                  - heading "The Kalimera Show" [level=3] [ref=e313]
+                  - button "Favorite stream" [ref=e314]:
+                    - img [ref=e315]
+                - paragraph [ref=e317]: npub1q33jywkl8…esjymqu0
+            - link "No thumbnail Public VOD 175e124e-405d-45fc-83c3-c6299db8a214 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e318] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/175e124e-405d-45fc-83c3-c6299db8a214?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F66bd677c87ba07167358ad4e8bf63980%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e319]:
+                - generic [ref=e320]: No thumbnail
+                - generic [ref=e321]: Public VOD
+              - generic [ref=e322]:
+                - generic [ref=e323]:
+                  - heading "175e124e-405d-45fc-83c3-c6299db8a214" [level=3] [ref=e324]
+                  - button "Favorite stream" [ref=e325]:
+                    - img [ref=e326]
+                - paragraph [ref=e328]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD 834d22e7-48e5-4289-a12d-be10838c4328 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e329] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/834d22e7-48e5-4289-a12d-be10838c4328?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F1e44eed7054e485d9dc75a78bc19a27e%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e330]:
+                - generic [ref=e331]: No thumbnail
+                - generic [ref=e332]: Public VOD
+              - generic [ref=e333]:
+                - generic [ref=e334]:
+                  - heading "834d22e7-48e5-4289-a12d-be10838c4328" [level=3] [ref=e335]
+                  - button "Favorite stream" [ref=e336]:
+                    - img [ref=e337]
+                - paragraph [ref=e339]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD 52353430-fe72-403e-9fb7-444c0fbca2d4 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e340] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/52353430-fe72-403e-9fb7-444c0fbca2d4?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fac76e57d6659a3c98a419b3618d2824b%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e341]:
+                - generic [ref=e342]: No thumbnail
+                - generic [ref=e343]: Public VOD
+              - generic [ref=e344]:
+                - generic [ref=e345]:
+                  - heading "52353430-fe72-403e-9fb7-444c0fbca2d4" [level=3] [ref=e346]
+                  - button "Favorite stream" [ref=e347]:
+                    - img [ref=e348]
+                - paragraph [ref=e350]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD 6d239a1b-e0c4-424e-99ce-98e05c819d9d Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e351] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/6d239a1b-e0c4-424e-99ce-98e05c819d9d?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F5a8fa591663568cfb59104f1b8a92ea9%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e352]:
+                - generic [ref=e353]: No thumbnail
+                - generic [ref=e354]: Public VOD
+              - generic [ref=e355]:
+                - generic [ref=e356]:
+                  - heading "6d239a1b-e0c4-424e-99ce-98e05c819d9d" [level=3] [ref=e357]
+                  - button "Favorite stream" [ref=e358]:
+                    - img [ref=e359]
+                - paragraph [ref=e361]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD f9253f52-3539-4b33-bcd1-4cd5761d9f86 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e362] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/f9253f52-3539-4b33-bcd1-4cd5761d9f86?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fc45f2c26585eb18e9c926042006f3c9a%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e363]:
+                - generic [ref=e364]: No thumbnail
+                - generic [ref=e365]: Public VOD
+              - generic [ref=e366]:
+                - generic [ref=e367]:
+                  - heading "f9253f52-3539-4b33-bcd1-4cd5761d9f86" [level=3] [ref=e368]
+                  - button "Favorite stream" [ref=e369]:
+                    - img [ref=e370]
+                - paragraph [ref=e372]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD cb7b7d57-d739-40c3-90a2-973a86f58c56 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e373] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/cb7b7d57-d739-40c3-90a2-973a86f58c56?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fd558acb4584586ad6cca4b5f1c2b321b%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e374]:
+                - generic [ref=e375]: No thumbnail
+                - generic [ref=e376]: Public VOD
+              - generic [ref=e377]:
+                - generic [ref=e378]:
+                  - heading "cb7b7d57-d739-40c3-90a2-973a86f58c56" [level=3] [ref=e379]
+                  - button "Favorite stream" [ref=e380]:
+                    - img [ref=e381]
+                - paragraph [ref=e383]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD 0b8d4df7-3109-4456-88b9-3f12d771d3ae Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e384] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/0b8d4df7-3109-4456-88b9-3f12d771d3ae?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F508d62d5c3f60bb5866a6780b5fc82ad%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e385]:
+                - generic [ref=e386]: No thumbnail
+                - generic [ref=e387]: Public VOD
+              - generic [ref=e388]:
+                - generic [ref=e389]:
+                  - heading "0b8d4df7-3109-4456-88b9-3f12d771d3ae" [level=3] [ref=e390]
+                  - button "Favorite stream" [ref=e391]:
+                    - img [ref=e392]
+                - paragraph [ref=e394]: npub1sh0cy25xt…0sghnh3u
+            - link "Rod from Shosho is live 👋 Public VOD Rod from Shosho is live 👋 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e395] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/24ac2845-ac00-4392-903d-9f434fe8410f?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F4868baf456b78ec1130c67da2c819680%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e396]:
+                - img "Rod from Shosho is live 👋" [ref=e397]
+                - generic [ref=e398]: Public VOD
+              - generic [ref=e399]:
+                - generic [ref=e400]:
+                  - heading "Rod from Shosho is live 👋" [level=3] [ref=e401]
+                  - button "Favorite stream" [ref=e402]:
+                    - img [ref=e403]
+                - paragraph [ref=e405]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD 7ffa8ba8-eacf-4b0e-9b3d-6feb46fc11a4 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e406] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/7ffa8ba8-eacf-4b0e-9b3d-6feb46fc11a4?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fb2ebb65cba402dea97b8f2cce6288f8e%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e407]:
+                - generic [ref=e408]: No thumbnail
+                - generic [ref=e409]: Public VOD
+              - generic [ref=e410]:
+                - generic [ref=e411]:
+                  - heading "7ffa8ba8-eacf-4b0e-9b3d-6feb46fc11a4" [level=3] [ref=e412]
+                  - button "Favorite stream" [ref=e413]:
+                    - img [ref=e414]
+                - paragraph [ref=e416]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD No Reality Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e417] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/454301e1-2846-4d9e-a8d5-96a3d8668e42?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fa7c02b011a83c8970def5a0ce38eb4eb%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e418]:
+                - generic [ref=e419]: No thumbnail
+                - generic [ref=e420]: Public VOD
+              - generic [ref=e421]:
+                - generic [ref=e422]:
+                  - heading "No Reality" [level=3] [ref=e423]
+                  - button "Favorite stream" [ref=e424]:
+                    - img [ref=e425]
+                - paragraph [ref=e427]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD f090797a-de9a-40ed-9fdf-9b22775b65d9 Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e428] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/f090797a-de9a-40ed-9fdf-9b22775b65d9?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2F145354c5f50fc041bff19ea2c0db863b%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e429]:
+                - generic [ref=e430]: No thumbnail
+                - generic [ref=e431]: Public VOD
+              - generic [ref=e432]:
+                - generic [ref=e433]:
+                  - heading "f090797a-de9a-40ed-9fdf-9b22775b65d9" [level=3] [ref=e434]
+                  - button "Favorite stream" [ref=e435]:
+                    - img [ref=e436]
+                - paragraph [ref=e438]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD Testing a new Shosho Server build Favorite stream npub12ujta4fgp…hqgvgtmf" [ref=e439] [cursor=pointer]:
+              - /url: /watch/npub12ujta4fgp93jqrj36tg2lj3gvze3ng4umr0uyt0e3q3279ywr3hqgvgtmf/ea1d2e6f-39de-4ff9-b326-0bf9026fd4ec?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fbdc746f57433b0f03205b3bddb101d04%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e440]:
+                - generic [ref=e441]: No thumbnail
+                - generic [ref=e442]: Public VOD
+              - generic [ref=e443]:
+                - generic [ref=e444]:
+                  - heading "Testing a new Shosho Server build" [level=3] [ref=e445]
+                  - button "Favorite stream" [ref=e446]:
+                    - img [ref=e447]
+                - paragraph [ref=e449]: npub12ujta4fgp…hqgvgtmf
+            - link "No thumbnail Public VOD Testing a new Shosho Server build Favorite stream npub1sh0cy25xt…0sghnh3u" [ref=e450] [cursor=pointer]:
+              - /url: /watch/npub1sh0cy25xtx0lh6q58kc7rcdl95tzlfs0c6zuv4g4jclx0n7hfx0sghnh3u/849d5c01-a32e-4dd0-afd1-50f820401d72?u=https%3A%2F%2Fcustomer-51tzzrmdygiq19h7.cloudflarestream.com%2Fbdc746f57433b0f03205b3bddb101d04%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e451]:
+                - generic [ref=e452]: No thumbnail
+                - generic [ref=e453]: Public VOD
+              - generic [ref=e454]:
+                - generic [ref=e455]:
+                  - heading "Testing a new Shosho Server build" [level=3] [ref=e456]
+                  - button "Favorite stream" [ref=e457]:
+                    - img [ref=e458]
+                - paragraph [ref=e460]: npub1sh0cy25xt…0sghnh3u
+            - link "No thumbnail Public VOD ttttt Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e461] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771871933761?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771871933761%2Flive.m3u8
+              - generic [ref=e462]:
+                - generic [ref=e463]: No thumbnail
+                - generic [ref=e464]: Public VOD
+              - generic [ref=e465]:
+                - generic [ref=e466]:
+                  - heading "ttttt" [level=3] [ref=e467]
+                  - button "Favorite stream" [ref=e468]:
+                    - img [ref=e469]
+                - paragraph [ref=e471]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD ttt Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e472] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771868191828?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771868191828%2Flive.m3u8
+              - generic [ref=e473]:
+                - generic [ref=e474]: No thumbnail
+                - generic [ref=e475]: Public VOD
+              - generic [ref=e476]:
+                - generic [ref=e477]:
+                  - heading "ttt" [level=3] [ref=e478]
+                  - button "Favorite stream" [ref=e479]:
+                    - img [ref=e480]
+                - paragraph [ref=e482]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e483] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771863724046?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771863724046%2Flive.m3u8
+              - generic [ref=e484]:
+                - generic [ref=e485]: No thumbnail
+                - generic [ref=e486]: Public VOD
+              - generic [ref=e487]:
+                - generic [ref=e488]:
+                  - heading "test" [level=3] [ref=e489]
+                  - button "Favorite stream" [ref=e490]:
+                    - img [ref=e491]
+                - paragraph [ref=e493]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e494] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771860063367?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771860063367%2Flive.m3u8
+              - generic [ref=e495]:
+                - generic [ref=e496]: No thumbnail
+                - generic [ref=e497]: Public VOD
+              - generic [ref=e498]:
+                - generic [ref=e499]:
+                  - heading "test" [level=3] [ref=e500]
+                  - button "Favorite stream" [ref=e501]:
+                    - img [ref=e502]
+                - paragraph [ref=e504]: npub1ampsgchcv…qq4q8cdg
+            - link "The Kalimera Show Public VOD The Kalimera Show Favorite stream npub1q33jywkl8…esjymqu0" [ref=e505] [cursor=pointer]:
+              - /url: /watch/npub1q33jywkl8r0e5g48lvrenxnr3lw59kzrw4e7p0cecslqzwc56eesjymqu0/1771833619?u=https%3A%2F%2Fstream.mxtthxw.art%2Fhls%2Fstream.m3u8
+              - generic [ref=e506]:
+                - img "The Kalimera Show" [ref=e507]
+                - generic [ref=e508]: Public VOD
+              - generic [ref=e509]:
+                - generic [ref=e510]:
+                  - heading "The Kalimera Show" [level=3] [ref=e511]
+                  - button "Favorite stream" [ref=e512]:
+                    - img [ref=e513]
+                - paragraph [ref=e515]: npub1q33jywkl8…esjymqu0
+            - link "No thumbnail Public VOD great Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e516] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771819633562?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771819633562%2Flive.m3u8
+              - generic [ref=e517]:
+                - generic [ref=e518]: No thumbnail
+                - generic [ref=e519]: Public VOD
+              - generic [ref=e520]:
+                - generic [ref=e521]:
+                  - heading "great" [level=3] [ref=e522]
+                  - button "Favorite stream" [ref=e523]:
+                    - img [ref=e524]
+                - paragraph [ref=e526]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e527] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771818923180?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771818923180%2Flive.m3u8
+              - generic [ref=e528]:
+                - generic [ref=e529]: No thumbnail
+                - generic [ref=e530]: Public VOD
+              - generic [ref=e531]:
+                - generic [ref=e532]:
+                  - heading "test" [level=3] [ref=e533]
+                  - button "Favorite stream" [ref=e534]:
+                    - img [ref=e535]
+                - paragraph [ref=e537]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e538] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771813087707?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771813087707%2Flive.m3u8
+              - generic [ref=e539]:
+                - generic [ref=e540]: No thumbnail
+                - generic [ref=e541]: Public VOD
+              - generic [ref=e542]:
+                - generic [ref=e543]:
+                  - heading "test" [level=3] [ref=e544]
+                  - button "Favorite stream" [ref=e545]:
+                    - img [ref=e546]
+                - paragraph [ref=e548]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e549] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771796257853?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771796257853%2Flive.m3u8
+              - generic [ref=e550]:
+                - generic [ref=e551]: No thumbnail
+                - generic [ref=e552]: Public VOD
+              - generic [ref=e553]:
+                - generic [ref=e554]:
+                  - heading "test" [level=3] [ref=e555]
+                  - button "Favorite stream" [ref=e556]:
+                    - img [ref=e557]
+                - paragraph [ref=e559]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e560] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771795125576?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771795125576%2Flive.m3u8
+              - generic [ref=e561]:
+                - generic [ref=e562]: No thumbnail
+                - generic [ref=e563]: Public VOD
+              - generic [ref=e564]:
+                - generic [ref=e565]:
+                  - heading "test" [level=3] [ref=e566]
+                  - button "Favorite stream" [ref=e567]:
+                    - img [ref=e568]
+                - paragraph [ref=e570]: npub1ampsgchcv…qq4q8cdg
+            - link "Lil Nightmares 2. Horror. Public VOD Lil Nightmares 2. Horror. Favorite stream npub1q7why7lw8…gq2km2vr" [ref=e571] [cursor=pointer]:
+              - /url: /watch/npub1q7why7lw8kq9ufr43ps75ngz3vhx5duqt7xmgklcq3dljqqfjegq2km2vr/1771739280?u=https%3A%2F%2Fcustomer-ku755s5l55fiy1lt.cloudflarestream.com%2F8000217446c530ec2edbe6043b63530b%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e572]:
+                - img "Lil Nightmares 2. Horror." [ref=e573]
+                - generic [ref=e574]: Public VOD
+              - generic [ref=e575]:
+                - generic [ref=e576]:
+                  - heading "Lil Nightmares 2. Horror." [level=3] [ref=e577]
+                  - button "Favorite stream" [ref=e578]:
+                    - img [ref=e579]
+                - paragraph [ref=e581]: npub1q7why7lw8…gq2km2vr
+            - link "(TH) SPECIAL 44 - อันมนุษย์มีมากมายดังฝูงแย้ Public VOD (TH) SPECIAL 44 - อันมนุษย์มีมากมายดังฝูงแย้ Favorite stream npub13kxrwvtvh…nslw5kr4" [ref=e582] [cursor=pointer]:
+              - /url: /watch/npub13kxrwvtvhh4rtsan66r8rplquhpc87rjsruf69xaka54n0a3z4nslw5kr4/eb0747f1-b989-44ee-83f8-182cb7a45fb8?u=https%3A%2F%2Fstream.notoshi.win%2Fmemfs%2Fe15eec3e-6b82-4fc1-ab7b-75a24e465977.m3u8
+              - generic [ref=e583]:
+                - img "(TH) SPECIAL 44 - อันมนุษย์มีมากมายดังฝูงแย้" [ref=e584]
+                - generic [ref=e585]: Public VOD
+              - generic [ref=e586]:
+                - generic [ref=e587]:
+                  - heading "(TH) SPECIAL 44 - อันมนุษย์มีมากมายดังฝูงแย้" [level=3] [ref=e588]
+                  - button "Favorite stream" [ref=e589]:
+                    - img [ref=e590]
+                - paragraph [ref=e592]: npub13kxrwvtvh…nslw5kr4
+            - link "No thumbnail Public VOD Live Stream Favorite stream npub12zqf55l7l…jqkq99h8" [ref=e593] [cursor=pointer]:
+              - /url: /watch/npub12zqf55l7l9vsg5f6ssx5pq4f9dzu6hcmnepkm8ftj25fecy379jqkq99h8/oni-1771677889038?u=https%3A%2F%2Flive.mycelium.social%2Fhls%2Fstream.m3u8
+              - generic [ref=e594]:
+                - generic [ref=e595]: No thumbnail
+                - generic [ref=e596]: Public VOD
+              - generic [ref=e597]:
+                - generic [ref=e598]:
+                  - heading "Live Stream" [level=3] [ref=e599]
+                  - button "Favorite stream" [ref=e600]:
+                    - img [ref=e601]
+                - paragraph [ref=e603]: npub12zqf55l7l…jqkq99h8
+            - link "No thumbnail Public VOD Live Stream Favorite stream npub12zqf55l7l…jqkq99h8" [ref=e604] [cursor=pointer]:
+              - /url: /watch/npub12zqf55l7l9vsg5f6ssx5pq4f9dzu6hcmnepkm8ftj25fecy379jqkq99h8/oni-1771677890812?u=https%3A%2F%2Flive.mycelium.social%2Fhls%2Fstream.m3u8
+              - generic [ref=e605]:
+                - generic [ref=e606]: No thumbnail
+                - generic [ref=e607]: Public VOD
+              - generic [ref=e608]:
+                - generic [ref=e609]:
+                  - heading "Live Stream" [level=3] [ref=e610]
+                  - button "Favorite stream" [ref=e611]:
+                    - img [ref=e612]
+                - paragraph [ref=e614]: npub12zqf55l7l…jqkq99h8
+            - link "Live feed of zaps over ALL of the nostr. Public VOD Live feed of zaps over ALL of the nostr. Favorite stream npub1q7why7lw8…gq2km2vr" [ref=e615] [cursor=pointer]:
+              - /url: /watch/npub1q7why7lw8kq9ufr43ps75ngz3vhx5duqt7xmgklcq3dljqqfjegq2km2vr/plebs-1771661111118-r64e93?u=https%3A%2F%2Fcustomer-ku755s5l55fiy1lt.cloudflarestream.com%2Fb99eb975454972806f321fee3d70f64f%2Fmanifest%2Fvideo.m3u8
+              - generic [ref=e616]:
+                - img "Live feed of zaps over ALL of the nostr." [ref=e617]
+                - generic [ref=e618]: Public VOD
+              - generic [ref=e619]:
+                - generic [ref=e620]:
+                  - heading "Live feed of zaps over ALL of the nostr." [level=3] [ref=e621]
+                  - button "Favorite stream" [ref=e622]:
+                    - img [ref=e623]
+                - paragraph [ref=e625]: npub1q7why7lw8…gq2km2vr
+            - link "No thumbnail Public VOD test test Favorite stream npub1ampsgchcv…qq4q8cdg" [ref=e626] [cursor=pointer]:
+              - /url: /watch/npub1ampsgchcvmythqus4ppjgrnke9lyvr5f5px96xpw9r56ctvdteqq4q8cdg/ownly-live-1771636660669?u=https%3A%2F%2Fpub-01fee76d945d450c91fd100954724406.r2.dev%2Fstreams%2Fownly-live-1771636660669%2Flive.m3u8
+              - generic [ref=e627]:
+                - generic [ref=e628]: No thumbnail
+                - generic [ref=e629]: Public VOD
+              - generic [ref=e630]:
+                - generic [ref=e631]:
+                  - heading "test test" [level=3] [ref=e632]
+                  - button "Favorite stream" [ref=e633]:
+                    - img [ref=e634]
+                - paragraph [ref=e636]: npub1ampsgchcv…qq4q8cdg
+            - link "No thumbnail Public VOD QuakeWatch 24/7 Favorite stream npub1g5x50sqva…rstl0t6z" [ref=e637] [cursor=pointer]:
+              - /url: /watch/npub1g5x50sqvan6jycav82tt8lews0a46t9p22mxgzg7agpe35wgglrstl0t6z/quakewatch?u=https%3A%2F%2Fdstream.stream%2Fstream%2Fquakewatch%2Findex.m3u8
+              - generic [ref=e638]:
+                - generic [ref=e639]: No thumbnail
+                - generic [ref=e640]: Public VOD
+              - generic [ref=e641]:
+                - generic [ref=e642]:
+                  - heading "QuakeWatch 24/7" [level=3] [ref=e643]
+                  - button "Favorite stream" [ref=e644]:
+                    - img [ref=e645]
+                - paragraph [ref=e647]: npub1g5x50sqva…rstl0t6z
+    - contentinfo [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - img "dStream logo" [ref=e9]
+            - generic [ref=e10]: dStream Rebuild
+          - paragraph [ref=e11]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e12]:
+          - paragraph [ref=e13]: Protocol
+          - link "Whitepaper" [ref=e14] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e15] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e16] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e17]:
+          - paragraph [ref=e18]: Support
+          - link "Donate" [ref=e19] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e20]
+            - text: Donate
+          - link "GitHub" [ref=e22] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e23]:
+            - img [ref=e24]
+            - img [ref=e27]
+            - text: Updated for the current rebuild architecture
+  - alert [ref=e648]

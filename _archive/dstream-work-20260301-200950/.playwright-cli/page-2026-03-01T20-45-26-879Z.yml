@@ -1,0 +1,161 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]:
+          - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e8]
+            - generic [ref=e9]: Stream
+          - navigation [ref=e10]:
+            - link "Browse" [ref=e11] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e12] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e13] [cursor=pointer]:
+              - /url: /inbox
+            - link "Broadcast" [ref=e14] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Dashboard" [ref=e15] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Profile" [ref=e16] [cursor=pointer]:
+              - /url: /profile
+            - link "Moderation" [ref=e17] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e18] [cursor=pointer]:
+              - /url: /settings
+            - link "Visuals" [ref=e19] [cursor=pointer]:
+              - /url: /dev/visuals
+          - button "Identity" [ref=e62]:
+            - img [ref=e63]
+            - generic [ref=e66]: Identity
+      - main [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - heading "Settings" [level=1] [ref=e25]
+            - paragraph [ref=e26]: Local-only (stored in this browser).
+          - link "Browse" [ref=e27] [cursor=pointer]:
+            - /url: /browse
+        - generic [ref=e67]:
+          - heading "Identity Keys" [level=2] [ref=e68]
+          - generic [ref=e69]:
+            - button "Connect Extension" [ref=e70]
+            - button "Generate Local" [ref=e71]
+            - button "Disconnect" [ref=e72]
+          - generic [ref=e73]: "Active: None"
+          - generic [ref=e74]:
+            - generic [ref=e75]: Import local key (nsec… or 64-hex)
+            - generic [ref=e76]:
+              - textbox "nsec… or 64-hex secret" [ref=e77]
+              - textbox "Optional label" [ref=e78]
+              - button "Import" [ref=e79]
+          - generic [ref=e80]:
+            - generic [ref=e81]: Saved local identities
+            - generic [ref=e82]: No local identities saved.
+        - generic [ref=e83]:
+          - heading "Playback & P2P" [level=2] [ref=e84]
+          - generic [ref=e85]:
+            - generic [ref=e86] [cursor=pointer]:
+              - checkbox "Share presence by default" [checked] [ref=e87]
+              - text: Share presence by default
+            - generic [ref=e88] [cursor=pointer]:
+              - checkbox "Enable P2P assist by default (when allowed)" [checked] [ref=e89]
+              - text: Enable P2P assist by default (when allowed)
+            - generic [ref=e90] [cursor=pointer]:
+              - checkbox "Autoplay muted" [checked] [ref=e91]
+              - text: Autoplay muted
+            - generic [ref=e92]:
+              - generic [ref=e93]: P2P peers
+              - combobox "P2P peers" [ref=e94]:
+                - option "Any (default)" [selected]
+                - option "Trusted only"
+        - generic [ref=e95]:
+          - heading "Payment Defaults" [level=2] [ref=e96]
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]: Default Monero tip address
+              - textbox "Default Monero tip address" [ref=e100]:
+                - /placeholder: 4...
+            - generic [ref=e101]:
+              - generic [ref=e102]:
+                - generic [ref=e103]: Default stake requirement (XMR)
+                - textbox "Default stake requirement (XMR)" [ref=e104]:
+                  - /placeholder: "0.05"
+              - generic [ref=e105]:
+                - generic [ref=e106]: Default stake note
+                - textbox "Default stake note" [ref=e107]:
+                  - /placeholder: Optional message shown to viewers
+          - generic [ref=e108]: Applied to new broadcasts (and can be re-applied from the broadcast page).
+        - generic [ref=e109]:
+          - heading "Keyring Aliases" [level=2] [ref=e110]
+          - generic [ref=e111]:
+            - textbox "npub… or 64-hex" [ref=e112]
+            - textbox "Alias (e.g. Alice)" [ref=e113]
+            - button "Save" [ref=e114]
+          - generic [ref=e115]: No aliases yet.
+        - generic [ref=e116]:
+          - heading "Trust & Blocks" [level=2] [ref=e117]
+          - generic [ref=e118]:
+            - generic [ref=e119]:
+              - generic [ref=e120]: Trusted peers
+              - generic [ref=e121]:
+                - textbox "npub… or 64-hex" [ref=e122]
+                - button "Add" [ref=e123]
+              - generic [ref=e124]: No trusted peers yet.
+            - generic [ref=e125]:
+              - generic [ref=e126]: Muted (chat/inbox filtering)
+              - generic [ref=e127]:
+                - textbox "npub… or 64-hex" [ref=e128]
+                - button "Add" [ref=e129]
+              - generic [ref=e130]: No muted pubkeys.
+            - generic [ref=e131]:
+              - generic [ref=e132]: Blocked (hide + exclude from P2P)
+              - generic [ref=e133]:
+                - textbox "npub… or 64-hex" [ref=e134]
+                - button "Add" [ref=e135]
+              - generic [ref=e136]: No blocked pubkeys.
+        - generic [ref=e137]:
+          - heading "Favorites" [level=2] [ref=e138]
+          - generic [ref=e139]:
+            - generic [ref=e140]: Add favorite creator
+            - generic [ref=e141]:
+              - textbox "npub… or 64-hex" [ref=e142]
+              - button "Add" [ref=e143]
+          - generic [ref=e144]: No favorites yet. Favorite from Browse or Watch.
+        - generic [ref=e145]:
+          - heading "Danger Zone" [level=2] [ref=e146]
+          - generic [ref=e147]: Clears aliases, trust lists, favorites, and settings from this browser.
+          - button "Reset local data" [ref=e148]
+          - generic [ref=e149]:
+            - generic [ref=e150]: Restore local data from a backup file exported from this page.
+            - button "Load backup data" [ref=e151]
+    - contentinfo [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - img "dStream logo" [ref=e33]
+            - generic [ref=e34]: dStream Rebuild
+          - paragraph [ref=e35]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e36]:
+          - paragraph [ref=e37]: Protocol
+          - link "Whitepaper" [ref=e38] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e39] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e40] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e41]:
+          - paragraph [ref=e42]: Support
+          - link "Donate" [ref=e43] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e44]
+            - text: Donate
+          - link "GitHub" [ref=e46] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e47]:
+            - img [ref=e48]
+            - img [ref=e51]
+            - text: Updated for the current rebuild architecture
+  - button "Open Next.js Dev Tools" [ref=e58] [cursor=pointer]:
+    - img [ref=e59]
+  - alert [ref=e152]

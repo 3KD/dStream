@@ -1,0 +1,79 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]:
+          - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e8]
+            - generic [ref=e9]: Stream
+          - navigation [ref=e10]:
+            - link "Browse" [ref=e11] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e12] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e13] [cursor=pointer]:
+              - /url: /inbox
+            - link "Broadcast" [ref=e14] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Dashboard" [ref=e15] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Profile" [ref=e16] [cursor=pointer]:
+              - /url: /profile
+            - link "Moderation" [ref=e17] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e18] [cursor=pointer]:
+              - /url: /settings
+            - link "Visuals" [ref=e19] [cursor=pointer]:
+              - /url: /dev/visuals
+          - button "Identity" [ref=e65]:
+            - img [ref=e66]
+            - generic [ref=e69]: Identity
+      - main [ref=e22]:
+        - generic [ref=e25]:
+          - generic [ref=e27]:
+            - heading "Unnamed streamer" [level=1] [ref=e28]
+            - generic [ref=e29]: npub1q7why7lw8kq9ufr43ps…qfjegq2km2vr
+          - generic [ref=e30]:
+            - button "Favorite Creator" [ref=e31]
+            - button "Trust" [ref=e32]
+            - button "Block" [ref=e33]
+        - generic [ref=e34]:
+          - generic [ref=e35]:
+            - heading "Recent Streams" [level=2] [ref=e36]
+            - generic [ref=e37]:
+              - link "Creator VOD" [ref=e38] [cursor=pointer]:
+                - /url: /vod?creator=npub1q7why7lw8kq9ufr43ps75ngz3vhx5duqt7xmgklcq3dljqqfjegq2km2vr
+              - link "Browse" [ref=e39] [cursor=pointer]:
+                - /url: /browse
+          - generic [ref=e40]: Loading streams…
+    - contentinfo [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - img "dStream logo" [ref=e45]
+            - generic [ref=e46]: dStream Rebuild
+          - paragraph [ref=e47]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e48]:
+          - paragraph [ref=e49]: Protocol
+          - link "Whitepaper" [ref=e50] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e51] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e52] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e53]:
+          - paragraph [ref=e54]: Support
+          - link "Donate" [ref=e55] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e56]
+            - text: Donate
+          - link "GitHub" [ref=e58] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e59]:
+            - img [ref=e60]
+            - img [ref=e63]
+            - text: Updated for the current rebuild architecture
+  - button "Open Next.js Dev Tools" [ref=e75] [cursor=pointer]:
+    - img [ref=e76]
+  - alert [ref=e79]

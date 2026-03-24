@@ -1,0 +1,117 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Moderation" [ref=e14] [cursor=pointer]:
+            - /url: /moderation
+          - link "Settings" [ref=e15] [cursor=pointer]:
+            - /url: /settings
+          - link "Visuals" [ref=e16] [cursor=pointer]:
+            - /url: /dev/visuals
+        - link "Start Streaming" [ref=e18] [cursor=pointer]:
+          - /url: /broadcast
+    - main [ref=e20]:
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e24]:
+            - generic [ref=e27]: Decentralized
+            - generic [ref=e29]:
+              - img [ref=e30]
+              - generic [ref=e35]: Ownerless
+            - generic [ref=e37]:
+              - img [ref=e38]
+              - generic [ref=e43]: P2P
+            - generic [ref=e45]:
+              - img [ref=e46]
+              - generic [ref=e49]: Unstoppable
+          - generic [ref=e50]: Streaming
+        - paragraph [ref=e51]:
+          - text: dStream - World's first decentralized streaming protocol.
+          - text: Freely built for people of the modern de-fi economy.
+        - generic [ref=e52]:
+          - link "Start Streaming" [ref=e53] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Browse Streams" [ref=e54] [cursor=pointer]:
+            - /url: /browse
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - heading "Live Now (0)" [level=2] [ref=e57]: Live Now (0)
+          - generic [ref=e59]:
+            - link "Browse" [ref=e60] [cursor=pointer]:
+              - /url: /browse
+              - img [ref=e61]
+              - generic [ref=e64]: Browse
+            - button "Shuffle" [disabled] [ref=e65]:
+              - img [ref=e66]
+              - generic [ref=e72]: Shuffle
+        - textbox "Search by title, topic, or pubkey…" [ref=e74]
+      - generic [ref=e80]:
+        - heading "Latest Replays (VOD)" [level=2] [ref=e81]
+        - link "View all" [ref=e82] [cursor=pointer]:
+          - /url: /vod
+      - generic [ref=e87]:
+        - generic [ref=e88]:
+          - generic:
+            - img
+          - generic [ref=e89]:
+            - img [ref=e91]
+            - generic [ref=e100]: Nostr Identity
+          - heading "Censorship Resistant" [level=3] [ref=e101]
+          - paragraph [ref=e102]: Identity is rooted in Nostr cryptography. No central authority can ban your keys or delete your followers.
+        - generic [ref=e103]:
+          - generic:
+            - img
+          - generic [ref=e104]:
+            - img [ref=e106]
+            - generic [ref=e111]: P2P Scale
+          - heading "Replaceable Delivery" [level=3] [ref=e112]
+          - paragraph [ref=e113]: The media layer is a hint, not an authority. Clients can fail over across origins and peer swarms (when enabled).
+        - generic [ref=e114]:
+          - generic:
+            - img
+          - generic [ref=e115]:
+            - img [ref=e117]
+            - generic [ref=e122]: Presence
+          - heading "Approximate Viewers" [level=3] [ref=e123]
+          - paragraph [ref=e124]: Watch pages display an approximate viewer count from lightweight presence events published to configured relays.
+      - generic [ref=e125]:
+        - paragraph [ref=e126]: Watch route (ADR 0003)
+        - paragraph [ref=e127]: /watch/:npub/:streamId
+  - contentinfo [ref=e128]:
+    - generic [ref=e129]:
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - img "dStream logo" [ref=e132]
+          - generic [ref=e133]: dStream Rebuild
+        - paragraph [ref=e134]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+      - generic [ref=e135]:
+        - paragraph [ref=e136]: Protocol
+        - link "Whitepaper" [ref=e137] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e138] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e139] [cursor=pointer]:
+          - /url: /use-cases
+      - generic [ref=e140]:
+        - paragraph [ref=e141]: Support
+        - link "Donate" [ref=e142] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e143]
+          - text: Donate
+        - link "GitHub" [ref=e145] [cursor=pointer]:
+          - /url: https://github.com/dstream-protocol
+        - paragraph [ref=e146]:
+          - img [ref=e147]
+          - img [ref=e150]
+          - text: Updated for the current rebuild architecture

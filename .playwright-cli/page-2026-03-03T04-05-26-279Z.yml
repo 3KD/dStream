@@ -1,0 +1,96 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Moderation" [ref=e14] [cursor=pointer]:
+            - /url: /moderation
+          - link "Settings" [ref=e15] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - heading "VOD Hub" [level=1] [ref=e21]
+          - generic [ref=e22]: 0 replay items
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - textbox [ref=e28]:
+              - /placeholder: Search title, playlist, creator…
+          - combobox [ref=e29]:
+            - option "All modes" [selected]
+            - option "Public only"
+            - option "Paid only"
+          - generic [ref=e30]:
+            - checkbox "Favorites only" [ref=e31]
+            - text: Favorites only
+          - button "Reset filters" [disabled] [ref=e32]
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - heading "Creator Playlist Manager" [level=2] [ref=e35]
+          - generic [ref=e36]: 0 replay items owned by your current identity
+        - generic [ref=e37]: Connect an identity to republish playlist metadata for your replays.
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - heading "Local VOD Access Entitlements" [level=2] [ref=e40]
+          - button "Refresh" [ref=e41]:
+            - img [ref=e42]
+            - text: Refresh
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - checkbox "Show expired" [ref=e49]
+            - text: Show expired
+          - generic [ref=e50]:
+            - checkbox "Mine only" [checked] [ref=e51]
+            - text: Mine only
+          - button "Clear expired" [ref=e52]
+          - button "Clear all" [ref=e53]
+        - generic [ref=e54]: No matching local entitlements.
+      - generic [ref=e56]:
+        - heading "Playlists (0)" [level=2] [ref=e57]
+        - generic [ref=e58]:
+          - text: Sort
+          - combobox "Sort" [ref=e59]:
+            - option "Latest activity" [selected]
+            - option "Most items"
+            - option "Fewest items"
+            - option "Name A→Z"
+            - option "Name Z→A"
+      - heading "Replays" [level=2] [ref=e65]
+  - contentinfo [ref=e71]:
+    - generic [ref=e72]:
+      - generic [ref=e73]:
+        - generic [ref=e74]:
+          - img "dStream logo" [ref=e75]
+          - generic [ref=e76]: dStream Rebuild
+        - paragraph [ref=e77]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+      - generic [ref=e78]:
+        - paragraph [ref=e79]: Protocol
+        - link "Whitepaper" [ref=e80] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e81] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e82] [cursor=pointer]:
+          - /url: /use-cases
+      - generic [ref=e83]:
+        - paragraph [ref=e84]: Support
+        - link "Donate" [ref=e85] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e86]
+          - text: Donate
+        - link "GitHub" [ref=e88] [cursor=pointer]:
+          - /url: https://github.com/dstream-protocol
+        - paragraph [ref=e89]:
+          - img [ref=e90]
+          - img [ref=e93]
+          - text: Updated for the current rebuild architecture

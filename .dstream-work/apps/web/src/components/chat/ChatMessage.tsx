@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useSocial } from "@/context/SocialContext";
 import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
-import { BadgeCheck, Ban, CheckCircle2, Flag, Gem, Shield, ShieldCheck, Volume2, VolumeX } from "lucide-react";
+import { BadgeCheck, CheckCircle2, EllipsisVertical, Flag, Gem, RadioTower, ShieldCheck } from "lucide-react";
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
 
 export function ChatMessage({
@@ -28,7 +29,9 @@ export function ChatMessage({
   onToggleModerator,
   onToggleSubscriber,
   onReportUser,
-  onReportMessage
+  onReportMessage,
+  onReplyToUser,
+  onWhisperToUser
 }: {
   msg: StreamChatMessage;
   isBroadcaster: boolean;
@@ -51,6 +54,8 @@ export function ChatMessage({
   onToggleSubscriber?: () => void;
   onReportUser?: () => void;
   onReportMessage?: () => void;
+  onReplyToUser?: () => void;
+  onWhisperToUser?: () => void;
 }) {
   const time = new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const social = useSocial();
@@ -66,10 +71,35 @@ export function ChatMessage({
   const displayLabel = normalizedProfileName || alias || pubkeyLabel;
   const showModeration = canModerate && !isBroadcaster;
   const showRoleControl = canManageRoles && !isBroadcaster;
-  const showReportUser = typeof onReportUser === "function";
-  const showReportMessage = typeof onReportMessage === "function";
-  const showActions = showModeration || showReportUser || showReportMessage;
+  const showReply = typeof onReplyToUser === "function";
+  const showWhisper = typeof onWhisperToUser === "function";
+  const reportAction = onReportMessage ?? onReportUser;
+  const showReport = typeof reportAction === "function";
+  const showActions = showModeration || showReply || showWhisper || showReport;
   const profileHref = `/profile/${npub ?? msg.pubkey}`;
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (actionsMenuRef.current?.contains(target)) return;
+      setActionsOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActionsOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown, { passive: true });
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [actionsOpen]);
 
   return (
     <div className={`flex gap-2 py-1.5 px-3 hover:bg-neutral-800/50 ${isWhisper ? "bg-purple-950/10" : ""}`}>
@@ -89,13 +119,22 @@ export function ChatMessage({
             </span>
           )}
           {isVerified && (
-            <span className="text-[10px] bg-cyan-950/50 border border-cyan-700/30 text-cyan-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-950/60 border border-cyan-700/40 text-cyan-200"
+              title="Verified"
+              aria-label="Verified"
+            >
               <BadgeCheck className="w-3 h-3" />
-              VERIFIED
             </span>
           )}
           {isModerator && (
-            <span className="text-[10px] bg-blue-950/50 border border-blue-700/30 text-blue-200 px-1.5 py-0.5 rounded">MOD</span>
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-950/60 border border-blue-700/40 text-blue-200"
+              title="Admin"
+              aria-label="Admin"
+            >
+              <ShieldCheck className="w-3 h-3" />
+            </span>
           )}
           {isSubscriber && (
             <span className="text-[10px] bg-amber-950/50 border border-amber-700/30 text-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
@@ -103,7 +142,15 @@ export function ChatMessage({
               SUB
             </span>
           )}
-          {isBroadcaster && <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded">STREAMER</span>}
+          {isBroadcaster && (
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-950/70 border border-red-700/40 text-red-200"
+              title="Streamer"
+              aria-label="Streamer"
+            >
+              <RadioTower className="w-3 h-3" />
+            </span>
+          )}
           {isWhisper && (
             <span className="text-[10px] bg-purple-950/50 border border-purple-700/30 text-purple-200 px-1.5 py-0.5 rounded">WHISPER</span>
           )}
@@ -114,94 +161,118 @@ export function ChatMessage({
       </div>
 
       {showActions && (
-        <div className="flex items-start gap-1 pt-0.5">
-          {showReportUser && (
-            <button
-              type="button"
-              onClick={onReportUser}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-              title="Report user"
-              aria-label="Report user"
-              disabled={reportBusy}
-            >
-              <Flag className="w-4 h-4" />
-            </button>
-          )}
-          {showReportMessage && (
-            <button
-              type="button"
-              onClick={onReportMessage}
-              className="inline-flex items-center justify-center px-2 h-8 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white text-[10px] font-semibold"
-              title="Report message"
-              aria-label="Report message"
-              disabled={reportBusy}
-            >
-              Msg
-            </button>
-          )}
-          {showModeration && (
-            <>
-              <button
-                type="button"
-                onClick={() => onModerationAction?.(remoteMuted ? "clear" : "mute")}
-                className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                  muted
-                    ? "bg-neutral-950/60 border-neutral-700 text-neutral-200"
-                    : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-                }`}
-                title={remoteMuted ? "Clear mute" : "Mute user"}
-                aria-label={remoteMuted ? "Clear mute" : "Mute user"}
-                disabled={moderationBusy}
-              >
-                {muted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => onModerationAction?.(remoteBlocked ? "clear" : "block")}
-                className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                  blocked
-                    ? "bg-red-950/40 border-red-800/40 text-red-200"
-                    : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-                }`}
-                title={remoteBlocked ? "Clear block" : "Block user"}
-                aria-label={remoteBlocked ? "Clear block" : "Block user"}
-                disabled={moderationBusy}
-              >
-                {blocked ? <CheckCircle2 className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-              </button>
-              {showRoleControl && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onToggleModerator?.()}
-                    className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                      isModerator
-                        ? "bg-blue-950/40 border-blue-800/40 text-blue-200"
-                        : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-                    }`}
-                    title={isModerator ? "Remove moderator" : "Make moderator"}
-                    aria-label={isModerator ? "Remove moderator" : "Make moderator"}
-                    disabled={roleBusy}
-                  >
-                    {isModerator ? <ShieldCheck className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onToggleSubscriber?.()}
-                    className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border ${
-                      isSubscriber
-                        ? "bg-amber-950/40 border-amber-800/40 text-amber-200"
-                        : "bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
-                    }`}
-                    title={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
-                    aria-label={isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
-                    disabled={subscriberRoleBusy}
-                  >
-                    <Gem className="w-4 h-4" />
-                  </button>
-                </>
+        <div ref={actionsMenuRef} className="relative flex items-start gap-1 pt-0.5">
+          <button
+            type="button"
+            onClick={() => setActionsOpen((current) => !current)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
+            title="Message actions"
+            aria-label="Message actions"
+            aria-expanded={actionsOpen}
+            aria-haspopup="menu"
+          >
+            <EllipsisVertical className="w-4 h-4" />
+          </button>
+
+          {actionsOpen && (
+            <div className="absolute right-0 top-10 z-20 min-w-[12rem] rounded-xl border border-neutral-800 bg-neutral-950/95 shadow-xl overflow-hidden">
+              {showReply && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onReplyToUser?.();
+                    setActionsOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+                >
+                  Reply to user
+                </button>
               )}
-            </>
+
+              {showWhisper && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onWhisperToUser?.();
+                    setActionsOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+                >
+                  Whisper to user
+                </button>
+              )}
+
+              {showModeration && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onModerationAction?.(remoteMuted || muted ? "clear" : "mute");
+                    setActionsOpen(false);
+                  }}
+                  disabled={moderationBusy}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {remoteMuted || muted ? "Unmute user" : "Mute user"}
+                </button>
+              )}
+
+              {showModeration && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onModerationAction?.(remoteBlocked || blocked ? "clear" : "block");
+                    setActionsOpen(false);
+                  }}
+                  disabled={moderationBusy}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {remoteBlocked || blocked ? "Unblock user" : "Block user"}
+                </button>
+              )}
+
+              {showRoleControl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleModerator?.();
+                    setActionsOpen(false);
+                  }}
+                  disabled={roleBusy}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {isModerator ? "Remove moderator" : "Make moderator"}
+                </button>
+              )}
+
+              {showRoleControl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleSubscriber?.();
+                    setActionsOpen(false);
+                  }}
+                  disabled={subscriberRoleBusy}
+                  className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {isSubscriber ? "Remove subscriber badge" : "Add subscriber badge"}
+                </button>
+              )}
+
+              {showReport && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    reportAction?.();
+                    setActionsOpen(false);
+                  }}
+                  disabled={reportBusy}
+                  className="w-full px-3 py-2 text-left text-xs text-red-200 hover:bg-red-950/30 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  Report
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

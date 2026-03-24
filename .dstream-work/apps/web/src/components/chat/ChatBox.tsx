@@ -64,6 +64,8 @@ export function ChatBox({
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
   const [localChatClearedAt, setLocalChatClearedAt] = useState<number | null>(null);
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerDraftVersion, setComposerDraftVersion] = useState(0);
 
   const lastMessageSentAtRef = useRef<number>(0);
   const clearRequestSeenRef = useRef<number>(0);
@@ -209,6 +211,15 @@ export function ChatBox({
       setCommandNotice((current) => (current === value ? null : current));
     }, 3000);
   }, []);
+
+  const seedComposerDraft = useCallback(
+    (value: string, notice?: string) => {
+      setComposerDraft(value);
+      setComposerDraftVersion((current) => current + 1);
+      if (notice) showNotice(notice);
+    },
+    [showNotice]
+  );
 
   const clearChatWindow = useCallback(async (): Promise<boolean> => {
     if (!canModerate) return false;
@@ -486,16 +497,13 @@ export function ChatBox({
                         summary: `Report user ${npub}`
                       });
                     }}
-                    onReportMessage={() => {
-                      const messageId = m.id ?? `${m.pubkey}:${m.createdAt}:${m.content.slice(0, 16)}`;
-                      setReportTarget({
-                        type: "message",
-                        targetPubkey: m.pubkey,
-                        targetStreamId: streamId,
-                        targetMessageId: messageId,
-                        targetMessagePreview: m.content.slice(0, 280),
-                        summary: `Report message from ${pubkeyHexToNpub(m.pubkey) ?? m.pubkey}`
-                      });
+                    onReplyToUser={() => {
+                      const target = pubkeyHexToNpub(m.pubkey) ?? m.pubkey;
+                      seedComposerDraft(`@${target} `, "Reply target inserted.");
+                    }}
+                    onWhisperToUser={() => {
+                      const target = pubkeyHexToNpub(m.pubkey) ?? m.pubkey;
+                      seedComposerDraft(`/w ${target} `, "Whisper target inserted.");
                     }}
                   />
                 );
@@ -515,6 +523,8 @@ export function ChatBox({
           onSend={handleSendInput}
           disabled={!canSend || !!chatPolicyBlockReason}
           placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
+          draftMessage={composerDraft}
+          draftVersion={composerDraftVersion}
         />
       )}
 

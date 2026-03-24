@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "updatedAtSec": 1772848083,
+  "entitlements": [
+    {
+      "id": "e95664f8-b78b-4d98-8114-9b4d1293a1a7",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "subjectPubkey": "9687749e109e6a4bd5f98c9b09b27b0b702fb2fae7a9fb4e360dae3cde909c22",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "actions": [
+        "watch_vod"
+      ],
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3019f587-7f99-4141-83e3-bb778b2e3b3f:7b9432e07aafca71",
+      "status": "active",
+      "startsAtSec": 1772848083,
+      "expiresAtSec": 1772934483,
+      "metadata": {
+        "packageId": "3019f587-7f99-4141-83e3-bb778b2e3b3f",
+        "streamId": "vodsanity1",
+        "playlistId": null,
+        "relativePath": "episode1.mp4",
+        "paymentAsset": "xmr",
+        "paymentAmount": "0.5",
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772848083,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      },
+      "createdAtSec": 1772848083,
+      "updatedAtSec": 1772848083
+    },
+    {
+      "id": "b670c64d-08ac-4324-93fd-34579851589f",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "subjectPubkey": "95b85ccc405a9059b20a82f38ec1faaa37f26f50461253070afb87083c076943",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "actions": [
+        "watch_vod"
+      ],
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3808bae0-7604-4e2f-ba81-012a2af3b90c:a55d35d2442c4e7f",
+      "status": "active",
+      "startsAtSec": 1772847833,
+      "expiresAtSec": 1772934233,
+      "metadata": {
+        "packageId": "3808bae0-7604-4e2f-ba81-012a2af3b90c",
+        "streamId": "vodsanity1",
+        "playlistId": null,
+        "relativePath": "episode1.mp4",
+        "paymentAsset": "xmr",
+        "paymentAmount": "0.5",
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772847833,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      },
+      "createdAtSec": 1772847833,
+      "updatedAtSec": 1772847833
+    },
+    {
+      "id": "4e782a89-c0b7-48b0-9933-30f0ee4cd2a1",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "subjectPubkey": "efe7b86e63b090aaf188dc90201cf8c2d77c163bfdd3d7ae7bd41b0a657925c9",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "actions": [
+        "watch_vod"
+      ],
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3808bae0-7604-4e2f-ba81-012a2af3b90c:e4f8583934160d04",
+      "status": "active",
+      "startsAtSec": 1772847815,
+      "expiresAtSec": 1772934215,
+      "metadata": {
+        "packageId": "3808bae0-7604-4e2f-ba81-012a2af3b90c",
+        "streamId": "vodsanity1",
+        "playlistId": null,
+        "relativePath": "episode1.mp4",
+        "paymentAsset": "xmr",
+        "paymentAmount": "0.5",
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772847815,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      },
+      "createdAtSec": 1772847815,
+      "updatedAtSec": 1772847815
+    }
+  ],
+  "denyRules": [],
+  "audit": []
+}

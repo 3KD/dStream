@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export function ChatInput({
   onSend,
   disabled,
-  placeholder
+  placeholder,
+  draftMessage,
+  draftVersion
 }: {
   onSend: (message: string) => Promise<boolean>;
   disabled?: boolean;
   placeholder?: string;
+  draftMessage?: string;
+  draftVersion?: number;
 }) {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  useEffect(() => {
+    if (draftVersion === undefined) return;
+    setMessage(draftMessage ?? "");
+  }, [draftMessage, draftVersion]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

@@ -1,5 +1,9 @@
 node_modules
 .next
+apps/web/.next
+apps/web/.turbo
+apps/web/node_modules
+apps/mobile/node_modules
 .turbo
 dist
 build
@@ -9,4 +13,3 @@ out
 !.env.example
 .git
 .DS_Store
-

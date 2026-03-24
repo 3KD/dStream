@@ -1,0 +1,155 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e7]:
+        - link "dStream Logo Stream" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e9]
+          - generic [ref=e10]: Stream
+        - navigation [ref=e11]:
+          - generic [ref=e12]:
+            - link "Browse" [ref=e13] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e14] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e15] [cursor=pointer]:
+              - /url: /inbox
+            - link "Moderation" [ref=e16] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e17] [cursor=pointer]:
+              - /url: /settings
+        - link "Start Streaming" [ref=e19] [cursor=pointer]:
+          - /url: /broadcast
+    - main [ref=e21]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e27]:
+            - generic [ref=e30]: Decentralized
+            - generic [ref=e32]:
+              - img [ref=e33]
+              - generic [ref=e38]: Ownerless
+            - generic [ref=e40]:
+              - img [ref=e41]
+              - generic [ref=e46]: P2P
+            - generic [ref=e48]:
+              - img [ref=e49]
+              - generic [ref=e52]: Unstoppable
+          - generic [ref=e53]: Streaming
+        - paragraph [ref=e54]:
+          - text: dStream – World’s first decentralized streaming protocol.
+          - text: Freely built for people of the modern de-fi economy.
+        - generic [ref=e55]:
+          - link "Start Streaming" [ref=e56] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Browse Streams" [ref=e57] [cursor=pointer]:
+            - /url: /browse
+        - button "^" [expanded] [ref=e59]
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - heading "Live Now (0)" [level=2] [ref=e62]: Live Now (0)
+          - generic [ref=e64]:
+            - button "Mature" [ref=e65]
+            - link "Browse" [ref=e66] [cursor=pointer]:
+              - /url: /browse
+              - img [ref=e67]
+              - generic [ref=e70]: Browse
+            - button "Shuffle" [disabled] [ref=e71]:
+              - img [ref=e72]
+              - generic [ref=e78]: Shuffle
+        - textbox "Search by title, topic, or pubkey…" [ref=e80]
+      - generic [ref=e100]:
+        - generic [ref=e101]:
+          - generic:
+            - img
+          - generic [ref=e102]:
+            - img [ref=e104]
+            - generic [ref=e113]: Nostr Identity
+          - heading "Censorship Resistant" [level=3] [ref=e114]
+          - paragraph [ref=e115]: Identity is rooted in Nostr cryptography. No central authority can ban your keys or delete your followers.
+        - generic [ref=e116]:
+          - generic:
+            - img
+          - generic [ref=e117]:
+            - img [ref=e119]
+            - generic [ref=e124]: P2P Scale
+          - heading "Replaceable Delivery" [level=3] [ref=e125]
+          - paragraph [ref=e126]: The media layer is a hint, not an authority. Clients can fail over across origins and peer swarms (when enabled).
+        - generic [ref=e127]:
+          - generic:
+            - img
+          - generic [ref=e128]:
+            - img [ref=e130]
+            - generic [ref=e135]: Presence
+          - heading "Approximate Viewers" [level=3] [ref=e136]
+          - paragraph [ref=e137]: Watch pages display an approximate viewer count from lightweight presence events published to configured relays.
+  - contentinfo [ref=e138]:
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - generic [ref=e142]:
+            - img "dStream logo" [ref=e143]
+            - generic [ref=e144]: dStream Protocol
+          - paragraph [ref=e145]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+          - paragraph [ref=e146]:
+            - img [ref=e147]
+            - img [ref=e150]
+            - text: Production docs reflect live stack behavior
+        - generic [ref=e152]:
+          - paragraph [ref=e153]:
+            - img [ref=e154]
+            - text: Protocol
+          - generic [ref=e159]:
+            - link "Whitepaper" [ref=e160] [cursor=pointer]:
+              - /url: /whitepaper
+            - link "Documentation" [ref=e161] [cursor=pointer]:
+              - /url: /docs
+            - link "Use Cases" [ref=e162] [cursor=pointer]:
+              - /url: /use-cases
+            - link "Donate" [ref=e163] [cursor=pointer]:
+              - /url: /donate
+            - link "Analytics" [ref=e164] [cursor=pointer]:
+              - /url: /analytics
+            - link "Terms" [ref=e165] [cursor=pointer]:
+              - /url: /terms
+            - link "Privacy" [ref=e166] [cursor=pointer]:
+              - /url: /privacy
+            - link "Community Guidelines" [ref=e167] [cursor=pointer]:
+              - /url: /community-guidelines
+        - generic [ref=e168]:
+          - paragraph [ref=e169]:
+            - img [ref=e170]
+            - text: Build
+          - generic [ref=e173]:
+            - link "Broadcast" [ref=e174] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Browse" [ref=e175] [cursor=pointer]:
+              - /url: /browse
+            - link "Settings" [ref=e176] [cursor=pointer]:
+              - /url: /settings
+            - link "Mobile Bootstrap" [ref=e177] [cursor=pointer]:
+              - /url: /mobile/bootstrap
+        - generic [ref=e178]:
+          - paragraph [ref=e179]: Support
+          - generic [ref=e180]:
+            - link "Support Hub" [ref=e181] [cursor=pointer]:
+              - /url: /support
+            - link "Donate" [ref=e182] [cursor=pointer]:
+              - /url: /donate
+              - img [ref=e183]
+              - text: Donate
+            - link "GitHub" [ref=e185] [cursor=pointer]:
+              - /url: https://github.com/3KD/dStream
+              - text: GitHub
+              - img [ref=e186]
+          - generic [ref=e190]:
+            - text: "XMR:"
+            - button "Copy Monero support address" [ref=e191]:
+              - generic [ref=e192]: 49zL3oidgJbD…GP6X5w42
+              - generic [ref=e193]: copy
+          - generic [ref=e194]: "Wallet plugin setup: Settings → Wallet Integrations"
+          - link "Report abuse or policy violations" [ref=e195] [cursor=pointer]:
+            - /url: /community-guidelines
+          - generic [ref=e196]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+      - generic [ref=e197]:
+        - generic [ref=e198]: © dStream
+        - generic [ref=e199]: Decentralized by default. Operated by independent nodes.

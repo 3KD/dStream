@@ -1,17 +1,17 @@
 # dStream Production Deployment Guide (Current Stack)
 
-This guide targets the current rebuild stack in `/.dstream-work` (root `docker-compose.yml`), not the legacy `infra/prod/docker-compose.prod.yml` layout.
+This guide targets the current rebuild stack in `/dStream` (root `docker-compose.yml`), not the legacy `infra/prod/docker-compose.prod.yml` layout.
 
 ## 1) Prerequisites
 
 - A Linux VPS with Docker + Docker Compose plugin installed.
 - DNS pointed to your server (for example `dstream.stream`).
 - A completed production env file:
-  - `.dstream-work/.env.production` (copy from `.env.production.example` and fill real values).
+  - `../dStream/.env.production` (copy from `.env.production.example` and fill real values).
 
 ## 2) Required production env values
 
-At minimum, set these in `.dstream-work/.env.production`:
+At minimum, set these in `../dStream/.env.production`:
 
 - `NEXT_PUBLIC_NOSTR_RELAYS` (2+ public `wss://` relays)
 - `NEXT_PUBLIC_HLS_ORIGIN` (`https://<your-domain>`)
@@ -29,7 +29,7 @@ From this repo:
 
 Defaults:
 
-- Local project dir: `./.dstream-work`
+- Local project dir: `../dStream`
 - Remote dir: `/opt/dstream`
 - Compose stack: `docker-compose.yml`
 
@@ -70,7 +70,7 @@ ssh user@your-server 'cd /opt/dstream && docker compose --env-file .env.producti
 If the app is publicly reachable, run local gates against the domain:
 
 ```bash
-cd .dstream-work
+cd ../dStream
 ENV_FILE=.env.production npm run harden:deploy
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
 ```

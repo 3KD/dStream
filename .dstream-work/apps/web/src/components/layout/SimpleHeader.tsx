@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { Mail, Search, Settings, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { IdentityButton } from "@/components/IdentityButton";
 
 interface SimpleHeaderProps {
@@ -66,8 +66,8 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
             </span>
           </Link>
 
-          <nav className="hidden md:flex flex-1 min-w-0 justify-center overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex min-w-max items-center justify-center gap-1.5 px-1">
+          <nav className="hidden md:flex landscape:flex flex-1 min-w-0 justify-start lg:justify-center overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-max items-center justify-start lg:justify-center gap-1.5 px-1">
               {NAV_ITEMS.map((item) => (
                 <Link key={item.href} href={item.href} className={navClassName}>
                   {item.label}
@@ -121,25 +121,11 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
                   <Search className="w-3.5 h-3.5" />
                 </button>
               ))}
-            <Link
-              href="/inbox"
-              className="sm:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
-              aria-label="Inbox"
-            >
-              <Mail className="w-3.5 h-3.5" />
-            </Link>
-            <Link
-              href="/settings"
-              className="sm:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
-              aria-label="Settings"
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </Link>
             <IdentityButton />
           </div>
         </div>
 
-        <nav className="md:hidden mt-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="md:hidden landscape:hidden mt-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max items-center gap-1.5">
             {NAV_ITEMS.map((item) => (
               <Link key={item.href} href={item.href} className={navClassName}>

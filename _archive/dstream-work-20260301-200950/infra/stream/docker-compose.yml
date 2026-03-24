@@ -1,0 +1,63 @@
+# dStream (Rebuild) streaming infrastructure
+
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: dstream_ingest
+    ports:
+      - "1940:1935" # RTMP ingest (optional)
+      - "8888:8880" # HLS/HTTP output
+      - "8889:8889" # WebRTC/WHIP
+      - "9990:9990" # API
+      - "8181:8181/udp" # ICE/UDP
+      - "8189:8189" # ICE/TCP
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+      - /tmp/dstream_hls:/hls
+    restart: unless-stopped
+
+  transcoder:
+    build:
+      context: ../..
+      dockerfile: services/transcoder/Dockerfile
+    container_name: dstream_transcoder
+    depends_on:
+      mediamtx:
+        condition: service_started
+    environment:
+      HLS_DIR: "/hls"
+      TRANSCODER_SOURCE_HLS_BASE: "${TRANSCODER_SOURCE_HLS_BASE:-http://mediamtx:8880}"
+      TRANSCODER_OUTPUT_RTMP_BASE: "${TRANSCODER_OUTPUT_RTMP_BASE:-rtmp://mediamtx:1935}"
+      TRANSCODER_PROFILES: "${TRANSCODER_PROFILES:-720p:1280:720:2500k:128k,480p:854:480:1200k:96k,360p:640:360:700k:64k}"
+      TRANSCODER_POLL_MS: "${TRANSCODER_POLL_MS:-2500}"
+      TRANSCODER_STALE_MS: "${TRANSCODER_STALE_MS:-12000}"
+      TRANSCODER_MAX_STREAMS: "${TRANSCODER_MAX_STREAMS:-24}"
+    volumes:
+      - /tmp/dstream_hls:/hls:ro
+    restart: unless-stopped
+
+  relay:
+    image: scsibug/nostr-rs-relay:latest
+    container_name: dstream_relay
+    ports:
+      - "8081:8080"
+    volumes:
+      - relay_data:/usr/src/app/db
+    restart: unless-stopped
+
+  ffsim:
+    image: linuxserver/ffmpeg:latest
+    container_name: dstream_ffsim
+    depends_on:
+      mediamtx:
+        condition: service_started
+    command: >
+      -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i sine=frequency=440:beep_factor=4
+      -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1000k -g 60 -keyint_min 60 -sc_threshold 0
+      -c:a aac -b:a 128k -f flv rtmp://mediamtx:1935/test
+    restart: unless-stopped
+    profiles:
+      - test
+
+volumes:
+  relay_data:

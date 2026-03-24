@@ -22,6 +22,73 @@ function streamKey(stream: Stream) {
     return `${stream.broadcasterPubkey}:${stream.id}`;
 }
 
+function normalizeText(value?: string) {
+    return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeStreamId(value?: string) {
+    const normalized = (value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return normalized.length >= 6 ? normalized : null;
+}
+
+function normalizeStreamingUrl(value?: string) {
+    if (!value) return null;
+
+    try {
+        const parsed = value.startsWith('/')
+            ? new URL(value, 'https://dstream.stream')
+            : new URL(value);
+
+        const host = parsed.host.toLowerCase();
+        const path = parsed.pathname
+            .toLowerCase()
+            .replace(/\/index\.m3u8$/i, '')
+            .replace(/\/live\.m3u8$/i, '')
+            .replace(/\/+$/, '');
+
+        if (!path) return null;
+        return `${host}${path}`;
+    } catch {
+        return null;
+    }
+}
+
+function canonicalKeys(stream: Stream) {
+    const keys: string[] = [];
+    const titleKey = normalizeText(stream.title);
+    const streamIdKey = normalizeStreamId(stream.id);
+    const streamingUrlKey = normalizeStreamingUrl(stream.streamingUrl);
+
+    if (streamingUrlKey) {
+        keys.push(`url:${streamingUrlKey}`);
+    }
+    if (streamIdKey && titleKey) {
+        keys.push(`id-title:${streamIdKey}:${titleKey}`);
+    }
+    if (titleKey) {
+        keys.push(`pubkey-title:${stream.broadcasterPubkey}:${titleKey}`);
+    }
+
+    return keys;
+}
+
+function dedupeStreams(streams: Stream[]) {
+    const seen = new Set<string>();
+    const deduped: Stream[] = [];
+
+    for (const stream of streams) {
+        const keys = canonicalKeys(stream);
+        const isDuplicate = keys.some(key => seen.has(key));
+        if (isDuplicate) continue;
+
+        keys.forEach(key => seen.add(key));
+        deduped.push(stream);
+    }
+
+    return deduped;
+}
+
 function clampPerBroadcaster(streams: Stream[], maxPerBroadcaster: number) {
     if (!Number.isFinite(maxPerBroadcaster) || maxPerBroadcaster < 1) return streams;
     if (maxPerBroadcaster >= streams.length) return streams;
@@ -102,7 +169,8 @@ export function useNostrStreams({
                         .filter(item => !liveOnly || (item.startedAt || 0) >= nowSec() - liveWindowSec)
                         .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 
-                    return clampPerBroadcaster(sorted, maxPerPubkey).slice(0, limit);
+                    const deduped = dedupeStreams(sorted);
+                    return clampPerBroadcaster(deduped, maxPerPubkey).slice(0, limit);
                 });
             },
             () => {
@@ -119,15 +187,18 @@ export function useNostrStreams({
         const prune = () => {
             const cutoff = nowSec() - liveWindowSec;
             setStreams(prev => {
-                const filtered = prev.filter(item => (item.startedAt || 0) >= cutoff);
-                if (filtered.length === prev.length) return prev;
+                const filtered = prev
+                    .filter(item => (item.startedAt || 0) >= cutoff)
+                    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+                const deduped = dedupeStreams(filtered);
+                if (deduped.length === prev.length) return prev;
 
                 seenByStream.current = new Map(
-                    filtered.map(item => [streamKey(item), item.startedAt || 0] as const)
+                    deduped.map(item => [streamKey(item), item.startedAt || 0] as const)
                 );
 
                 return clampPerBroadcaster(
-                    filtered.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)),
+                    deduped,
                     maxPerPubkey
                 ).slice(0, limit);
             });

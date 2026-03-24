@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X } from "lucide-react";
+import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X } from "lucide-react";
 import { Player } from "@/components/Player";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
@@ -11,13 +11,16 @@ import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
 
 const STORAGE_KEY = "dstream_mini_player_layout_v3";
+const BACKGROUND_PLAY_PREF_KEY = "dstream_player_background_play_v1";
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 960;
 const DEFAULT_WIDTH = 320;
 const DEFAULT_GAP = 24;
 const AUTO_PIP_RETRY_MS = 1200;
 const AUTO_PIP_MAX_ATTEMPTS = 8;
-const DRAG_BLOCK_SELECTOR = "button,a,input,select,textarea,label,[role='button'],[data-no-drag='true']";
+const AUTO_RESUME_RETRY_MS = 500;
+const AUTO_RESUME_MAX_ATTEMPTS = 12;
+const DRAG_BLOCK_SELECTOR = "video,button,a,input,select,textarea,label,[role='button'],[data-no-drag='true']";
 
 type ResizeHandle = "top_left" | "top_right" | "bottom_right" | "bottom_left";
 
@@ -104,6 +107,24 @@ function isDragBlockedTarget(target: EventTarget | null): boolean {
   return !!target.closest(DRAG_BLOCK_SELECTOR);
 }
 
+function readBackgroundPlayPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(BACKGROUND_PLAY_PREF_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeBackgroundPlayPreference(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(BACKGROUND_PLAY_PREF_KEY, enabled ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
 export function GlobalQuickPlayDock() {
   const pathname = usePathname();
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
@@ -118,6 +139,7 @@ export function GlobalQuickPlayDock() {
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [pipActive, setPipActive] = useState(false);
+  const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"idle" | "drag" | "resize">("idle");
   const [touchDevice, setTouchDevice] = useState(false);
 
@@ -137,6 +159,9 @@ export function GlobalQuickPlayDock() {
   const autoPipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPipAttemptsRef = useRef(0);
   const autoPipAttemptKeyRef = useRef<string | null>(null);
+  const autoResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoResumeAttemptsRef = useRef(0);
+  const autoResumeAttemptKeyRef = useRef<string | null>(null);
 
   const height = useMemo(() => toHeight(width), [width]);
   const originStreamId = useMemo(() => {
@@ -161,6 +186,7 @@ export function GlobalQuickPlayDock() {
   const watchHref = quickPlayStream
     ? `/watch/${pubkeyHexToNpub(quickPlayStream.streamPubkey) ?? quickPlayStream.streamPubkey}/${quickPlayStream.streamId}`
     : null;
+  const tipHref = watchHref ? `${watchHref}?tip=1` : null;
   const playbackStateKey = useMemo(() => {
     if (!quickPlayStream) return undefined;
     return deriveQuickPlayPlaybackStateKey({
@@ -174,6 +200,12 @@ export function GlobalQuickPlayDock() {
     if (!autoPipTimerRef.current) return;
     clearTimeout(autoPipTimerRef.current);
     autoPipTimerRef.current = null;
+  }, []);
+
+  const clearAutoResumeTimer = useCallback(() => {
+    if (!autoResumeTimerRef.current) return;
+    clearTimeout(autoResumeTimerRef.current);
+    autoResumeTimerRef.current = null;
   }, []);
 
   const requestSystemPip = useCallback(async () => {
@@ -214,7 +246,12 @@ export function GlobalQuickPlayDock() {
 
   useEffect(() => {
     setTouchDevice(isTouchDevice());
+    setBackgroundPlayEnabled(readBackgroundPlayPreference());
   }, []);
+
+  useEffect(() => {
+    writeBackgroundPlayPreference(backgroundPlayEnabled);
+  }, [backgroundPlayEnabled]);
 
   useEffect(() => {
     if (ready || typeof window === "undefined") return;
@@ -315,8 +352,11 @@ export function GlobalQuickPlayDock() {
   }, [pipActive]);
 
   useEffect(() => {
-    return () => clearAutoPipTimer();
-  }, [clearAutoPipTimer]);
+    return () => {
+      clearAutoPipTimer();
+      clearAutoResumeTimer();
+    };
+  }, [clearAutoPipTimer, clearAutoResumeTimer]);
 
   useEffect(() => {
     if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc || touchDevice) {
@@ -351,6 +391,78 @@ export function GlobalQuickPlayDock() {
 
     return () => clearAutoPipTimer();
   }, [clearAutoPipTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, requestSystemPip, touchDevice]);
+
+  useEffect(() => {
+    if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc) {
+      clearAutoResumeTimer();
+      return;
+    }
+
+    const attemptKey = `${quickPlayStream.streamPubkey}:${quickPlayStream.streamId}:${pathname ?? ""}:${hlsSrc}:${whepSrc ?? ""}`;
+    if (autoResumeAttemptKeyRef.current === attemptKey) return;
+    autoResumeAttemptKeyRef.current = attemptKey;
+    autoResumeAttemptsRef.current = 0;
+
+    const attempt = async () => {
+      const video = videoRef.current;
+      if (!video) {
+        if (autoResumeAttemptsRef.current >= AUTO_RESUME_MAX_ATTEMPTS) {
+          clearAutoResumeTimer();
+          return;
+        }
+        autoResumeAttemptsRef.current += 1;
+        autoResumeTimerRef.current = setTimeout(() => {
+          void attempt();
+        }, AUTO_RESUME_RETRY_MS);
+        return;
+      }
+
+      if (!video.paused && !video.ended) {
+        clearAutoResumeTimer();
+        return;
+      }
+
+      autoResumeAttemptsRef.current += 1;
+      try {
+        await video.play();
+        clearAutoResumeTimer();
+        return;
+      } catch {
+        // fallback to muted autoplay
+      }
+
+      try {
+        video.muted = true;
+        video.volume = 0;
+      } catch {
+        // ignore
+      }
+      setMuted(true);
+      setVolume(0);
+      try {
+        await video.play();
+        clearAutoResumeTimer();
+        return;
+      } catch {
+        // keep retrying while we still have budget
+      }
+
+      if (autoResumeAttemptsRef.current >= AUTO_RESUME_MAX_ATTEMPTS) {
+        clearAutoResumeTimer();
+        return;
+      }
+
+      autoResumeTimerRef.current = setTimeout(() => {
+        void attempt();
+      }, AUTO_RESUME_RETRY_MS);
+    };
+
+    autoResumeTimerRef.current = setTimeout(() => {
+      void attempt();
+    }, 160);
+
+    return () => clearAutoResumeTimer();
+  }, [clearAutoResumeTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, whepSrc]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -497,6 +609,7 @@ export function GlobalQuickPlayDock() {
           src={hlsSrc}
           whepSrc={whepSrc}
           autoplayMuted={false}
+          backgroundPlayEnabledOverride={backgroundPlayEnabled}
           isLiveStream
           showTimelineControls={false}
           showAuxControls={false}
@@ -506,16 +619,48 @@ export function GlobalQuickPlayDock() {
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
       </div>
 
-      <div className="absolute inset-0 z-20 flex flex-col pointer-events-none opacity-100">
+      <div
+        className={`absolute inset-0 z-20 flex flex-col pointer-events-none transition-opacity duration-150 ${
+          touchDevice ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      >
         <div className="p-3 bg-gradient-to-b from-black/80 to-transparent flex items-center gap-3 pointer-events-auto">
           <div className="p-1.5 bg-white/10 rounded-lg">
             <Move className="w-3 h-3 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
-            <p className="text-xs font-medium text-white/70 truncate leading-none">
-              {quickPlayStream.title || "Live stream"}
-            </p>
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+            {watchHref ? (
+              <Link
+                href={watchHref}
+                onMouseDown={(event) => event.stopPropagation()}
+                className="min-w-0 flex-1 rounded-lg px-1 py-0.5 hover:bg-white/10 transition"
+                title="Open full stream page"
+                aria-label="Open full stream page"
+              >
+                <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
+                <p className="truncate text-xs font-medium leading-none text-white/70">
+                  {quickPlayStream.title || "Live stream"}
+                </p>
+              </Link>
+            ) : (
+              <div className="min-w-0 flex-1 px-1 py-0.5">
+                <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
+                <p className="truncate text-xs font-medium leading-none text-white/70">
+                  {quickPlayStream.title || "Live stream"}
+                </p>
+              </div>
+            )}
+            {tipHref ? (
+              <Link
+                href={tipHref}
+                onMouseDown={(event) => event.stopPropagation()}
+                className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-emerald-400/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 transition"
+                title="Tip this streamer"
+                aria-label="Tip this streamer"
+              >
+                <HandCoins className="h-3 w-3" />
+              </Link>
+            ) : null}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -559,16 +704,31 @@ export function GlobalQuickPlayDock() {
         </div>
 
         <div className="mt-auto p-2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <button
-              type="button"
-              onClick={handleToggleMute}
-              className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-white/90 hover:text-white"
-              title={muted || volume === 0 ? "Unmute" : "Mute"}
-              aria-label={muted || volume === 0 ? "Unmute" : "Mute"}
-            >
-              {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-            </button>
+          <div className="flex items-end gap-2 pointer-events-auto">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition ${
+                  backgroundPlayEnabled
+                    ? "border-blue-400/60 bg-blue-500/20 text-blue-100"
+                    : "border-white/20 bg-black/40 text-white/75 hover:text-white"
+                }`}
+                title="Keep audio playing when app/browser is backgrounded"
+                aria-label={`Background play ${backgroundPlayEnabled ? "on" : "off"}`}
+              >
+                BG {backgroundPlayEnabled ? "On" : "Off"}
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-white/90 hover:text-white"
+                title={muted || volume === 0 ? "Unmute" : "Mute"}
+                aria-label={muted || volume === 0 ? "Unmute" : "Mute"}
+              >
+                {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
             <input
               type="range"
               min={0}

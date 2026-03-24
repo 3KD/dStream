@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "updatedAtSec": 1772848148,
+  "packages": [
+    {
+      "id": "73cd1ba7-d1ea-42cd-9752-d463510ef49a",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity2",
+      "relativePath": "episode1.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity2:vod:file:ZXBpc29kZTEubXA0",
+      "title": "Episode 1 unlock (24h)",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.5",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772848148,
+      "updatedAtSec": 1772848148
+    },
+    {
+      "id": "1f2849fe-9240-4c76-8cb3-3502cb2de89a",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity2",
+      "relativePath": "episode3.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity2:vod:file:ZXBpc29kZTMubXA0",
+      "title": "Episode 3 unlock (24h)",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.25",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772848148,
+      "updatedAtSec": 1772848148
+    },
+    {
+      "id": "3019f587-7f99-4141-83e3-bb778b2e3b3f",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity1",
+      "relativePath": "episode1.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "title": "Episode 1 unlock (24h)",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.5",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772848083,
+      "updatedAtSec": 1772848083
+    },
+    {
+      "id": "be968aff-5a95-4a99-a925-9fcc5a23e500",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity1",
+      "relativePath": "episode3.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTMubXA0",
+      "title": "Episode 3 unlock (24h)",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.25",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772848083,
+      "updatedAtSec": 1772848083
+    },
+    {
+      "id": "a045b4e2-f645-4bf7-8fa5-f4deb8dbb2ec",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity1",
+      "relativePath": "episode3.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTMubXA0",
+      "title": "Episode 3 unlock (24h)",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.25",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772847908,
+      "updatedAtSec": 1772847908
+    },
+    {
+      "id": "3808bae0-7604-4e2f-ba81-012a2af3b90c",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "streamId": "vodsanity1",
+      "relativePath": "episode1.mp4",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "title": "Episode 1 unlock (24h)",
+      "description": "Unlock private episode 1",
+      "paymentAsset": "xmr",
+      "paymentAmount": "0.5",
+      "durationHours": 24,
+      "status": "active",
+      "visibility": "public",
+      "metadata": {},
+      "createdAtSec": 1772847815,
+      "updatedAtSec": 1772847815
+    }
+  ],
+  "purchases": [
+    {
+      "id": "0c389b5e-64fd-4b25-8145-38899a936a3f",
+      "packageId": "3019f587-7f99-4141-83e3-bb778b2e3b3f",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "viewerPubkey": "9687749e109e6a4bd5f98c9b09b27b0b702fb2fae7a9fb4e360dae3cde909c22",
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3019f587-7f99-4141-83e3-bb778b2e3b3f:7b9432e07aafca71",
+      "status": "granted",
+      "entitlementId": "e95664f8-b78b-4d98-8114-9b4d1293a1a7",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "createdAtSec": 1772848083,
+      "expiresAtSec": 1772934483,
+      "metadata": {
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772848083,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      }
+    },
+    {
+      "id": "eacc5c71-3c3f-4807-8380-221014228030",
+      "packageId": "3808bae0-7604-4e2f-ba81-012a2af3b90c",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "viewerPubkey": "95b85ccc405a9059b20a82f38ec1faaa37f26f50461253070afb87083c076943",
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3808bae0-7604-4e2f-ba81-012a2af3b90c:a55d35d2442c4e7f",
+      "status": "granted",
+      "entitlementId": "b670c64d-08ac-4324-93fd-34579851589f",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "createdAtSec": 1772847833,
+      "expiresAtSec": 1772934233,
+      "metadata": {
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772847833,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      }
+    },
+    {
+      "id": "e36d7154-be42-47c7-89a7-c3019cee2fd8",
+      "packageId": "3808bae0-7604-4e2f-ba81-012a2af3b90c",
+      "hostPubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "viewerPubkey": "efe7b86e63b090aaf188dc90201cf8c2d77c163bfdd3d7ae7bd41b0a657925c9",
+      "source": "purchase_verified",
+      "sourceRef": "purchase:3808bae0-7604-4e2f-ba81-012a2af3b90c:e4f8583934160d04",
+      "status": "granted",
+      "entitlementId": "4e782a89-c0b7-48b0-9933-30f0ee4cd2a1",
+      "resourceId": "stream:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:vodsanity1:vod:file:ZXBpc29kZTEubXA0",
+      "createdAtSec": 1772847815,
+      "expiresAtSec": 1772934215,
+      "metadata": {
+        "purchasePolicy": "operator_or_verified",
+        "purchasePolicyEnforcedAtSec": 1772847815,
+        "operatorOverride": true,
+        "verificationMode": "operator_override"
+      }
+    }
+  ]
+}

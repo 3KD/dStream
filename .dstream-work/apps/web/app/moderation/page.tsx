@@ -292,7 +292,15 @@ export default function ModerationPage() {
                           <div className="text-sm text-neutral-200 font-mono truncate">{label}</div>
                           <div className="text-xs text-neutral-500 font-mono truncate">{pubkey}</div>
                           <div className="mt-1 flex flex-wrap gap-2">
-                            {isModerator && <span className="text-[10px] bg-blue-950/50 border border-blue-700/30 text-blue-200 px-1.5 py-0.5 rounded">MOD</span>}
+                            {isModerator && (
+                              <span
+                                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-950/60 border border-blue-700/40 text-blue-200"
+                                title="Admin"
+                                aria-label="Admin"
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                              </span>
+                            )}
                             {isSubscriber && <span className="text-[10px] bg-amber-950/50 border border-amber-700/30 text-amber-200 px-1.5 py-0.5 rounded">SUB</span>}
                             {isBlocked && <span className="text-[10px] bg-red-950/50 border border-red-700/30 text-red-200 px-1.5 py-0.5 rounded">BLOCKED</span>}
                             {isMuted && <span className="text-[10px] bg-neutral-950/50 border border-neutral-700/30 text-neutral-200 px-1.5 py-0.5 rounded">MUTED</span>}

@@ -1,0 +1,98 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e52]:
+      - banner [ref=e53]:
+        - generic [ref=e54]:
+          - link "dStream Logo Stream" [ref=e55] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e56]
+            - generic [ref=e57]: Stream
+          - navigation [ref=e58]:
+            - link "Browse" [ref=e59] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e60] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e61] [cursor=pointer]:
+              - /url: /inbox
+            - link "Broadcast" [ref=e62] [cursor=pointer]:
+              - /url: /broadcast
+            - link "Dashboard" [ref=e63] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Profile" [ref=e64] [cursor=pointer]:
+              - /url: /profile
+            - link "Moderation" [ref=e65] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e66] [cursor=pointer]:
+              - /url: /settings
+          - group [ref=e69]:
+            - generic "Identity" [ref=e70] [cursor=pointer]:
+              - generic [ref=e71]:
+                - img [ref=e72]
+                - generic [ref=e75]: Identity
+      - main [ref=e76]:
+        - generic [ref=e77]:
+          - heading "Browse" [level=1] [ref=e78]
+          - generic [ref=e79]:
+            - generic [ref=e80] [cursor=pointer]:
+              - checkbox "Favorites only" [ref=e81]
+              - text: Favorites only
+            - generic [ref=e82] [cursor=pointer]:
+              - checkbox "Curated only" [ref=e83]
+              - text: Curated only
+            - link "Guilds" [ref=e84] [cursor=pointer]:
+              - /url: /guilds
+            - link "Home" [ref=e85] [cursor=pointer]:
+              - /url: /
+        - generic [ref=e86]: No live streams found.
+    - contentinfo [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - img "dStream logo" [ref=e9]
+            - generic [ref=e10]: dStream Protocol
+          - paragraph [ref=e11]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+          - paragraph [ref=e12]:
+            - img [ref=e13]
+            - img [ref=e16]
+            - text: Production docs reflect live stack behavior
+        - generic [ref=e18]:
+          - paragraph [ref=e19]:
+            - img [ref=e20]
+            - text: Protocol
+          - link "Whitepaper" [ref=e25] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e26] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e27] [cursor=pointer]:
+            - /url: /use-cases
+          - link "Donate" [ref=e28] [cursor=pointer]:
+            - /url: /donate
+          - link "Analytics" [ref=e29] [cursor=pointer]:
+            - /url: /analytics
+        - generic [ref=e30]:
+          - paragraph [ref=e31]:
+            - img [ref=e32]
+            - text: Build
+          - link "Broadcast" [ref=e35] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Browse" [ref=e36] [cursor=pointer]:
+            - /url: /browse
+          - link "Settings" [ref=e37] [cursor=pointer]:
+            - /url: /settings
+          - link "Profile" [ref=e38] [cursor=pointer]:
+            - /url: /profile
+          - link "Mobile Bootstrap" [ref=e39] [cursor=pointer]:
+            - /url: /mobile/bootstrap
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Support
+          - link "Donate" [ref=e42] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e43]
+            - text: Donate
+          - generic [ref=e45]: "Wallet plugin setup: Settings → Wallet Integrations"
+          - link "GitHub" [ref=e46] [cursor=pointer]:
+            - /url: https://github.com/3KD/dStream
+            - text: GitHub
+            - img [ref=e47]
+          - generic [ref=e51]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+  - alert [ref=e87]

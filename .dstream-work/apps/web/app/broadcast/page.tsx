@@ -14,6 +14,13 @@ import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
 import { getPaymentRailForMethod } from "@/lib/payments/rails";
 import {
+  getNativeWalletCapability,
+  nativeWalletProviderLabel,
+  nativeWalletSendNeedsAmount,
+  sendNativeWalletPayment,
+  supportsNativeWalletPayment
+} from "@/lib/payments/nativeWallet";
+import {
   createPaymentMethodDraft,
   paymentMethodToDraft,
   type PaymentMethodDraft,
@@ -26,6 +33,7 @@ import {
   type StreamGuildFeeWaiver,
   type StreamHostMode,
   type StreamPaymentAsset,
+  type StreamPaymentMethod,
   type StreamRendition,
   type StreamVodVisibility
 } from "@dstream/protocol";
@@ -212,6 +220,11 @@ export default function BroadcastPage() {
   const [image, setImage] = useState("");
   const [xmr, setXmr] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<PaymentMethodDraft[]>([]);
+  const [nativePaymentBusyByKey, setNativePaymentBusyByKey] = useState<Record<string, boolean>>({});
+  const [nativePaymentStatusByKey, setNativePaymentStatusByKey] = useState<
+    Record<string, { ok: boolean; message: string; txId?: string }>
+  >({});
+  const [nativePaymentAmountByKey, setNativePaymentAmountByKey] = useState<Record<string, string>>({});
   const [stakeXmr, setStakeXmr] = useState("");
   const [stakeNote, setStakeNote] = useState("");
   const [captionLines, setCaptionLines] = useState("");
@@ -737,6 +750,47 @@ export default function BroadcastPage() {
   const updatePaymentDraft = useCallback((index: number, patch: Partial<PaymentMethodDraft>) => {
     setPaymentDrafts((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }, []);
+
+  const sendNativePaymentDraft = useCallback(
+    async (key: string, draft: PaymentMethodDraft) => {
+      const amountOverride = (nativePaymentAmountByKey[key] ?? "").trim();
+      const method: StreamPaymentMethod = {
+        asset: draft.asset,
+        address: draft.address.trim(),
+        network: draft.network.trim() || undefined,
+        label: draft.label.trim() || undefined,
+        amount: draft.amount.trim() || amountOverride || undefined
+      };
+      setNativePaymentBusyByKey((prev) => ({ ...prev, [key]: true }));
+      setNativePaymentStatusByKey((prev) => ({ ...prev, [key]: { ok: false, message: "" } }));
+      try {
+        const result = await sendNativeWalletPayment(method);
+        if (!result.ok) {
+          setNativePaymentStatusByKey((prev) => ({
+            ...prev,
+            [key]: { ok: false, message: result.error ?? "Native wallet send failed." }
+          }));
+          return;
+        }
+        setNativePaymentStatusByKey((prev) => ({
+          ...prev,
+          [key]: {
+            ok: true,
+            message: `Sent via ${result.provider ?? "wallet"}.`,
+            txId: result.txId
+          }
+        }));
+      } catch (error: any) {
+        setNativePaymentStatusByKey((prev) => ({
+          ...prev,
+          [key]: { ok: false, message: error?.message ?? "Native wallet send failed." }
+        }));
+      } finally {
+        setNativePaymentBusyByKey((prev) => ({ ...prev, [key]: false }));
+      }
+    },
+    [nativePaymentAmountByKey]
+  );
 
   const addWaiverGuild = useCallback(() => {
     setWaiverInputError(null);
@@ -2268,6 +2322,10 @@ export default function BroadcastPage() {
                             label: row.label.trim() || undefined,
                             amount: row.amount.trim() || undefined
                           });
+                          const nativePaymentKey = `broadcast:${index}:${row.asset}:${row.network.trim().toLowerCase()}:${row.address.trim().toLowerCase()}`;
+                          const nativeBusy = !!nativePaymentBusyByKey[nativePaymentKey];
+                          const nativeStatus = nativePaymentStatusByKey[nativePaymentKey];
+                          const nativeAmountDraft = nativePaymentAmountByKey[nativePaymentKey] ?? "";
                           const networkToken = row.network.trim().toLowerCase();
                           const addressToken = row.address.trim().toLowerCase();
                           const isBtcLightning =
@@ -2281,6 +2339,26 @@ export default function BroadcastPage() {
                               addressToken.startsWith("lnbcrt") ||
                               addressToken.startsWith("lnurl") ||
                               addressToken.includes("@"));
+                          const nativeMethod: StreamPaymentMethod = {
+                            asset: row.asset,
+                            address: row.address.trim(),
+                            network: row.network.trim() || undefined,
+                            label: row.label.trim() || undefined,
+                            amount: row.amount.trim() || undefined
+                          };
+                          const nativeCapability = getNativeWalletCapability(nativeMethod);
+                          const nativeSupported = nativeCapability.supported && supportsNativeWalletPayment(nativeMethod);
+                          const needsAmount = nativeCapability.requiresAmount && nativeWalletSendNeedsAmount(nativeMethod);
+                          const nativeAmount = row.amount.trim() || nativeAmountDraft.trim();
+                          const providerLabel = nativeCapability.providerLabel || nativeWalletProviderLabel(nativeMethod);
+                          const nativeActionLabel =
+                            nativeCapability.mode === "wallet_uri" ? "Open wallet app" : `Test send via ${providerLabel}`;
+                          const nativeTitle = nativeSupported
+                            ? nativeCapability.mode === "wallet_uri"
+                              ? "Open wallet using payment URI"
+                              : `Send with ${providerLabel}`
+                            : nativeCapability.reason ?? `${providerLabel} not detected in this browser`;
+                          const canNativeSend = nativeSupported && !!nativeMethod.address && (!needsAmount || !!nativeAmount);
                           return (
                             <div key={`broadcast-payment-${index}`} className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/40 p-2">
                               <div className="grid grid-cols-1 lg:grid-cols-[120px_1fr_130px_130px_130px_auto] gap-2">
@@ -2343,6 +2421,54 @@ export default function BroadcastPage() {
                                   ? ` · amount: ${row.amount.trim()}${isBtcLightning ? " sats" : ` ${PAYMENT_ASSET_META[row.asset].symbol}`}`
                                   : ""}
                               </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void sendNativePaymentDraft(nativePaymentKey, row)}
+                                  disabled={!canNativeSend || nativeBusy}
+                                  className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                                  title={nativeTitle}
+                                >
+                                  {nativeBusy ? "Sending…" : nativeActionLabel}
+                                </button>
+                                {!nativeSupported ? (
+                                  <span className="text-[11px] text-neutral-500">
+                                    {nativeCapability.reason ?? `${providerLabel} not detected in this browser.`}
+                                  </span>
+                                ) : null}
+                                {nativeCapability.mode === "wallet_uri" && nativeSupported ? (
+                                  <span className="text-[11px] text-neutral-500">
+                                    This asset opens your installed wallet app using a URI handoff.
+                                  </span>
+                                ) : null}
+                                {needsAmount && !row.amount.trim() ? (
+                                  <input
+                                    value={nativeAmountDraft}
+                                    onChange={(event) =>
+                                      setNativePaymentAmountByKey((prev) => ({
+                                        ...prev,
+                                        [nativePaymentKey]: event.target.value
+                                      }))
+                                    }
+                                    placeholder={`Amount (${PAYMENT_ASSET_META[row.asset].symbol})`}
+                                    className="bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:border-blue-500 focus:outline-none"
+                                  />
+                                ) : null}
+                              </div>
+                              {nativeStatus?.message ? (
+                                <div className={`text-[11px] ${nativeStatus.ok ? "text-emerald-300" : "text-red-300"}`}>
+                                  {nativeStatus.message}
+                                  {nativeStatus.txId ? (
+                                    <>
+                                      {" "}
+                                      · tx{" "}
+                                      <span className="font-mono text-neutral-300">
+                                        {shortenText(nativeStatus.txId, { head: 12, tail: 8 })}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           );
                         })}

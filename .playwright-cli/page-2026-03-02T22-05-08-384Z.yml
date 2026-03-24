@@ -1,0 +1,108 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Moderation" [ref=e14] [cursor=pointer]:
+            - /url: /moderation
+          - link "Settings" [ref=e15] [cursor=pointer]:
+            - /url: /settings
+          - link "Visuals" [ref=e16] [cursor=pointer]:
+            - /url: /dev/visuals
+    - main [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e24]:
+            - generic:
+              - generic:
+                - generic:
+                  - button "Play"
+                  - generic: Loading…
+                  - button "Tap for sound"
+                  - generic:
+                    - generic: Volume
+                    - button "Volume 0 0%": Unmute
+                    - slider "Volume": "0"
+                    - generic: 0%
+                  - generic "Stability mode (HLS preferred). Enable low-latency mode to try WHEP.":
+                    - checkbox "Low-latency mode"
+                    - generic: Low-latency mode
+                  - button "PiP" [disabled]
+                  - button "Background Off"
+                  - button "Fullscreen"
+                  - generic:
+                    - generic: Quality
+                    - combobox "Quality":
+                      - option "Auto" [selected]
+                  - generic:
+                    - button "Favorite stream":
+                      - img
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e28]: Stream details
+              - button "Collapse" [ref=e29]:
+                - text: Collapse
+                - img [ref=e30]
+            - generic [ref=e32]:
+              - generic [ref=e33]:
+                - heading "Live Stream" [level=1] [ref=e34]
+                - generic [ref=e35]:
+                  - button "npub1qy352euf4…hstefp92" [ref=e36]
+                  - generic [ref=e37]: / test-stream
+                - generic [ref=e38]:
+                  - generic [ref=e39]: Playing live stream path.
+                  - link "Playback URL" [ref=e40] [cursor=pointer]:
+                    - /url: /api/hls/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef--test-stream/index.m3u8
+                  - button "Copy playback URL" [ref=e41]:
+                    - img [ref=e42]
+              - generic [ref=e45]:
+                - generic [ref=e46]: About
+                - paragraph [ref=e47]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+            - generic [ref=e49]:
+              - generic [ref=e50]: viewers ≈ 0
+              - button "Presence On" [pressed] [ref=e51]
+              - button "P2P Assist On" [pressed] [ref=e52]
+              - generic [ref=e53]: Connect identity to publish.
+        - generic [ref=e55]:
+          - generic [ref=e57]:
+            - generic [ref=e58]: Chat
+            - generic [ref=e59]: syncing moderation…
+          - generic [ref=e61]: No messages yet
+          - generic [ref=e62]: Connect an identity to chat.
+  - contentinfo [ref=e63]:
+    - generic [ref=e64]:
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - img "dStream logo" [ref=e67]
+          - generic [ref=e68]: dStream Rebuild
+        - paragraph [ref=e69]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+      - generic [ref=e70]:
+        - paragraph [ref=e71]: Protocol
+        - link "Whitepaper" [ref=e72] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e73] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e74] [cursor=pointer]:
+          - /url: /use-cases
+      - generic [ref=e75]:
+        - paragraph [ref=e76]: Support
+        - link "Donate" [ref=e77] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e78]
+          - text: Donate
+        - link "GitHub" [ref=e80] [cursor=pointer]:
+          - /url: https://github.com/dstream-protocol
+        - paragraph [ref=e81]:
+          - img [ref=e82]
+          - img [ref=e85]
+          - text: Updated for the current rebuild architecture

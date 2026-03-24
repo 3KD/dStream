@@ -1,0 +1,139 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Broadcast" [ref=e14] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Dashboard" [ref=e15] [cursor=pointer]:
+            - /url: /dashboard
+          - link "Profile" [ref=e16] [cursor=pointer]:
+            - /url: /profile
+          - link "Moderation" [ref=e17] [cursor=pointer]:
+            - /url: /moderation
+          - link "Settings" [ref=e18] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e21]:
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - heading "Live Stream" [level=1] [ref=e24]
+          - generic [ref=e25]: npub1l0n8pza3s…rqrzqs04 / live-20260205-2128
+        - generic [ref=e26]:
+          - button "Favorite stream" [ref=e27]:
+            - img [ref=e28]
+          - link "Back to Browse" [ref=e30] [cursor=pointer]:
+            - /url: /browse
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - text: Viewers
+            - generic [ref=e34]: ≈ 0
+            - text: presence (approx)
+          - generic [ref=e35]:
+            - text: "Host mode: P2P Economy (T=6)"
+            - generic [ref=e36]: active 0 · queued 0
+        - generic [ref=e37]:
+          - generic [ref=e38] [cursor=pointer]:
+            - checkbox "Share presence" [checked] [ref=e39]
+            - text: Share presence
+          - generic [ref=e40] [cursor=pointer]:
+            - checkbox "P2P assist" [checked] [ref=e41]
+            - text: P2P assist
+          - generic [ref=e42]: "Queue status: not in active/standby set (enable presence to join FCFS queue)."
+          - generic [ref=e43]: Connect identity to publish.
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic: Loading…
+            - generic [ref=e49]:
+              - generic [ref=e50]:
+                - generic [ref=e51]: Volume
+                - slider "Volume" [ref=e52]: "0"
+                - generic [ref=e53]: 0%
+              - generic [ref=e54]:
+                - generic [ref=e55]: Quality
+                - combobox "Quality" [ref=e56]:
+                  - option "Auto" [selected]
+              - generic [ref=e57]:
+                - checkbox "Low-latency mode" [checked] [ref=e58]
+                - generic [ref=e59]: Low-latency mode
+              - button "PiP" [disabled] [ref=e60]
+              - button "Fullscreen" [ref=e61]
+              - generic [ref=e62]: "Quality: Auto"
+          - generic [ref=e63]:
+            - generic [ref=e64]: About
+            - paragraph [ref=e65]: This stream is discoverable via Nostr and delivered via HLS (with optional peer assist when available).
+            - generic [ref=e66]: "Playback URL: /api/hls/fbe6708bb182badcc478bf41f026b2c121020a6271712ed91d577c244ce38f06--live-20260205-2128/index.m3u8"
+            - generic [ref=e67]: Playing live stream path.
+          - generic [ref=e68]:
+            - generic [ref=e70]: Archived Broadcasts (VOD)
+            - generic [ref=e71]: Broadcaster disabled VOD archive and DVR controls for this stream.
+        - generic [ref=e73]:
+          - generic [ref=e74]:
+            - generic [ref=e75]:
+              - generic [ref=e76]: Chat
+              - generic [ref=e77]: syncing moderation…
+            - generic [ref=e78]: 0 msgs
+          - generic [ref=e81]: No messages yet
+          - generic [ref=e82]: Connect an identity to chat.
+  - contentinfo [ref=e83]:
+    - generic [ref=e84]:
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - img "dStream logo" [ref=e87]
+          - generic [ref=e88]: dStream Protocol
+        - paragraph [ref=e89]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+        - paragraph [ref=e90]:
+          - img [ref=e91]
+          - img [ref=e94]
+          - text: Production docs reflect live stack behavior
+      - generic [ref=e96]:
+        - paragraph [ref=e97]:
+          - img [ref=e98]
+          - text: Protocol
+        - link "Whitepaper" [ref=e103] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e104] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e105] [cursor=pointer]:
+          - /url: /use-cases
+        - link "Donate" [ref=e106] [cursor=pointer]:
+          - /url: /donate
+        - link "Analytics" [ref=e107] [cursor=pointer]:
+          - /url: /analytics
+      - generic [ref=e108]:
+        - paragraph [ref=e109]:
+          - img [ref=e110]
+          - text: Build
+        - link "Broadcast" [ref=e113] [cursor=pointer]:
+          - /url: /broadcast
+        - link "Browse" [ref=e114] [cursor=pointer]:
+          - /url: /browse
+        - link "Settings" [ref=e115] [cursor=pointer]:
+          - /url: /settings
+        - link "Profile" [ref=e116] [cursor=pointer]:
+          - /url: /profile
+        - link "Mobile Bootstrap" [ref=e117] [cursor=pointer]:
+          - /url: /mobile/bootstrap
+      - generic [ref=e118]:
+        - paragraph [ref=e119]: Support
+        - link "Donate" [ref=e120] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e121]
+          - text: Donate
+        - generic [ref=e123]: "Wallet plugin setup: Settings → Wallet Integrations"
+        - link "GitHub" [ref=e124] [cursor=pointer]:
+          - /url: https://github.com/3KD/dStream
+          - text: GitHub
+          - img [ref=e125]
+        - generic [ref=e129]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.

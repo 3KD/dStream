@@ -29,8 +29,8 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-neutral-800/80 bg-neutral-950/95">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-7 xl:gap-8">
-          <div className="space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-7 xl:gap-8">
+          <div className="col-span-2 xl:col-span-1 space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2">
               <img src="/logo_trimmed.png" alt="dStream logo" className="h-7 w-auto object-contain" />
               <span className="font-semibold tracking-tight">dStream Protocol</span>
@@ -73,7 +73,7 @@ export function SiteFooter() {
             </div>
           </div>
 
-          <div className="space-y-2 text-sm">
+          <div className="col-span-2 xl:col-span-1 space-y-2 text-sm">
             <p className="text-xs uppercase tracking-wider text-neutral-500">Support</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link href="/support" className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-colors">

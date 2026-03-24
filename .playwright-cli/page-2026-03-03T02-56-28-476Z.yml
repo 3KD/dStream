@@ -1,0 +1,83 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e660]:
+      - banner [ref=e661]:
+        - generic [ref=e662]:
+          - link "dStream Logo Stream" [ref=e663] [cursor=pointer]:
+            - /url: /
+            - img "dStream Logo" [ref=e664]
+            - generic [ref=e665]: Stream
+          - navigation [ref=e666]:
+            - link "Browse" [ref=e667] [cursor=pointer]:
+              - /url: /browse
+            - link "Guilds" [ref=e668] [cursor=pointer]:
+              - /url: /guilds
+            - link "Inbox" [ref=e669] [cursor=pointer]:
+              - /url: /inbox
+            - link "Moderation" [ref=e670] [cursor=pointer]:
+              - /url: /moderation
+            - link "Settings" [ref=e671] [cursor=pointer]:
+              - /url: /settings
+          - button "Identity" [ref=e674]:
+            - img [ref=e675]
+            - generic [ref=e678]: Identity
+      - main [ref=e679]:
+        - generic [ref=e680]:
+          - generic [ref=e681]:
+            - button "Click to play" [ref=e742]:
+              - generic [ref=e743]: Click to play
+            - generic [ref=e710]:
+              - generic [ref=e711]:
+                - generic [ref=e712]:
+                  - heading "Synthdragon Radio — CHILL" [level=1] [ref=e744]
+                  - generic [ref=e714]:
+                    - button "npub1qhnqzk03u…6q30lht3" [ref=e715]
+                    - generic [ref=e716]: / synthdragon-chill
+                  - generic [ref=e717]:
+                    - generic [ref=e718]: Playing live stream path.
+                    - link "Playback URL" [ref=e719] [cursor=pointer]:
+                      - /url: https://hls.synthdragonradio.com/hls/chill/index.m3u8
+                    - button "Copy playback URL" [ref=e720]:
+                      - img [ref=e721]
+                - generic [ref=e724]:
+                  - generic [ref=e725]: About
+                  - paragraph [ref=e726]: 24/7 synthwave, ambient retrowave, and cosmic soundscapes. Frozen Nebula vibes.
+              - generic [ref=e728]:
+                - generic [ref=e729]: viewers ≈ 0
+                - button "Presence On" [pressed] [ref=e730]
+                - button "P2P Assist On" [pressed] [ref=e731]
+                - generic [ref=e732]: Connect identity to publish.
+          - generic [ref=e734]:
+            - generic [ref=e736]:
+              - generic [ref=e737]: Chat
+              - generic "Connected" [ref=e745]
+            - generic [ref=e740]: No messages yet
+            - generic [ref=e741]: Connect an identity to chat.
+    - contentinfo [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - img "dStream logo" [ref=e9]
+            - generic [ref=e10]: dStream Rebuild
+          - paragraph [ref=e11]: Nostr-native live streaming with WHIP ingest, WHEP/HLS playback, and optional peer-assist over WebRTC.
+        - generic [ref=e12]:
+          - paragraph [ref=e13]: Protocol
+          - link "Whitepaper" [ref=e14] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Documentation" [ref=e15] [cursor=pointer]:
+            - /url: /docs
+          - link "Use Cases" [ref=e16] [cursor=pointer]:
+            - /url: /use-cases
+        - generic [ref=e17]:
+          - paragraph [ref=e18]: Support
+          - link "Donate" [ref=e19] [cursor=pointer]:
+            - /url: /donate
+            - img [ref=e20]
+            - text: Donate
+          - link "GitHub" [ref=e22] [cursor=pointer]:
+            - /url: https://github.com/dstream-protocol
+          - paragraph [ref=e23]:
+            - img [ref=e24]
+            - img [ref=e27]
+            - text: Updated for the current rebuild architecture
+  - alert [ref=e659]

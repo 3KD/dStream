@@ -1,0 +1,301 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "dStream Logo Stream" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "dStream Logo" [ref=e8]
+          - generic [ref=e9]: Stream
+        - navigation [ref=e10]:
+          - link "Browse" [ref=e11] [cursor=pointer]:
+            - /url: /browse
+          - link "Guilds" [ref=e12] [cursor=pointer]:
+            - /url: /guilds
+          - link "Inbox" [ref=e13] [cursor=pointer]:
+            - /url: /inbox
+          - link "Broadcast" [ref=e14] [cursor=pointer]:
+            - /url: /broadcast
+          - link "Dashboard" [ref=e15] [cursor=pointer]:
+            - /url: /dashboard
+          - link "Profile" [ref=e16] [cursor=pointer]:
+            - /url: /profile
+          - link "Moderation" [ref=e17] [cursor=pointer]:
+            - /url: /moderation
+          - link "Guidelines" [ref=e18] [cursor=pointer]:
+            - /url: /community-guidelines
+          - link "Settings" [ref=e19] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e22]:
+      - generic [ref=e23]:
+        - paragraph [ref=e24]: Technical Documentation
+        - heading "dStream Runtime Docs (Production Path)" [level=1] [ref=e25]
+        - paragraph [ref=e26]: "Updated reference for the current stack: Nostr identity, WHIP/WHEP/HLS media path, P2P assist policy controls, and wallet-integrated payment flows."
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - img [ref=e29]
+          - text: Getting Started
+        - generic [ref=e31]:
+          - article [ref=e32]:
+            - generic [ref=e33]: Step 1
+            - heading "Watch" [level=3] [ref=e34]
+            - paragraph [ref=e35]: "Open `/browse` or home cards, then watch from `/watch/:npub/:streamId` with WHEP-first and HLS fallback."
+          - article [ref=e36]:
+            - generic [ref=e37]: Step 2
+            - heading "Connect Identity" [level=3] [ref=e38]
+            - paragraph [ref=e39]: "Use extension or local key in Settings. Canonical stream identity is `(pubkeyHex, streamId)`; UI routes are npub-first."
+          - article [ref=e40]:
+            - generic [ref=e41]: Step 3
+            - heading "Go Live" [level=3] [ref=e42]
+            - paragraph [ref=e43]: "Open `/broadcast`, start preview, publish over WHIP, and confirm announce relay acceptance."
+          - article [ref=e44]:
+            - generic [ref=e45]: Step 4
+            - heading "Verify Economics" [level=3] [ref=e46]
+            - paragraph [ref=e47]: Run verified Monero tip/stake flow and confirm wallet-rpc session status from watch page.
+      - generic [ref=e48]:
+        - heading "Runtime Architecture" [level=2] [ref=e49]
+        - generic [ref=e50]:
+          - article [ref=e51]:
+            - generic [ref=e52]: Identity + Coordination
+            - paragraph [ref=e53]: Nostr relays carry announce, moderation, presence, profile, and DM/whisper signaling.
+          - article [ref=e54]:
+            - generic [ref=e55]: Media Origin
+            - paragraph [ref=e56]: WHIP ingest to MediaMTX, remux to HLS, expose WHEP endpoints, maintain origin fallback.
+          - article [ref=e57]:
+            - generic [ref=e58]: Assist Transport
+            - paragraph [ref=e59]: WebRTC datachannel assist can offload HLS delivery when host policy and stake conditions allow.
+          - article [ref=e60]:
+            - generic [ref=e61]: Payments
+            - paragraph [ref=e62]: Monero wallet-rpc for verified flows; additional asset methods exposed as addresses + wallet URI hints.
+      - generic [ref=e63]:
+        - heading "Protocol Landscape" [level=2] [ref=e64]
+        - generic [ref=e65]:
+          - article [ref=e66]:
+            - generic [ref=e67]: dStream
+            - paragraph [ref=e68]: "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + Monero verified payment backend."
+          - article [ref=e69]:
+            - generic [ref=e70]: zap.stream
+            - paragraph [ref=e71]: NIP-53-focused Nostr client with Lightning/Zap ecosystem alignment and a host/CDN-style media path centered around HLS/RTMP workflows.
+        - paragraph [ref=e72]:
+          - text: "Detailed comparison notes are maintained in repository docs:"
+          - code [ref=e73]: docs/COMPETITIVE_DELTA.md
+      - generic [ref=e74]:
+        - heading "Nostr Event Surface" [level=2] [ref=e75]
+        - table [ref=e77]:
+          - rowgroup [ref=e78]:
+            - row "Kind Purpose Notes" [ref=e79]:
+              - columnheader "Kind" [ref=e80]
+              - columnheader "Purpose" [ref=e81]
+              - columnheader "Notes" [ref=e82]
+          - rowgroup [ref=e83]:
+            - 'row "30311 Stream announce Replaceable live metadata (`d`, `title`, `streaming`, host mode, discoverability, payment methods)." [ref=e84]':
+              - cell "30311" [ref=e85]
+              - cell "Stream announce" [ref=e86]
+              - 'cell "Replaceable live metadata (`d`, `title`, `streaming`, host mode, discoverability, payment methods)." [ref=e87]'
+            - row "30312 Presence Viewer heartbeat and participation estimates." [ref=e88]:
+              - cell "30312" [ref=e89]
+              - cell "Presence" [ref=e90]
+              - cell "Viewer heartbeat and participation estimates." [ref=e91]
+            - row "30313 Moderation / roles Relay-scoped mute/block + moderator/subscriber role updates." [ref=e92]:
+              - cell "30313" [ref=e93]
+              - cell "Moderation / roles" [ref=e94]
+              - cell "Relay-scoped mute/block + moderator/subscriber role updates." [ref=e95]
+            - row "30321 Discovery moderation Operator hide/restore actions for official app discovery surfaces only." [ref=e96]:
+              - cell "30321" [ref=e97]
+              - cell "Discovery moderation" [ref=e98]
+              - cell "Operator hide/restore actions for official app discovery surfaces only." [ref=e99]
+            - row "1 Public chat Stream-associated public text events." [ref=e100]:
+              - cell "1" [ref=e101]
+              - cell "Public chat" [ref=e102]
+              - cell "Stream-associated public text events." [ref=e103]
+            - row "4 / 20004 DM / whisper Private encrypted channels for broadcaster/viewer coordination." [ref=e104]:
+              - cell "4 / 20004" [ref=e105]
+              - cell "DM / whisper" [ref=e106]
+              - cell "Private encrypted channels for broadcaster/viewer coordination." [ref=e107]
+      - generic [ref=e108]:
+        - heading "HTTP/API Surface" [level=2] [ref=e109]
+        - table [ref=e111]:
+          - rowgroup [ref=e112]:
+            - row "Route Role Auth / Guard" [ref=e113]:
+              - columnheader "Route" [ref=e114]
+              - columnheader "Role" [ref=e115]
+              - columnheader "Auth / Guard" [ref=e116]
+          - rowgroup [ref=e117]:
+            - row "/api/whip/:originStreamId/whip WHIP ingest proxy Signed publisher path expected upstream." [ref=e118]:
+              - cell "/api/whip/:originStreamId/whip" [ref=e119]
+              - cell "WHIP ingest proxy" [ref=e120]
+              - cell "Signed publisher path expected upstream." [ref=e121]
+            - row "/api/whep/:originStreamId/whep WHEP playback proxy Public read; guarded by origin policy." [ref=e122]:
+              - cell "/api/whep/:originStreamId/whep" [ref=e123]
+              - cell "WHEP playback proxy" [ref=e124]
+              - cell "Public read; guarded by origin policy." [ref=e125]
+            - row "/api/hls/:originStreamId/* HLS passthrough Public read with edge cache compatibility." [ref=e126]:
+              - cell "/api/hls/:originStreamId/*" [ref=e127]
+              - cell "HLS passthrough" [ref=e128]
+              - cell "Public read with edge cache compatibility." [ref=e129]
+            - row "/api/xmr/tip/session(/:token) Verified tip lifecycle Signed control requests." [ref=e130]:
+              - cell "/api/xmr/tip/session(/:token)" [ref=e131]
+              - cell "Verified tip lifecycle" [ref=e132]
+              - cell "Signed control requests." [ref=e133]
+            - row "/api/xmr/stake/session(/:token) Stake gate + refund lifecycle Signed control requests." [ref=e134]:
+              - cell "/api/xmr/stake/session(/:token)" [ref=e135]
+              - cell "Stake gate + refund lifecycle" [ref=e136]
+              - cell "Signed control requests." [ref=e137]
+            - row "/api/xmr/escrow/session/* Escrow-v3 multisig orchestration Coordinator/participant scoped actions." [ref=e138]:
+              - cell "/api/xmr/escrow/session/*" [ref=e139]
+              - cell "Escrow-v3 multisig orchestration" [ref=e140]
+              - cell "Coordinator/participant scoped actions." [ref=e141]
+            - row "/api/payments/catalog Asset + wallet integration metadata Public read." [ref=e142]:
+              - cell "/api/payments/catalog" [ref=e143]
+              - cell "Asset + wallet integration metadata" [ref=e144]
+              - cell "Public read." [ref=e145]
+            - row "/api/payments/validate Server-side payment method validator Schema guard only." [ref=e146]:
+              - cell "/api/payments/validate" [ref=e147]
+              - cell "Server-side payment method validator" [ref=e148]
+              - cell "Schema guard only." [ref=e149]
+            - row "/api/moderation/reports Abuse report intake + operator queue actions Signed report/operator proof scopes." [ref=e150]:
+              - cell "/api/moderation/reports" [ref=e151]
+              - cell "Abuse report intake + operator queue actions" [ref=e152]
+              - cell "Signed report/operator proof scopes." [ref=e153]
+      - generic [ref=e154]:
+        - heading "Wallet Integration Workflow" [level=2] [ref=e155]
+        - list [ref=e156]:
+          - listitem [ref=e157]: Configure payout methods in Broadcast (core fields + advanced payout section).
+          - listitem [ref=e158]: Set preferred wallet per asset from Settings wallet integration panel.
+          - listitem [ref=e159]: Watchers use copy/URI actions on watch page to pay with native app, extension, or CLI workflow.
+          - listitem [ref=e160]: For XMR verification, viewers request a dedicated subaddress and check on-session status.
+        - generic [ref=e161]:
+          - link "Open Wallet Integrations" [ref=e162] [cursor=pointer]:
+            - /url: /settings#wallet-integrations
+          - link "Configure Broadcast Payouts" [ref=e163] [cursor=pointer]:
+            - /url: /broadcast
+      - generic [ref=e164]:
+        - heading "Safety & Reporting" [level=2] [ref=e165]
+        - list [ref=e166]:
+          - listitem [ref=e167]: In-app report controls are available on browse cards, watch header, and chat messages.
+          - listitem [ref=e168]:
+            - text: Operators review report queue items in
+            - strong [ref=e169]: Moderation
+            - text: and can mark state transitions.
+          - listitem [ref=e170]: Confirmed abuse can be hidden from official discovery surfaces without changing decentralized relay history.
+          - listitem [ref=e171]:
+            - text: "Policy URLs for app review:"
+            - code [ref=e172]: /terms
+            - text: ","
+            - code [ref=e173]: /privacy
+            - text: ","
+            - code [ref=e174]: /community-guidelines
+            - text: .
+        - generic [ref=e175]:
+          - link "Open Moderation" [ref=e176] [cursor=pointer]:
+            - /url: /moderation
+          - link "Community Guidelines" [ref=e177] [cursor=pointer]:
+            - /url: /community-guidelines
+      - generic [ref=e178]:
+        - generic [ref=e179]:
+          - img [ref=e180]
+          - text: Production Gate
+        - generic [ref=e182]:
+          - generic [ref=e183]: npm run harden:deploy -- .env.production
+          - generic [ref=e184]: npm run smoke:external:readiness
+          - generic [ref=e185]: npm run smoke:prod:runtime
+          - generic [ref=e186]: npm run gate:prod -- .env.production
+      - generic [ref=e187]:
+        - heading "Known Failure Modes" [level=2] [ref=e188]
+        - generic [ref=e189]:
+          - article [ref=e190]:
+            - generic [ref=e191]: "HLS `404` on `/api/hls/.../index.m3u8`"
+            - generic [ref=e192]: "Cause: Origin stream not live yet, stale streamId, or old announce record."
+            - generic [ref=e193]: "Action: Re-open watch using current live announce and verify `/api/dev/log` + MediaMTX path list."
+          - article [ref=e194]:
+            - generic [ref=e195]: WHEP timeout waiting for remote track
+            - generic [ref=e196]: "Cause: Publisher not sending media, ICE/TURN path mismatch, or origin path mismatch."
+            - generic [ref=e197]: "Action: Check WHIP publish success, TURN env values, and exact originStreamId mapping."
+          - article [ref=e198]:
+            - generic [ref=e199]: Announce relay warning
+            - generic [ref=e200]: "Cause: Media is live but relay publish failed or partially failed."
+            - generic [ref=e201]: "Action: Use `Update Announce`, inspect relay statuses, and validate configured relay URLs."
+      - generic [ref=e202]:
+        - heading "Primary Reading" [level=2] [ref=e203]
+        - generic [ref=e204]:
+          - link "Whitepaper" [ref=e205] [cursor=pointer]:
+            - /url: /whitepaper
+          - link "Use Cases" [ref=e206] [cursor=pointer]:
+            - /url: /use-cases
+          - link "Donate" [ref=e207] [cursor=pointer]:
+            - /url: /donate
+          - link "GitHub" [ref=e208] [cursor=pointer]:
+            - /url: https://github.com/3KD/dStream
+            - text: GitHub
+            - img [ref=e209]
+      - generic [ref=e213]:
+        - generic [ref=e214]:
+          - img [ref=e215]
+          - text: Trust Boundaries
+        - list [ref=e217]:
+          - listitem [ref=e218]: P2P assist reduces host load but does not remove origin bootstrap/fallback requirements.
+          - listitem [ref=e219]: Wallet integration never stores private keys; key material stays in user-controlled wallet software.
+          - listitem [ref=e220]: Escrow-v3 is multisig workflow coordination, not a trustless smart-contract VM.
+          - listitem [ref=e221]: "Canonical routing is `(pubkeyHex, streamId)`; UI keeps npub-first addressing for users."
+          - listitem [ref=e222]: "Content responsibility is node-local: independent operators are responsible for what they broadcast/relay; dStream does not control third-party content."
+  - contentinfo [ref=e223]:
+    - generic [ref=e224]:
+      - generic [ref=e225]:
+        - generic [ref=e226]:
+          - img "dStream logo" [ref=e227]
+          - generic [ref=e228]: dStream Protocol
+        - paragraph [ref=e229]: World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+        - paragraph [ref=e230]:
+          - img [ref=e231]
+          - img [ref=e234]
+          - text: Production docs reflect live stack behavior
+      - generic [ref=e236]:
+        - paragraph [ref=e237]:
+          - img [ref=e238]
+          - text: Protocol
+        - link "Whitepaper" [ref=e243] [cursor=pointer]:
+          - /url: /whitepaper
+        - link "Documentation" [ref=e244] [cursor=pointer]:
+          - /url: /docs
+        - link "Use Cases" [ref=e245] [cursor=pointer]:
+          - /url: /use-cases
+        - link "Donate" [ref=e246] [cursor=pointer]:
+          - /url: /donate
+        - link "Analytics" [ref=e247] [cursor=pointer]:
+          - /url: /analytics
+        - link "Terms" [ref=e248] [cursor=pointer]:
+          - /url: /terms
+        - link "Privacy" [ref=e249] [cursor=pointer]:
+          - /url: /privacy
+        - link "Community Guidelines" [ref=e250] [cursor=pointer]:
+          - /url: /community-guidelines
+      - generic [ref=e251]:
+        - paragraph [ref=e252]:
+          - img [ref=e253]
+          - text: Build
+        - link "Broadcast" [ref=e256] [cursor=pointer]:
+          - /url: /broadcast
+        - link "Browse" [ref=e257] [cursor=pointer]:
+          - /url: /browse
+        - link "Settings" [ref=e258] [cursor=pointer]:
+          - /url: /settings
+        - link "Profile" [ref=e259] [cursor=pointer]:
+          - /url: /profile
+        - link "Mobile Bootstrap" [ref=e260] [cursor=pointer]:
+          - /url: /mobile/bootstrap
+      - generic [ref=e261]:
+        - paragraph [ref=e262]: Support
+        - link "Donate" [ref=e263] [cursor=pointer]:
+          - /url: /donate
+          - img [ref=e264]
+          - text: Donate
+        - generic [ref=e266]: "Wallet plugin setup: Settings → Wallet Integrations"
+        - link "Report abuse or policy violations" [ref=e267] [cursor=pointer]:
+          - /url: /community-guidelines
+        - link "GitHub" [ref=e268] [cursor=pointer]:
+          - /url: https://github.com/3KD/dStream
+          - text: GitHub
+          - img [ref=e269]
+        - generic [ref=e273]: Streams run on independent nodes. Node operators are responsible for what they broadcast or relay. dStream does not control third-party content and assumes no liability for it.
+  - button "Quick Player" [ref=e274]:
+    - img [ref=e275]
+    - text: Quick Player
