@@ -59,18 +59,19 @@ export const WORD_COLORS_HEX: Record<string, string> = {
 // One full cycle: HOLD → LIFT → ROTATE → DROP → repeat
 const HOLD_MS   = 1400;  // word sits visible, flat
 const LIFT_MS   = 600;   // cube rises
-const ROTATE_MS = 800;   // cube spins 90°
+const ROTATE_MS = 1200;  // cube spins 90°
+const PAUSE_MS  = 400;   // hesitation after rotation, before drop
 const DROP_MS   = 600;   // cube settles back down
-const CYCLE_MS  = HOLD_MS + LIFT_MS + ROTATE_MS + DROP_MS; // total per word
 
 // CSS transition adapts to whichever phase is active
-type Phase = "hold" | "lift" | "rotate" | "drop";
+type Phase = "hold" | "lift" | "rotate" | "pause" | "drop";
 
 function transitionFor(phase: Phase): string {
   switch (phase) {
     case "hold":   return "transform 0ms linear";
     case "lift":   return `transform ${LIFT_MS}ms ease-out`;
     case "rotate": return `transform ${ROTATE_MS}ms ease-in-out`;
+    case "pause":  return "transform 0ms linear";
     case "drop":   return `transform ${DROP_MS}ms ease-in`;
   }
 }
@@ -133,7 +134,12 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
       rotRef.current += 1;
       setRotation(rotRef.current);
       setPhase("rotate");
-      schedule(doDrop, ROTATE_MS);
+      schedule(doPause, ROTATE_MS);
+    };
+
+    const doPause = () => {
+      setPhase("pause");
+      schedule(doDrop, PAUSE_MS);
     };
 
     const doDrop = () => {
@@ -151,7 +157,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Transform ───────────────────────────────────────
-  const lifted = phase === "lift" || phase === "rotate";
+  const lifted = phase === "lift" || phase === "rotate" || phase === "pause";
   const liftZ = lifted ? "1.5em" : "0";
   const rotateX = rotation * -90;
 
