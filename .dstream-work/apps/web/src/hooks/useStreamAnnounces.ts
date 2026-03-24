@@ -297,8 +297,36 @@ function applyStreamSnapshot() {
   }
 
   const deduped = dedupeByCanonicalStream(Array.from(streamDirectoryStore.streamsByKey.values()), now);
-  const sorted = sortStreamsStable(deduped, streamDirectoryStore.orderMeta);
-  const capped = sorted.slice(0, STREAM_CACHE_MAX_ITEMS);
+
+  // Stable merge: preserve the order of previously-emitted streams,
+  // only append new ones at the end (sorted among themselves).
+  const prevKeys = new Set(
+    streamDirectoryStore.snapshot.streams.map((s) => makeStreamKey(s.pubkey, s.streamId))
+  );
+  const prevMap = new Map(
+    streamDirectoryStore.snapshot.streams.map((s) => [makeStreamKey(s.pubkey, s.streamId), s])
+  );
+
+  // Keep previous streams in their existing order, updating data but NOT position
+  const kept: StreamAnnounce[] = [];
+  for (const prev of streamDirectoryStore.snapshot.streams) {
+    const key = makeStreamKey(prev.pubkey, prev.streamId);
+    const updated = deduped.find((s) => makeStreamKey(s.pubkey, s.streamId) === key);
+    if (updated) kept.push(updated);
+  }
+
+  // New streams that weren't in the previous snapshot — sort then append
+  const newStreams = deduped.filter((s) => !prevKeys.has(makeStreamKey(s.pubkey, s.streamId)));
+  const sortedNew = sortStreamsStable(newStreams, streamDirectoryStore.orderMeta);
+
+  // Combine: live first within each group, but don't re-sort kept streams
+  const keptLive = kept.filter((s) => s.status === "live");
+  const keptOther = kept.filter((s) => s.status !== "live");
+  const newLive = sortedNew.filter((s) => s.status === "live");
+  const newOther = sortedNew.filter((s) => s.status !== "live");
+
+  const merged = [...keptLive, ...newLive, ...keptOther, ...newOther];
+  const capped = merged.slice(0, STREAM_CACHE_MAX_ITEMS);
   if (streamDirectoryStore.streamsByKey.size > STREAM_CACHE_MAX_ITEMS) {
     const keep = new Set(capped.map((stream) => makeStreamKey(stream.pubkey, stream.streamId)));
     for (const streamKey of Array.from(streamDirectoryStore.streamsByKey.keys())) {
