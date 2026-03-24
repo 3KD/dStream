@@ -261,11 +261,21 @@ const streamDirectoryStore: StreamDirectoryStore = {
   fallbackLastAtMs: 0
 };
 
+let applySnapshotTimer: ReturnType<typeof setTimeout> | null = null;
+
 function emitSnapshot(patch: Partial<StreamDirectorySnapshot>) {
   streamDirectoryStore.snapshot = { ...streamDirectoryStore.snapshot, ...patch };
   for (const listener of streamDirectoryStore.listeners) {
     listener();
   }
+}
+
+function applyStreamSnapshotDebounced() {
+  if (applySnapshotTimer) return;
+  applySnapshotTimer = setTimeout(() => {
+    applySnapshotTimer = null;
+    applyStreamSnapshot();
+  }, 500);
 }
 
 function applyStreamSnapshot() {
@@ -349,7 +359,7 @@ function updateStreamAnnounce(event: any) {
   const hintGraceCutoff = now - LIVE_HINT_GRACE_SEC;
   const normalized = normalizeStaleLiveStatus(parsed, staleCutoff, hintGraceCutoff);
   streamDirectoryStore.streamsByKey.set(streamKey, normalized);
-  applyStreamSnapshot();
+  applyStreamSnapshotDebounced();
 }
 
 function mergeFallbackStreams(streams: StreamAnnounce[]) {
