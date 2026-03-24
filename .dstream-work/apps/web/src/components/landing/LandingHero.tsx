@@ -33,13 +33,8 @@ export function LandingHero({
         </span>
       </div>
 
-      <p className="mx-auto flex max-w-3xl flex-col items-center text-center text-xl leading-tight text-neutral-400">
-        <span className="inline-block -translate-x-8 md:-translate-x-14">
-          <span className="text-blue-500">dStream</span> – World’s first decentralized streaming protocol.
-        </span>
-        <span className="mt-1 inline-block translate-x-8 md:translate-x-14">
-          Freely built for people of the modern de-fi economy.
-        </span>
+      <p className="text-xl text-neutral-400 max-w-2xl mx-auto">
+        <span className="text-blue-500">dStream</span> – Freely built for people of the modern de-fi economy.
       </p>
 
       <div className="flex gap-4 justify-center pt-6">
