@@ -2,15 +2,16 @@
 
 import { useEffect, useState, useRef } from "react";
 import {
-    ShieldCheck, Unlock, Users, EyeOff, Network,
+    ShieldCheck, Unlock, Users, EyeOff,
     Globe, PenTool, Megaphone, Music, Camera,
-    Gamepad, Flag, type LucideIcon
+    Gamepad, type LucideIcon
 } from "lucide-react";
 
 export const WORDS = [
     "Decentralized",
-    "Unstoppable",
     "P2P",
+    "Independent",
+    "Unstoppable",
     "Ownerless",
     "Private",
     "Permissionless",
@@ -19,8 +20,7 @@ export const WORDS = [
     "Activism",
     "Music",
     "Gamer",
-    "Influencer",
-    "Independent"
+    "Influencer"
 ];
 
 // Icon + color for each word
@@ -30,14 +30,14 @@ const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: strin
     "Permissionless": { icon: Unlock, color: "text-yellow-400" },
     "Ownerless": { icon: Users, color: "text-blue-400" },
     "Private": { icon: EyeOff, color: "text-red-400" },
-    "P2P": { icon: Network, color: "text-cyan-400" },
+    "P2P": { img: "/p2p-nodes.svg", color: "text-cyan-400" },
     "Global": { icon: Globe, color: "text-emerald-400" },
     "Journalism": { icon: PenTool, color: "text-orange-400" },
     "Activism": { icon: Megaphone, color: "text-pink-400" },
     "Music": { icon: Music, color: "text-violet-400" },
     "Influencer": { icon: Camera, color: "text-rose-400" },
     "Gamer": { icon: Gamepad, color: "text-lime-400" },
-    "Independent": { icon: Flag, color: "text-amber-400" },
+    "Independent": { img: "/bitcoin.svg", color: "text-amber-400" },
 };
 
 // Hex colors for CSS transitions (Tailwind classes don't animate)
