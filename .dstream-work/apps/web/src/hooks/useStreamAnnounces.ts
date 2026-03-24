@@ -17,7 +17,7 @@ interface UseStreamAnnouncesOptions {
 }
 
 const LIVE_STALE_SEC = 6 * 60 * 60;
-const LIVE_HINT_GRACE_DEFAULT_SEC = 72 * 60 * 60;
+const LIVE_HINT_GRACE_DEFAULT_SEC = 45 * 24 * 60 * 60;
 const LIVE_HINT_GRACE_SEC = (() => {
   const raw = Number(process.env.NEXT_PUBLIC_STREAM_LIVE_HINT_GRACE_SEC ?? "");
   if (!Number.isFinite(raw)) return LIVE_HINT_GRACE_DEFAULT_SEC;

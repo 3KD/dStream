@@ -346,8 +346,9 @@ export default function BrowseClient() {
                               loading="lazy"
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                              <img src="/logo_trimmed.png" alt="" className="w-16 h-16 object-contain opacity-20 grayscale" />
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
+                              <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
+                              <span className="text-[11px] font-semibold tracking-wider uppercase text-neutral-700">dStream</span>
                             </div>
                           )}
                           <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
@@ -426,8 +427,9 @@ export default function BrowseClient() {
                               loading="lazy"
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                              <img src="/logo_trimmed.png" alt="" className="w-16 h-16 object-contain opacity-20 grayscale" />
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
+                              <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
+                              <span className="text-[11px] font-semibold tracking-wider uppercase text-neutral-700">dStream</span>
                             </div>
                           )}
                           <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">

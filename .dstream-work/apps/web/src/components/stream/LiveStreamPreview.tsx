@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Play } from "lucide-react";
 import Hls from "hls.js";
 import { makeOriginStreamId } from "@/lib/origin";
 
@@ -139,7 +138,12 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
   const displayImage = frameDataUrl ?? (fallbackImage?.trim() || null);
 
   if (!displayImage) {
-    return <Play className="w-12 h-12 text-white/20 group-hover:text-white/50 transition" />;
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
+        <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
+        <span className="text-[11px] font-semibold tracking-wider uppercase text-neutral-700">dStream</span>
+      </div>
+    );
   }
 
   return <img src={displayImage} alt={title} className="w-full h-full object-cover" loading="lazy" />;
