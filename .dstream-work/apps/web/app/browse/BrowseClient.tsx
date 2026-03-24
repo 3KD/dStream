@@ -346,7 +346,9 @@ export default function BrowseClient() {
                               loading="lazy"
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-500 text-sm">No thumbnail</div>
+                            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                              <img src="/logo_trimmed.png" alt="" className="w-16 h-16 object-contain opacity-20 grayscale" />
+                            </div>
                           )}
                           <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
                             {vodModeLabel(vodPolicy)}
@@ -424,7 +426,9 @@ export default function BrowseClient() {
                               loading="lazy"
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-500 text-sm">No thumbnail</div>
+                            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                              <img src="/logo_trimmed.png" alt="" className="w-16 h-16 object-contain opacity-20 grayscale" />
+                            </div>
                           )}
                           <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
                             Offline

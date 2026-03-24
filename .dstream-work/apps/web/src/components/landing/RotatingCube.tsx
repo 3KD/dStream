@@ -108,11 +108,12 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
 
       setIsLifted(true);
 
+      // Trigger rotation almost immediately so lift + rotate animate together
       setTimeout(() => {
         if (cancelled) return;
         rotationCountRef.current += 1;
         setRotationCount(rotationCountRef.current);
-      }, ROTATE_TRANSITION_MS);
+      }, 50);
 
       setTimeout(() => {
         if (cancelled) return;
