@@ -125,7 +125,7 @@ function canonicalStreamKey(stream: StreamAnnounce): string {
   return idFromTag || idFromUrl || makeStreamKey(stream.pubkey, stream.streamId).toLowerCase();
 }
 
-function streamQualityScore(stream: StreamAnnounce, nowSec: number): number {
+function streamQualityScore(stream: StreamAnnounce): number {
   const url = (stream.streaming ?? "").trim().toLowerCase();
   const image = (stream.image ?? "").trim();
   let score = 0;
@@ -136,28 +136,27 @@ function streamQualityScore(stream: StreamAnnounce, nowSec: number): number {
   if (url.includes("trycloudflare.com") || url.includes("host.docker.internal") || url.includes("localhost")) score -= 8;
   if (!isLikelyLivePlayableMediaUrl(stream.streaming)) score -= 10;
   if (image) score += 4;
-  const ageSec = Math.max(0, nowSec - stream.createdAt);
-  if (ageSec <= 120) score += 3;
-  else if (ageSec <= 600) score += 1;
-  else if (ageSec > 1800) score -= 2;
+  // NOTE: age-based scoring was intentionally removed — it caused dedup winners
+  // to flip every prune cycle as streams crossed age thresholds, making cards
+  // pop in/out of the grid.  Static URL + image scoring is stable.
   return score;
 }
 
-function chooseBetterStream(current: StreamAnnounce, candidate: StreamAnnounce, nowSec: number): StreamAnnounce {
+function chooseBetterStream(current: StreamAnnounce, candidate: StreamAnnounce): StreamAnnounce {
   const currentLive = current.status === "live";
   const candidateLive = candidate.status === "live";
   if (candidateLive !== currentLive) {
     return candidateLive ? candidate : current;
   }
 
-  const currentAgeSec = Math.max(0, nowSec - current.createdAt);
-  const candidateAgeSec = Math.max(0, nowSec - candidate.createdAt);
-  if (Math.abs(candidateAgeSec - currentAgeSec) >= 120) {
-    return candidateAgeSec < currentAgeSec ? candidate : current;
+  // Prefer significantly newer announcements (>= 120s difference).
+  // This comparison is time-independent: createdAt difference is constant.
+  if (Math.abs(candidate.createdAt - current.createdAt) >= 120) {
+    return candidate.createdAt > current.createdAt ? candidate : current;
   }
 
-  const currentScore = streamQualityScore(current, nowSec);
-  const candidateScore = streamQualityScore(candidate, nowSec);
+  const currentScore = streamQualityScore(current);
+  const candidateScore = streamQualityScore(candidate);
   if (candidateScore !== currentScore) {
     return candidateScore > currentScore ? candidate : current;
   }
@@ -167,7 +166,7 @@ function chooseBetterStream(current: StreamAnnounce, candidate: StreamAnnounce, 
   return current;
 }
 
-function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): StreamAnnounce[] {
+function dedupeByCanonicalStream(streams: StreamAnnounce[]): StreamAnnounce[] {
   // First pass: dedup by canonical stream key (URL-based)
   const byCanonical = new Map<string, StreamAnnounce>();
   for (const stream of streams) {
@@ -175,7 +174,7 @@ function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): Str
     const key = `${stream.pubkey.toLowerCase()}::${canonical}`;
     if (!key) continue;
     const existing = byCanonical.get(key);
-    byCanonical.set(key, existing ? chooseBetterStream(existing, stream, nowSec) : stream);
+    byCanonical.set(key, existing ? chooseBetterStream(existing, stream) : stream);
   }
 
   // Second pass: dedup by pubkey + title to collapse repeat announcements
@@ -190,23 +189,30 @@ function dedupeByCanonicalStream(streams: StreamAnnounce[], nowSec: number): Str
     }
     const key = `${stream.pubkey.toLowerCase()}::title::${normalizedTitle}`;
     const existing = byPubkeyTitle.get(key);
-    byPubkeyTitle.set(key, existing ? chooseBetterStream(existing, stream, nowSec) : stream);
+    byPubkeyTitle.set(key, existing ? chooseBetterStream(existing, stream) : stream);
   }
   return Array.from(byPubkeyTitle.values());
 }
 
 function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number, hintGraceCutoffSec: number): StreamAnnounce {
+  const hasStreamingHint = isLikelyLivePlayableMediaUrl(stream.streaming);
+
   if (stream.status === "live") {
+    // Recent enough — always keep live
     if (stream.createdAt >= staleCutoffSec) return stream;
-    const hasStreamingHint = isLikelyLivePlayableMediaUrl(stream.streaming);
+    // Has a live URL and within the grace window — keep live
     if (hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) return stream;
+    // Stale with no live URL — mark ended
     return { ...stream, status: "ended" };
   }
-  // Promote "ended" back to "live" when the stream has a live-looking HLS URL
-  // Many 24/7 streams send "ended" events but keep streaming
-  if (stream.status === "ended" && isLikelyLivePlayableMediaUrl(stream.streaming)) {
+
+  // Promote "ended" to "live" ONLY when event has a live URL AND was announced
+  // within the hint grace window. This prevents oscillation for very old events
+  // that would immediately get demoted on the next prune cycle.
+  if (stream.status === "ended" && hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) {
     return { ...stream, status: "live" };
   }
+
   return stream;
 }
 
@@ -296,7 +302,7 @@ function applyStreamSnapshot() {
     }
   }
 
-  const deduped = dedupeByCanonicalStream(Array.from(streamDirectoryStore.streamsByKey.values()), now);
+  const deduped = dedupeByCanonicalStream(Array.from(streamDirectoryStore.streamsByKey.values()));
 
   // Stable merge: preserve the order of previously-emitted streams,
   // only append new ones at the end (sorted among themselves).
