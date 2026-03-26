@@ -276,6 +276,11 @@ export async function appendVodUploadSessionChunk(input: {
   bytes: Uint8Array;
 }): Promise<{ receivedBytes: number; fileSizeBytes: number; completed: boolean }> {
   if (!input.bytes?.byteLength) throw new Error("Chunk body is empty.");
+  // Enforce per-chunk size limit: 16MB max per individual chunk.
+  const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
+  if (input.bytes.byteLength > MAX_CHUNK_BYTES) {
+    throw new Error(`Chunk too large (${input.bytes.byteLength} bytes). Maximum is ${MAX_CHUNK_BYTES} bytes.`);
+  }
   const session = await readSession(input.uploadId);
   if (input.uploadToken !== session.uploadToken) throw new Error("Upload token mismatch.");
   if (!Number.isInteger(input.offset) || input.offset < 0) throw new Error("Chunk offset is invalid.");

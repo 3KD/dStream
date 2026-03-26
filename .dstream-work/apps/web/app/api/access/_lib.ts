@@ -42,7 +42,7 @@ export function authorizeAccessAdmin(
   proofEvent: unknown,
   hostPubkey: string
 ): { ok: true; actorPubkey: string } | { ok: false; status: number; error: string } {
-  if (parseBoolean(process.env.DSTREAM_ACCESS_ALLOW_UNAUTH)) {
+  if (parseBoolean(process.env.DSTREAM_ACCESS_ALLOW_UNAUTH) && process.env.NODE_ENV !== "production") {
     return { ok: true, actorPubkey: "0".repeat(64) };
   }
   const proof = verifyAccessProof(proofEvent, "access_admin");

@@ -23,7 +23,14 @@ function nowSec(): number {
 function getTokenSecret(): Buffer {
   const raw = (process.env.DSTREAM_ACCESS_TOKEN_SECRET ?? process.env.DSTREAM_PLAYBACK_ACCESS_SECRET ?? "").trim();
   if (raw) return Buffer.from(raw, "utf8");
-  return Buffer.from("dstream-access-local-dev-secret", "utf8");
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("DSTREAM_ACCESS_TOKEN_SECRET is required in production. Set it in .env.");
+  }
+  // Dev-only: generate a per-process random secret so tokens can't be forged with known keys.
+  const { randomBytes } = require("crypto");
+  const devSecret = randomBytes(32);
+  process.env.DSTREAM_ACCESS_TOKEN_SECRET = devSecret.toString("hex");
+  return devSecret;
 }
 
 function signPayload(payloadEncoded: string): string {

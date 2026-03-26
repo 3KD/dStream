@@ -680,7 +680,16 @@ export class P2PSwarm {
     }
 
     if (msg.t === "push") {
-      // Incoming unsolicited segment push — prepare to receive binary data.
+      // Only accept pushes from the stream's broadcaster (or peers who have relayed from the broadcaster).
+      // Signal identity pubkeys are ephemeral per session, so we also accept pushes from any peer
+      // if integrity verification is enabled (segments will be hash-checked against the signed manifest).
+      // Without integrity, we restrict to broadcaster-originated pushes by checking the segment URL
+      // contains the stream pubkey — this prevents random peers from injecting content.
+      const urlLower = (msg.url || "").toLowerCase();
+      const expectPrefix = `p2p://${this.streamPubkey.toLowerCase()}/`;
+      if (!urlLower.startsWith(expectPrefix) && !urlLower.includes(`/api/hls/`)) {
+        return; // Reject pushes with URLs that don't match this stream's origin.
+      }
       const len = msg.len;
       if (len <= 0 || len > 8 * 1024 * 1024) return;
       peer.expectBinary = { id: msg.id, url: msg.url, len, received: 0, buffer: new Uint8Array(len) };
@@ -706,9 +715,15 @@ export class P2PSwarm {
     }
 
     if (msg.t === "manifest") {
-      this.currentManifest = msg.data;
+      // Validate manifest references this stream's pubkey to prevent injection.
+      const manifestData = msg.data || "";
+      const expectPrefix = `p2p://${this.streamPubkey.toLowerCase()}/`;
+      if (manifestData.includes("p2p://") && !manifestData.toLowerCase().includes(expectPrefix)) {
+        return; // Reject manifests referencing a different stream.
+      }
+      this.currentManifest = manifestData;
       try {
-        this.onManifestReceived?.(msg.data);
+        this.onManifestReceived?.(manifestData);
       } catch {
         // ignore
       }

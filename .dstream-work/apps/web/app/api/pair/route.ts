@@ -23,12 +23,33 @@ interface PairToken {
 }
 
 const TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_ACTIVE_TOKENS = 10; // Cap to prevent memory exhaustion
 const tokens = new Map<string, PairToken>();
+
+// Rate limiting: max 6 token generations per minute per IP.
+const rateLimitWindow = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 6;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitWindow.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitWindow.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
 
 function cleanExpiredTokens() {
   const now = Date.now();
   for (const [key, entry] of tokens) {
     if (now - entry.createdAt > TOKEN_TTL_MS) tokens.delete(key);
+  }
+  // Clean stale rate limit entries.
+  for (const [ip, entry] of rateLimitWindow) {
+    if (now >= entry.resetAt) rateLimitWindow.delete(ip);
   }
 }
 
@@ -58,7 +79,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Pairing disabled" }, { status: 404 });
   }
 
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(ip)) {
+    return NextResponse.json({ error: "Too many pairing requests. Try again in a minute." }, { status: 429 });
+  }
+
   cleanExpiredTokens();
+
+  // Cap active tokens to prevent memory exhaustion.
+  if (tokens.size >= MAX_ACTIVE_TOKENS) {
+    return NextResponse.json({ error: "Too many active pairing tokens. Wait for some to expire." }, { status: 429 });
+  }
 
   const token = randomBytes(32).toString("hex");
   tokens.set(token, { token, createdAt: Date.now() });
