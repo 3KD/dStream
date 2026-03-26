@@ -23,6 +23,9 @@ import { createPaymentMethodDraft, paymentMethodToDraft, type PaymentMethodDraft
 import { type StreamPaymentAsset } from "@dstream/protocol";
 import { LOCAL_RELAY_ENABLED_KEY } from "@/lib/config";
 import { getLocalRelay, initLocalRelay, destroyLocalRelay, type LocalRelayStats } from "@/lib/relay/localRelay";
+import { loadWeights, saveWeights, exportWeights, importWeights, DEFAULT_WEIGHTS, WEIGHT_LABELS, type FeedWeights } from "@/lib/feed/weights";
+import { clearWatchHistory, getWatchHistoryCount } from "@/lib/feed/watchHistory";
+import { getSavedAlgorithmId } from "@/lib/feed/registry";
 
 const IDENTITY_STORE_STORAGE_KEY = "dstream_identity_store_v2";
 const SOCIAL_STORE_STORAGE_KEY = "dstream_social_v1";
@@ -190,6 +193,127 @@ function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli
   if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
   if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
   return "Open the native wallet app and send to the copied address or wallet URI target.";
+}
+
+function FeedWeightEditor() {
+  const [weights, setWeights] = useState<FeedWeights>(() => loadWeights());
+  const [historyCount, setHistoryCount] = useState(0);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getWatchHistoryCount().then(setHistoryCount);
+  }, []);
+
+  const updateWeight = useCallback((key: keyof FeedWeights, value: number) => {
+    setWeights((prev) => {
+      const next = { ...prev, [key]: value };
+      saveWeights(next);
+      return next;
+    });
+  }, []);
+
+  const resetToDefaults = useCallback(() => {
+    setWeights({ ...DEFAULT_WEIGHTS });
+    saveWeights(DEFAULT_WEIGHTS);
+    setNotice("Reset to defaults.");
+  }, []);
+
+  const handleExport = useCallback(() => {
+    const json = exportWeights(weights);
+    void navigator.clipboard.writeText(json).then(() => setNotice("Copied to clipboard."));
+  }, [weights]);
+
+  const handleImport = useCallback(() => {
+    setImportError(null);
+    const result = importWeights(importText);
+    if (!result) {
+      setImportError("Invalid feed weights JSON.");
+      return;
+    }
+    setWeights(result);
+    saveWeights(result);
+    setImportText("");
+    setNotice("Imported successfully.");
+  }, [importText]);
+
+  const handleClearHistory = useCallback(() => {
+    void clearWatchHistory().then(() => {
+      setHistoryCount(0);
+      setNotice("Watch history cleared.");
+    });
+  }, []);
+
+  return (
+    <div className="border-t border-neutral-800 pt-4 mt-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-neutral-200">Feed Algorithm Weights</h3>
+        <span className="text-xs text-neutral-500">Active: {getSavedAlgorithmId()}</span>
+      </div>
+      <p className="text-xs text-neutral-500">
+        Tune how the &quot;For You&quot; feed ranks streams. Changes apply immediately.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {(Object.keys(WEIGHT_LABELS) as (keyof FeedWeights)[]).map((key) => {
+          const meta = WEIGHT_LABELS[key];
+          return (
+            <label key={key} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-400">{meta.label}</span>
+                <span className="text-xs font-mono text-neutral-300">{weights[key]}</span>
+              </div>
+              <input
+                type="range"
+                min={meta.min}
+                max={meta.max}
+                step={meta.step}
+                value={weights[key]}
+                onChange={(e) => updateWeight(key, Number(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <div className="text-[10px] text-neutral-600">{meta.description}</div>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2 pt-2">
+        <button onClick={resetToDefaults} className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-300">
+          Reset to defaults
+        </button>
+        <button onClick={handleExport} className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-300">
+          Export (copy JSON)
+        </button>
+        <button onClick={handleClearHistory} className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-300">
+          Clear watch history ({historyCount})
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={importText}
+            onChange={(e) => { setImportText(e.target.value); setImportError(null); }}
+            placeholder='Paste feed weights JSON to import...'
+            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-600"
+          />
+          <button
+            onClick={handleImport}
+            disabled={!importText.trim()}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-xs font-medium"
+          >
+            Import
+          </button>
+        </div>
+        {importError && <div className="text-xs text-red-400">{importError}</div>}
+      </div>
+
+      {notice && <div className="text-xs text-emerald-300">{notice}</div>}
+    </div>
+  );
 }
 
 function LocalRelayToggle({ ownerPubkey }: { ownerPubkey: string | null }) {
@@ -986,6 +1110,7 @@ export default function SettingsPage() {
               </div>
 
               <LocalRelayToggle ownerPubkey={identity?.pubkey ?? null} />
+              <FeedWeightEditor />
             </section>
 
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
