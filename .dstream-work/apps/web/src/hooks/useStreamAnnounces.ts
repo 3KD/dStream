@@ -7,6 +7,8 @@ import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
 import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 import { subscribeMany } from "@/lib/nostr";
 
+import type { FeedAlgorithm, FeedContext } from "@/lib/feed/types";
+
 interface UseStreamAnnouncesOptions {
   enabled?: boolean;
   liveOnly?: boolean;
@@ -14,6 +16,10 @@ interface UseStreamAnnouncesOptions {
   includeHidden?: boolean;
   includeMature?: boolean;
   viewerPubkey?: string | null;
+  /** Optional feed algorithm. When provided, replaces the default chronological sort. */
+  algorithm?: FeedAlgorithm | null;
+  /** Feed context for the algorithm (social signals, presence, watch history). */
+  feedContext?: Omit<FeedContext, "now" | "orderMeta"> | null;
 }
 
 const LIVE_STALE_SEC = 6 * 60 * 60;
@@ -579,7 +585,9 @@ export function useStreamAnnounces({
   limit = 50,
   includeHidden = false,
   includeMature = true,
-  viewerPubkey = null
+  viewerPubkey = null,
+  algorithm = null,
+  feedContext = null
 }: UseStreamAnnouncesOptions = {}) {
   const [directorySnapshot, setDirectorySnapshot] = useState<StreamDirectorySnapshot>(streamDirectoryStore.snapshot);
 
@@ -636,9 +644,20 @@ export function useStreamAnnounces({
         const streamPolicy = hiddenStreamPolicies.get(makeStreamKey(streamPubkey, stream.streamId));
         if (streamPolicy?.hidden) return false;
         return true;
-      })
-      .slice(0, limit);
-  }, [directorySnapshot, enabled, includeHidden, includeMature, limit, liveOnly, viewerPubkey]);
+      });
+
+    // Apply feed algorithm if provided, otherwise return in default order.
+    if (algorithm && feedContext) {
+      const fullContext: FeedContext = {
+        ...feedContext,
+        now: Math.floor(Date.now() / 1000),
+        orderMeta: streamDirectoryStore.orderMeta,
+      };
+      return algorithm.rank(filtered, fullContext).slice(0, limit);
+    }
+
+    return filtered.slice(0, limit);
+  }, [directorySnapshot, enabled, includeHidden, includeMature, limit, liveOnly, viewerPubkey, algorithm, feedContext]);
 
   return {
     streams,

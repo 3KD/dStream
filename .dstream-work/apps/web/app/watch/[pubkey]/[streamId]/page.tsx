@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Flag, Star, X } from "lucide-react";
 import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
+import { recordWatch } from "@/lib/feed/watchHistory";
 import { Player } from "@/components/Player";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
@@ -145,6 +146,26 @@ export default function WatchPage() {
   const { announce, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
+
+  // Record watch history for the feed algorithm (on-device only).
+  const watchStartRef = useRef(Date.now());
+  useEffect(() => {
+    watchStartRef.current = Date.now();
+    const currentPubkey = pubkey;
+    const currentStreamId = streamId;
+    const currentTopics = announce?.topics ?? [];
+    return () => {
+      if (!currentPubkey) return;
+      const durationSec = Math.floor((Date.now() - watchStartRef.current) / 1000);
+      void recordWatch({
+        streamKey: `${currentPubkey}:${currentStreamId}`,
+        pubkey: currentPubkey,
+        watchedAt: watchStartRef.current,
+        durationSec,
+        topics: currentTopics,
+      });
+    };
+  }, [pubkey, streamId, announce?.topics]);
   const { count: zapCount, totalSats: zapTotalSats, isConnected: zapsConnected } = useStreamZaps({
     streamPubkey: pubkey ?? "",
     streamId
