@@ -682,6 +682,12 @@ export default function SettingsPage() {
             Monetization
           </Link>
           <Link
+            href="/settings/vod"
+            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+          >
+            VOD Library
+          </Link>
+          <Link
             href="/pair"
             className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
           >

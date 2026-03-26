@@ -121,6 +121,7 @@ This validates manifest verification + tamper signaling markers from `/dev/e2e`.
 - `/profile` and `/profile/:npub` (kind `0` publish/view)
 - `/inbox`, `/guilds`, `/moderation`, `/analytics`
 - `/whitepaper`, `/docs`, `/use-cases`, `/donate`
+- `/settings/vod` (VOD library management — upload videos, manage playlists & access packages)
 - `/pair` (QR code for mobile app pairing — requires `DSTREAM_PAIR_SECRET`)
 
 ## Mobile pairing
