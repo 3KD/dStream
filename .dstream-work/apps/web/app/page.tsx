@@ -9,6 +9,10 @@ import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
 import { isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
+import { getAlgorithm, getSavedAlgorithmId, saveAlgorithmId, listAlgorithms } from "@/lib/feed/registry";
+import { useSocial } from "@/context/SocialContext";
+import { getWatchHistory } from "@/lib/feed/watchHistory";
+import type { FeedContext, WatchHistoryEntry } from "@/lib/feed/types";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { formatXmrAtomic, isReplayEligibleStream, resolveVodPolicy, vodModeLabel } from "@/lib/vodPolicy";
@@ -16,7 +20,34 @@ import { buildWatchHref } from "@/lib/watchHref";
 
 export default function HomePage() {
   const router = useRouter();
-  const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
+  const social = useSocial();
+  const [algoId, setAlgoId] = useState(() => getSavedAlgorithmId());
+  const [watchHistory, setWatchHistory] = useState<WatchHistoryEntry[]>([]);
+  const algorithm = useMemo(() => getAlgorithm(algoId), [algoId]);
+
+  // Load watch history for recommendation algorithm.
+  useEffect(() => {
+    void getWatchHistory(200).then(setWatchHistory);
+  }, []);
+
+  const feedContext = useMemo((): Omit<FeedContext, "now" | "orderMeta"> => ({
+    social: {
+      isTrusted: (pk) => social.isTrusted(pk),
+      isBlocked: (pk) => social.isBlocked(pk),
+      isMuted: (pk) => social.isMuted(pk),
+      isFavoriteCreator: (pk) => social.isFavoriteCreator(pk),
+      isFavoriteStream: (pk, sid) => social.isFavoriteStream(pk, sid),
+    },
+    presence: new Map(), // TODO: wire global presence when available
+    watchHistory,
+    guildMemberships: new Set(),
+  }), [social, watchHistory]);
+
+  const { streams: liveStreams, isLoading } = useStreamAnnounces({
+    liveOnly: true, limit: 60,
+    algorithm: algoId !== "chronological" ? algorithm : null,
+    feedContext: algoId !== "chronological" ? feedContext : null,
+  });
   const { streams: announcedStreams, isLoading: vodLoading } = useStreamAnnounces({ liveOnly: false, limit: 180 });
   const [searchQuery, setSearchQuery] = useState("");
   const [heroCollapsed, setHeroCollapsed] = useState(false);
@@ -111,6 +142,21 @@ export default function HomePage() {
             </h2>
 
             <div className="flex items-center gap-2">
+              {listAlgorithms().map((algo) => (
+                <button
+                  key={algo.id}
+                  onClick={() => { setAlgoId(algo.id); saveAlgorithmId(algo.id); }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                    algoId === algo.id
+                      ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
+                      : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-600 hover:text-white"
+                  }`}
+                  title={algo.description}
+                >
+                  {algo.name}
+                </button>
+              ))}
+
               <Link
                 href="/browse"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
