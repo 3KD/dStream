@@ -227,7 +227,7 @@ export default function GuildsPage() {
 
       setDeleteBusyKey(canonicalKey);
       try {
-        const aTag = `30315:${guild.pubkey}:${guild.guildId}`;
+        const aTag = `39315:${guild.pubkey}:${guild.guildId}`;
         const unsigned = {
           kind: 5,
           pubkey: identity.pubkey,
@@ -235,7 +235,7 @@ export default function GuildsPage() {
           tags: [
             ["e", eventId],
             ["a", aTag],
-            ["k", "30315"]
+            ["k", "39315"]
           ],
           content: `Delete guild ${guild.guildId}`
         };
@@ -329,7 +329,7 @@ export default function GuildsPage() {
               <Users className="w-6 h-6 text-blue-500" />
               Guilds
             </h1>
-            <p className="text-sm text-neutral-400">Curated discovery published on Nostr (kind 30315), independent of whether a guild is live right now.</p>
+            <p className="text-sm text-neutral-400">Curated discovery published on Nostr (kind 39315), independent of whether a guild is live right now.</p>
           </div>
           <Link className="text-sm text-neutral-300 hover:text-white" href="/">
             Home

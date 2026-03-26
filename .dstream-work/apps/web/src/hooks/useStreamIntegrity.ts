@@ -43,7 +43,7 @@ export function useStreamIntegrity(opts: {
     if (!session) return;
 
     const filter: Filter = {
-      kinds: [30313],
+      kinds: [39313],
       authors: [session.manifestSignerPubkey],
       "#a": [makeATag(session.streamPubkey, session.streamId)],
       since: Math.floor(Date.now() / 1000) - 3600,

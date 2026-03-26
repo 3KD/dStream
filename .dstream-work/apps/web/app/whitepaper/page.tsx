@@ -34,8 +34,8 @@ export default function WhitepaperPage() {
             <h2 className="text-2xl font-bold">1. System Model</h2>
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3 text-sm text-neutral-300">
               <p>
-                <span className="text-neutral-100 font-semibold">Control plane (Nostr):</span> stream announce (`kind 30311`), presence (`30312`),
-                moderation/roles (`30313`), chat (`1`), and private coordination (`4` / `20004`).
+                <span className="text-neutral-100 font-semibold">Control plane (Nostr):</span> stream announce (`kind 30311`), presence (`10312`),
+                moderation/roles (`39317`/`39318`), chat (`1`), and private coordination (`4` / `20004`).
               </p>
               <p>
                 <span className="text-neutral-100 font-semibold">Media plane:</span> broadcaster publishes through WHIP; playback resolves through

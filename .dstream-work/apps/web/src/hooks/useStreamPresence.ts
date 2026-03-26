@@ -64,7 +64,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
     firstSeenRef.current.clear();
 
     const filter: Filter = {
-      kinds: [30312],
+      kinds: [10312],
       "#a": [makeATag(streamPubkey, streamId)],
       since: Math.floor(Date.now() / 1000) - windowSec * 4,
       limit: 500

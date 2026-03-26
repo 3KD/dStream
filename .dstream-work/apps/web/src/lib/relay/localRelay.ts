@@ -25,15 +25,15 @@ const ALLOWED_KINDS = new Set([
   4,     // encrypted DMs
   1311,  // stream chat
   8108,  // P2P signal
+  10312, // presence (NIP-53 aligned)
   30311, // stream announce
-  30312, // presence
-  30313, // manifest root
-  30314, // XMR receipt
-  30315, // guild
-  30317, // stream mod action
-  30318, // stream mod role
-  30319, // guild membership
-  30320, // guild role
+  39313, // manifest root
+  39314, // XMR receipt
+  39315, // guild
+  39317, // stream mod action
+  39318, // stream mod role
+  39319, // guild membership
+  39320, // guild role
 ]);
 
 export const LOCAL_RELAY_URL = "local://self";

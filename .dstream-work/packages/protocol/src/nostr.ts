@@ -36,7 +36,7 @@ export function parseStreamATag(aTag: string): { streamPubkey: string; streamId:
 }
 
 export function parseGuildATag(aTag: string): { guildPubkey: string; guildId: string } | null {
-  // Expected: "30315:<pubkeyHex>:<d>", but allow ":" inside <d> by splitting on the first 2 colons only.
+  // Expected: "39315:<pubkeyHex>:<d>", but allow ":" inside <d> by splitting on the first 2 colons only.
   const first = aTag.indexOf(":");
   if (first < 0) return null;
   const second = aTag.indexOf(":", first + 1);

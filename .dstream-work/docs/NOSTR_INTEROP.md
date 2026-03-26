@@ -13,28 +13,31 @@ dStream uses NIP-53 (Live Activities) as the foundation for livestreaming on Nos
 
 These two kinds are the public interface. Any NIP-53 client can discover dStream broadcasts and participate in chat.
 
-## Kind Clashes (must fix)
+## Kind Clashes — RESOLVED
 
-| Kind | dStream Usage | NIP-53 Definition | Action Required |
-|------|--------------|-------------------|-----------------|
-| **30312** | Viewer presence (heartbeat) | "Meeting Space Event" (space config) | **CLASH.** NIP-53 uses **10312** for presence. dStream should migrate to 10312 or a custom kind. |
-| **30313** | Manifest root (integrity signing) | "Meeting Room Events" (scheduled meetings) | **CLASH.** dStream should move to an unused kind. |
+Both clashes have been fixed:
 
-## Custom Event Kinds (unregistered)
+| Old Kind | New Kind | Reason |
+|----------|----------|--------|
+| 30312 (presence) | **10312** | Aligns with NIP-53 presence spec |
+| 30313 (manifest) | **39313** | Avoids NIP-53 "Meeting Room" collision |
 
-These kinds are used internally by dStream and are not defined by any NIP. They are in the 30000–40000 addressable event range which is actively used by new NIPs — consider migrating to a higher range (e.g. 39000+) or submitting a NIP proposal.
+## Custom Event Kinds
+
+All custom kinds have been moved to the 39xxx range to avoid collision with NIP-registered kinds in the 30000–30999 range.
 
 | Kind | Purpose | Collision Risk |
 |------|---------|---------------|
 | **8108** | P2P WebRTC signaling (SDP offer/answer/candidate/bye, encrypted via NIP-04) | Low — ephemeral event range, no known NIP claims this |
-| **30314** | Monero tip receipt (amount, tx confirmation) | Medium — in active addressable range |
-| **30315** | Guild definition (community/group profile) | Medium |
-| **30316** | P2P bytes receipt (bandwidth contribution proof) | Medium |
-| **30317** | Stream moderation action (mute/ban/clear) | Medium |
-| **30318** | Stream moderator/subscriber role assignment | Medium |
-| **30319** | Guild membership (join/leave) | Medium |
-| **30320** | Guild role assignment (member/mod/admin) | Medium |
-| **30321** | App-level discovery moderation (hide/show streams) | Medium |
+| **39313** | Manifest root (integrity signing) | Low — high addressable range |
+| **39314** | Monero tip receipt (amount, tx confirmation) | Low |
+| **39315** | Guild definition (community/group profile) | Low |
+| **39316** | P2P bytes receipt (bandwidth contribution proof) | Low |
+| **39317** | Stream moderation action (mute/ban/clear) | Low |
+| **39318** | Stream moderator/subscriber role assignment | Low |
+| **39319** | Guild membership (join/leave) | Low |
+| **39320** | Guild role assignment (member/mod/admin) | Low |
+| **39321** | App-level discovery moderation (hide/show streams) | Low |
 
 ## NIPs Used
 
@@ -61,13 +64,15 @@ These kinds are used internally by dStream and are not defined by any NIP. They 
 - Guilds, moderation roles, and discovery mod events are dStream-specific
 - Manifest integrity (kind 30313) is dStream-specific
 
-## Recommended Migration Plan
+## Migration History
 
+Completed 2026-03-26:
 1. **30312 → 10312** for presence (aligns with NIP-53 presence spec)
 2. **30313 → 39313** for manifest root (moves out of NIP-53 collision range)
 3. **30314–30321 → 39314–39321** for all custom kinds (reduces future collision risk)
-4. **8108** — keep as-is (ephemeral range, low collision risk)
-5. Submit a NIP proposal for dStream's custom kinds if adoption grows
+4. **8108** — kept as-is (ephemeral range, low collision risk)
+
+Next step: submit a NIP proposal for dStream's custom kinds if adoption grows.
 
 ## Related Projects
 

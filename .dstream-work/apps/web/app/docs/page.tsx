@@ -55,9 +55,9 @@ const protocolLandscape = [
 
 const eventKinds = [
   { kind: "30311", label: "Stream announce", note: "Replaceable live metadata (`d`, `title`, `streaming`, host mode, discoverability, payment methods)." },
-  { kind: "30312", label: "Presence", note: "Viewer heartbeat and participation estimates." },
-  { kind: "30313", label: "Moderation / roles", note: "Relay-scoped mute/block + moderator/subscriber role updates." },
-  { kind: "30321", label: "Discovery moderation", note: "Operator hide/restore actions for official app discovery surfaces only." },
+  { kind: "10312", label: "Presence", note: "Viewer heartbeat and participation estimates (NIP-53 aligned)." },
+  { kind: "39317/39318", label: "Moderation / roles", note: "Relay-scoped mute/block + moderator/subscriber role updates." },
+  { kind: "39321", label: "Discovery moderation", note: "Operator hide/restore actions for official app discovery surfaces only." },
   { kind: "1", label: "Public chat", note: "Stream-associated public text events." },
   { kind: "4 / 20004", label: "DM / whisper", note: "Private encrypted channels for broadcaster/viewer coordination." }
 ];

@@ -275,8 +275,8 @@ export default function GuildDetailPage() {
         created_at: nowSec(),
         tags: [
           ["e", eventId],
-          ["a", `30315:${guild.pubkey}:${guild.guildId}`],
-          ["k", "30315"]
+          ["a", `39315:${guild.pubkey}:${guild.guildId}`],
+          ["k", "39315"]
         ],
         content: `Delete guild ${guild.guildId}`
       };
@@ -352,7 +352,7 @@ export default function GuildDetailPage() {
         ) : !guild ? (
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-8 text-neutral-300 text-center space-y-3">
             <div className="text-lg font-semibold">Guild not found</div>
-            <div className="text-sm text-neutral-500">No kind 30315 event was found for this author + d-tag on your configured relays.</div>
+            <div className="text-sm text-neutral-500">No kind 39315 event was found for this author + d-tag on your configured relays.</div>
             <button
               type="button"
               className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"

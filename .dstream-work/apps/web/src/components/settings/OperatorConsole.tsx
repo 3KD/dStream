@@ -1270,7 +1270,7 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
                               onClick={() => void publishReceipt(t)}
                               disabled={status === "publishing"}
                               className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                              title="Publish a kind 30314 receipt to configured relays"
+                              title="Publish a kind 39314 receipt to configured relays"
                             >
                               {status === "publishing" ? "Publishing…" : status === "ok" ? "Receipt OK" : status === "fail" ? "Receipt failed" : "Publish receipt"}
                             </button>
