@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { makeATag, parseStreamPresenceEvent } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -72,6 +72,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsed = parseStreamPresenceEvent(event, { streamPubkey, streamId });
         if (!parsed) return;
 

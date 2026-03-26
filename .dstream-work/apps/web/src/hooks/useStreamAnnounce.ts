@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -34,6 +34,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsed = parseStreamAnnounceEvent(event);
         if (!parsed) return;
         if (parsed.pubkey !== pubkey || parsed.streamId !== streamId) return;

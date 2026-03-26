@@ -6,7 +6,7 @@ import {
   parseP2PSignalEvent,
   type P2PSignalPayloadV1
 } from "@dstream/protocol";
-import { SimplePool } from "nostr-tools";
+import { SimplePool, validateEvent, verifyEvent } from "nostr-tools";
 import { getPool } from "@/lib/nostr";
 import type { SignalIdentity } from "./localIdentity";
 
@@ -97,6 +97,11 @@ export function createP2PSignalClient(opts: {
         onevent: async (event: any) => {
           const raw = event as any;
           if (raw?.pubkey && raw?.id) log(`recv event from=${String(raw.pubkey).slice(0, 8)}… id=${String(raw.id).slice(0, 8)}…`);
+
+          if (!validateEvent(event) || !verifyEvent(event)) {
+            log("drop: signature verification failed");
+            return;
+          }
 
           const parsed = parseP2PSignalEvent(event as any, {
             streamPubkey,

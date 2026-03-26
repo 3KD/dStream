@@ -78,6 +78,7 @@ function parsePublicChatMessage(
   expectedStreamPubkey: string
 ): StreamChatFeedMessage | null {
   if (!event || (event.kind !== NOSTR_KINDS.STREAM_CHAT && event.kind !== 1)) return null;
+  if (!validateEvent(event) || !verifyEvent(event)) return null;
 
   const matchedATag = getMatchingATag(event, allowedATags);
   if (!matchedATag) return null;

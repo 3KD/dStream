@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Filter, Event as NostrEvent } from "nostr-tools";
+import { type Filter, type Event as NostrEvent, validateEvent, verifyEvent } from "nostr-tools";
 import {
   buildStreamModerationEvent,
   buildStreamModeratorRoleEvent,
@@ -89,6 +89,7 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsedRole = parseStreamModeratorRoleEvent(event, { streamPubkey, streamId });
         if (parsedRole) {
           const key = parsedRole.targetPubkey;

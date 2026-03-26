@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, type DiscoveryModerationRecord } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -54,6 +54,7 @@ export function useDiscoveryModeration(operatorPubkeysOverride?: string[]) {
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsed = parseDiscoveryModerationEvent(event);
         if (!parsed) return;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 import { NIP57_ZAP_RECEIPT_KIND, isZapReceiptForStream, parseZapReceiptEvent, type ParsedZapReceipt } from "@/lib/zaps";
@@ -37,6 +37,7 @@ export function useStreamZaps(scope: { streamPubkey: string; streamId: string; w
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsed = parseZapReceiptEvent(event);
         if (!parsed) return;
         if (!isZapReceiptForStream(parsed, streamPubkey, streamId)) return;

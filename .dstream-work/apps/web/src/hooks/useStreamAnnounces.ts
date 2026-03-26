@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
 import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
@@ -342,6 +342,7 @@ function applyStreamSnapshot() {
 }
 
 function updateDiscoveryPolicy(event: any) {
+  if (!validateEvent(event) || !verifyEvent(event)) return;
   const parsedPolicy = parseDiscoveryModerationEvent(event);
   if (!parsedPolicy) return;
   const key =
@@ -367,6 +368,7 @@ function updateDiscoveryPolicy(event: any) {
 }
 
 function updateStreamAnnounce(event: any) {
+  if (!validateEvent(event) || !verifyEvent(event)) return;
   const parsed = parseStreamAnnounceEvent(event);
   if (!parsed) return;
 

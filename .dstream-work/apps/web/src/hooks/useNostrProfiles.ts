@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { parseProfileEvent, type NostrProfileRecord } from "@/lib/profile";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -89,6 +89,7 @@ export function useNostrProfiles(pubkeysInput: string[]) {
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const parsed = parseProfileEvent(event);
         if (!parsed) return;
         if (!pubkeySet.has(parsed.pubkey)) return;

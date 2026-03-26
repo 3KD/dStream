@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import {
   NOSTR_KINDS,
   makeGuildKey,
@@ -88,6 +88,7 @@ export function useProfileGuildStatuses(profilePubkeyRaw?: string | null) {
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const guild = parseGuildEvent(event);
         if (guild) {
           const key = makeGuildKey(guild.pubkey, guild.guildId);

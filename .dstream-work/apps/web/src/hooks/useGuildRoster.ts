@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { type Filter, validateEvent, verifyEvent } from "nostr-tools";
 import { NOSTR_KINDS, parseGuildMembershipEvent, parseGuildRoleEvent, type GuildRole, type GuildMembershipStatus } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -66,6 +66,7 @@ export function useGuildRoster(opts: { guildPubkey: string; guildId: string; vie
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
+        if (!validateEvent(event) || !verifyEvent(event)) return;
         const membership = parseGuildMembershipEvent(event);
         if (membership && membership.guildPubkey === guildPubkey && membership.guildId === guildId) {
           const prev = seenMembership.current.get(membership.pubkey);
