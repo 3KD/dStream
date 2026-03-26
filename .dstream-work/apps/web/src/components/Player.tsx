@@ -14,6 +14,7 @@ interface PlayerProps {
   fallbackSrc?: string | null;
   whepSrc?: string | null;
   p2pSwarm?: P2PSwarm | null;
+  p2pOnly?: boolean;
   integrity?: IntegritySession | null;
   onReady?: () => void;
   autoplayMuted?: boolean;
@@ -145,6 +146,7 @@ export function Player({
   fallbackSrc,
   whepSrc,
   p2pSwarm,
+  p2pOnly,
   integrity,
   onReady,
   autoplayMuted,
@@ -738,6 +740,7 @@ export function Player({
         fLoader: P2PFragmentLoader,
         lowLatencyMode: lowLatencyEnabled,
         dstreamP2PSwarm: p2pSwarm ?? null,
+        dstreamP2POnly: !!p2pOnly,
         dstreamIntegritySession: integrity ?? null,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);

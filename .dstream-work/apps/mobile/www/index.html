@@ -12,6 +12,14 @@
         <h1>dStream mobile setup</h1>
         <p>Configure your own edge node and relays. This app then launches your node directly.</p>
 
+        <section id="pair-panel" class="pair-panel">
+          <button class="primary pair-btn" id="scan-pair" type="button">Scan QR to pair with home server</button>
+          <div id="pair-status" class="pair-status" hidden></div>
+          <input type="file" id="pair-camera" accept="image/*" capture="environment" hidden />
+          <canvas id="pair-canvas" hidden></canvas>
+          <div class="divider"><span>or set up manually</span></div>
+        </section>
+
         <section id="saved-panel" class="saved-panel" hidden>
           <div class="saved-title">Saved configuration</div>
           <div class="mono">Saved config: <span id="saved-config">none</span></div>
@@ -45,6 +53,7 @@
       </section>
     </main>
 
+    <script src="./jsqr.min.js"></script>
     <script src="./mobile.js"></script>
   </body>
 </html>

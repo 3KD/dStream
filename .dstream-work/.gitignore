@@ -21,6 +21,10 @@ pnpm-debug.log*
 !.env.example
 !.env.production.example
 
+# test artifacts
+.playwright-cli/
+output/
+
 # OS/editor
 .DS_Store
 .idea/

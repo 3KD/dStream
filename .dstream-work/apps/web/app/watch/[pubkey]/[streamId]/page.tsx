@@ -275,6 +275,7 @@ export default function WatchPage() {
 
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
+  const [p2pManifestBlobUrl, setP2pManifestBlobUrl] = useState<string | null>(null);
   const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>(() => detectWatchLayoutMode());
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(false);
   const [mobilePortraitChatHeightPx, setMobilePortraitChatHeightPx] = useState<number | null>(null);
@@ -392,6 +393,36 @@ export default function WatchPage() {
     return () => clearInterval(interval);
   }, [p2pAllowed, p2pEnabled, p2pSwarm]);
 
+  // P2P-only manifest listener: get manifest from swarm and create blob URL for HLS.js.
+  useEffect(() => {
+    if (!isP2POnly || !p2pSwarm) return;
+    let blobUrl: string | null = null;
+
+    const updateManifest = (manifestText: string) => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      const blob = new Blob([manifestText], { type: "application/vnd.apple.mpegurl" });
+      blobUrl = URL.createObjectURL(blob);
+      setP2pManifestBlobUrl(blobUrl);
+    };
+
+    p2pSwarm.onManifestReceived = updateManifest;
+
+    // Request manifest from peers immediately.
+    p2pSwarm.requestManifest();
+    // Poll for manifest periodically until we get one.
+    const pollInterval = setInterval(() => {
+      const manifest = p2pSwarm.getManifest();
+      if (manifest) updateManifest(manifest);
+      else p2pSwarm.requestManifest();
+    }, 2000);
+
+    return () => {
+      clearInterval(pollInterval);
+      p2pSwarm.onManifestReceived = null;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [isP2POnly, p2pSwarm]);
+
   const fallbackUrl = originStreamId ? `/api/hls/${originStreamId}/index.m3u8` : `/api/hls/${streamId}/index.m3u8`;
   const renditionHints = useMemo(() => {
     return (announce?.renditions ?? [])
@@ -421,6 +452,7 @@ export default function WatchPage() {
     return `/api/hls-master?${params.toString()}`;
   }, [renditionHints]);
 
+  const isP2POnly = announce?.p2pOnly ?? false;
   const announceStreamingHint = (announce?.streaming ?? "").trim();
   const canUseLocalFallback = useMemo(() => {
     if (e2eHlsOverride || directPlaybackHint) return false;
@@ -438,6 +470,8 @@ export default function WatchPage() {
   }, [announceStreamingHint, directPlaybackHint, e2eHlsOverride, streamId]);
 
   const streamUrl = useMemo(() => {
+    if (isP2POnly && p2pManifestBlobUrl) return p2pManifestBlobUrl;
+    if (isP2POnly) return ""; // Waiting for P2P manifest.
     if (e2eHlsOverride) return e2eHlsOverride;
     if (directPlaybackHint) return directPlaybackHint;
     if (renditionMasterUrl) return renditionMasterUrl;
@@ -452,6 +486,8 @@ export default function WatchPage() {
     directPlaybackHint,
     e2eHlsOverride,
     fallbackUrl,
+    isP2POnly,
+    p2pManifestBlobUrl,
     renditionHints,
     renditionMasterUrl
   ]);
@@ -1733,8 +1769,9 @@ export default function WatchPage() {
                   <Player
                     src={playbackStreamUrl}
                     fallbackSrc={announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null}
-                    whepSrc={whepSrc}
+                    whepSrc={isP2POnly ? null : whepSrc}
                     p2pSwarm={p2pSwarm}
+                    p2pOnly={isP2POnly}
                     integrity={integritySession}
                     isLiveStream={announce?.status !== "ended"}
                     showNativeControls={false}

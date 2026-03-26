@@ -11,13 +11,25 @@ const DEFAULT_NOSTR_RELAYS_PROD = [
 ];
 const DEFAULT_NIP05_POLICY = "badge";
 export const NOSTR_RELAY_OVERRIDE_STORAGE_KEY = "dstream_nostr_relays_override_v1";
+export const LOCAL_RELAY_ENABLED_KEY = "dstream_local_relay_enabled_v1";
+export const LOCAL_RELAY_URL = "local://self";
 
 export type Nip05Policy = "off" | "badge" | "require";
 
 export const DEFAULT_NOSTR_RELAYS =
   process.env.NODE_ENV === "development" ? DEFAULT_NOSTR_RELAYS_DEV : DEFAULT_NOSTR_RELAYS_PROD;
 
+export function isLocalRelayEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(LOCAL_RELAY_ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function isValidRelayUrl(url: string): boolean {
+  if (url === LOCAL_RELAY_URL) return true;
   try {
     const u = new URL(url);
     return u.protocol === "ws:" || u.protocol === "wss:";
@@ -71,13 +83,18 @@ function getRelayOverrideFromStorage(): string[] {
 export function getNostrRelays(): string[] {
   const configuredRelays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
   const override = getRelayOverrideFromStorage();
+  let relays: string[];
   if (override.length > 0) {
-    return uniq([...override, ...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+    relays = uniq([...override, ...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  } else if (configuredRelays.length > 0) {
+    relays = uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  } else {
+    relays = [...DEFAULT_NOSTR_RELAYS];
   }
-  if (configuredRelays.length > 0) {
-    return uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  if (isLocalRelayEnabled()) {
+    relays.unshift(LOCAL_RELAY_URL);
   }
-  return DEFAULT_NOSTR_RELAYS;
+  return relays;
 }
 
 export function getNip05Policy(): Nip05Policy {

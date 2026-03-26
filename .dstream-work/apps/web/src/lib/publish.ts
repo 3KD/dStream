@@ -1,5 +1,7 @@
 import type { Event as NostrEvent } from "nostr-tools";
 import { getPool } from "@/lib/nostr";
+import { LOCAL_RELAY_URL } from "@/lib/config";
+import { getLocalRelay } from "@/lib/relay/localRelay";
 
 async function publishViaRelayWebSocket(relay: string, event: NostrEvent, timeoutMs = 4000): Promise<boolean> {
   if (typeof WebSocket === "undefined") return false;
@@ -71,11 +73,19 @@ export interface PublishEventOptions {
 }
 
 export async function publishEvent(relays: string[], event: NostrEvent, options?: PublishEventOptions): Promise<boolean> {
-  if (relays.length === 0) throw new Error("No relays configured");
+  // Publish to local relay (fire-and-forget, always succeeds or is a no-op).
+  const localRelay = getLocalRelay();
+  if (localRelay && relays.includes(LOCAL_RELAY_URL)) {
+    localRelay.publish(event);
+  }
+
+  const remoteRelays = relays.filter((r) => r !== LOCAL_RELAY_URL);
+  if (remoteRelays.length === 0) return !!localRelay;
+
   const poolTimeoutMs = options?.poolTimeoutMs ?? 15000;
   const fallbackTimeoutMs = options?.fallbackTimeoutMs ?? 4000;
 
-  const pubs = getPool().publish(relays, event);
+  const pubs = getPool().publish(remoteRelays, event);
   try {
     await Promise.race([
       Promise.any(pubs as any),
@@ -108,10 +118,27 @@ export async function publishEventDetailed(
   if (relays.length === 0) throw new Error("No relays configured");
   const timeoutMs = opts?.timeoutMs ?? 5000;
 
-  const pubs = getPool().publish(relays, event) as any[];
+  // Local relay (synchronous, instant).
+  const localRelay = getLocalRelay();
+  const localResult: Array<{ relay: string; ok: boolean; reason?: string }> = [];
+  if (localRelay && relays.includes(LOCAL_RELAY_URL)) {
+    const r = localRelay.publish(event);
+    localResult.push({ relay: LOCAL_RELAY_URL, ok: r.ok, reason: r.ok ? undefined : r.message });
+  }
+
+  const remoteRelays = relays.filter((r) => r !== LOCAL_RELAY_URL);
+  if (remoteRelays.length === 0) {
+    return {
+      ok: localResult.some((r) => r.ok),
+      okRelays: localResult.filter((r) => r.ok).map((r) => r.relay),
+      failedRelays: localResult.filter((r) => !r.ok).map((r) => ({ relay: r.relay, reason: r.reason ?? "failed" })),
+    };
+  }
+
+  const pubs = getPool().publish(remoteRelays, event) as any[];
 
   const results = await Promise.all(
-    relays.map(async (relay, i) => {
+    remoteRelays.map(async (relay, i) => {
       const pub = pubs[i] as Promise<any> | undefined;
       if (!pub) return { relay, ok: false, reason: "missing publish promise" };
 
@@ -124,8 +151,9 @@ export async function publishEventDetailed(
     })
   );
 
-  const okRelays = results.filter((r) => r.ok).map((r) => r.relay);
-  const failedRelays = results
+  const allResults = [...localResult, ...results];
+  const okRelays = allResults.filter((r) => r.ok).map((r) => r.relay);
+  const failedRelays = allResults
     .filter((r) => !r.ok)
     .map((r) => ({ relay: r.relay, reason: (r as any).reason ?? "failed" }));
 

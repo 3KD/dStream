@@ -31,6 +31,8 @@ services:
       DSTREAM_XMR_SESSION_SECRET: "${DSTREAM_XMR_SESSION_SECRET:-dev-session-secret-0123456789abcdef}"
       # Allow /dev/* pages and /api/dev/log in local docker runs (still opt-in in non-local envs).
       DSTREAM_DEVTOOLS: "${DSTREAM_DEVTOOLS:-1}"
+      # Pairing secret for mobile QR pairing. Set any non-empty value to enable /api/pair + /pair.
+      DSTREAM_PAIR_SECRET: "${DSTREAM_PAIR_SECRET:-dev-pair-secret}"
     depends_on:
       mediamtx:
         condition: service_started

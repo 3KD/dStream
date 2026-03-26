@@ -9,6 +9,10 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
+import { P2PSwarm } from "@/lib/p2p/swarm";
+import { BroadcastSwarm } from "@/lib/p2p/broadcastSwarm";
+import { createLocalSignalIdentity } from "@/lib/p2p/localIdentity";
+import { getDefaultRtcConfig } from "@/lib/webrtc";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
@@ -207,6 +211,9 @@ export default function BroadcastPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const whipRef = useRef<WhipClient | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const p2pSwarmRef = useRef<P2PSwarm | null>(null);
+  const broadcastSwarmRef = useRef<BroadcastSwarm | null>(null);
+  const [broadcastMode, setBroadcastMode] = useState<"whip" | "p2p">("whip");
   const statusRef = useRef<"idle" | "preview" | "connecting" | "live" | "error">("idle");
   const manualStopRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1257,7 +1264,7 @@ export default function BroadcastPage() {
     }
   };
 
-  const announce = useCallback(async (nextStatus: "live" | "ended") => {
+  const announce = useCallback(async (nextStatus: "live" | "ended", opts?: { p2pOnly?: boolean }) => {
     if (!identity) throw new Error("No identity.");
     if (stakeInvalid) throw new Error("Invalid stake requirement (expected a number with up to 12 decimals).");
     if (rebroadcastThresholdInvalid) throw new Error("Rebroadcast threshold must be a positive integer.");
@@ -1338,7 +1345,8 @@ export default function BroadcastPage() {
       captions: parsedCaptions.tracks,
       renditions: mergedRenditions,
       manifestSignerPubkey: manifestSignerPubkey ?? undefined,
-      topics
+      topics,
+      p2pOnly: opts?.p2pOnly ?? false
     });
 
     const signed = await signEvent(unsigned);
@@ -1622,12 +1630,88 @@ export default function BroadcastPage() {
     }
   };
 
+  const goLiveP2P = async () => {
+    setError(null);
+    if (!identity) {
+      setError("Connect an identity first (NIP-07 preferred).");
+      return;
+    }
+    if (!mediaStream) {
+      setError("Start preview first (camera or screen).");
+      return;
+    }
+    setStatus("connecting");
+    try {
+      manualStopRef.current = false;
+      const signalIdentity = await createLocalSignalIdentity();
+      const swarm = new P2PSwarm({
+        identity: signalIdentity,
+        relays,
+        streamPubkey: identity.pubkey,
+        streamId,
+        rtcConfig: getDefaultRtcConfig(),
+        maxPeers: 12,
+      });
+      await swarm.start();
+      p2pSwarmRef.current = swarm;
+
+      const bs = new BroadcastSwarm({
+        swarm,
+        stream: mediaStream,
+        streamPubkey: identity.pubkey,
+        streamId,
+      });
+      await bs.start();
+      broadcastSwarmRef.current = bs;
+
+      setStatus("live");
+
+      try {
+        const nextSession: StoredBroadcastSession = {
+          pubkey: identity.pubkey,
+          streamId,
+          originStreamId: `${identity.pubkey}--${streamId}`,
+          startedAt: Date.now()
+        };
+        localStorage.setItem("dstream_broadcast_session_v1", JSON.stringify(nextSession));
+        setStoredSession(nextSession);
+      } catch {
+        // ignore
+      }
+
+      try {
+        setAnnounceStep("checking");
+        const ok = await announce("live", { p2pOnly: true });
+        setLastAnnounceAt(Date.now());
+        setAnnounceStep(ok ? "ok" : "fail");
+        if (!ok) {
+          setError("Stream is live (P2P), but announce failed on relays.");
+        }
+      } catch (e: any) {
+        setAnnounceStep("fail");
+        setError(e?.message ?? "Stream is live (P2P), but announce failed.");
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to start P2P broadcast.");
+      setStatus("error");
+    }
+  };
+
   const endStream = async () => {
     setError(null);
     manualStopRef.current = true;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+    // Clean up P2P broadcast if active.
+    try {
+      broadcastSwarmRef.current?.stop();
+      broadcastSwarmRef.current = null;
+      p2pSwarmRef.current?.stop();
+      p2pSwarmRef.current = null;
+    } catch {
+      // ignore
     }
     try {
       whipRef.current?.close();
@@ -1928,13 +2012,24 @@ export default function BroadcastPage() {
                       <Square className="w-4 h-4" /> End Stream
                     </button>
                   ) : (
-                    <button
-                      onClick={goLive}
-                      className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                      disabled={!mediaStream || status === "connecting"}
-                    >
-                      <Radio className="w-4 h-4" /> Start Stream
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={broadcastMode}
+                        onChange={(e) => setBroadcastMode(e.target.value as "whip" | "p2p")}
+                        className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+                        disabled={status === "connecting"}
+                      >
+                        <option value="whip">Server (WHIP)</option>
+                        <option value="p2p">Direct P2P</option>
+                      </select>
+                      <button
+                        onClick={broadcastMode === "p2p" ? goLiveP2P : goLive}
+                        className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                        disabled={!mediaStream || status === "connecting"}
+                      >
+                        <Radio className="w-4 h-4" /> {broadcastMode === "p2p" ? "Go Live (P2P)" : "Start Stream"}
+                      </button>
+                    </div>
                   )}
 
                   {status === "live" && identity && (

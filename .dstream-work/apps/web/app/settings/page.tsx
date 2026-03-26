@@ -21,6 +21,8 @@ import {
 } from "@/lib/payments/catalog";
 import { createPaymentMethodDraft, paymentMethodToDraft, type PaymentMethodDraft, validatePaymentMethodDrafts } from "@/lib/payments/methods";
 import { type StreamPaymentAsset } from "@dstream/protocol";
+import { LOCAL_RELAY_ENABLED_KEY } from "@/lib/config";
+import { getLocalRelay, initLocalRelay, destroyLocalRelay, type LocalRelayStats } from "@/lib/relay/localRelay";
 
 const IDENTITY_STORE_STORAGE_KEY = "dstream_identity_store_v2";
 const SOCIAL_STORE_STORAGE_KEY = "dstream_social_v1";
@@ -188,6 +190,70 @@ function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli
   if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
   if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
   return "Open the native wallet app and send to the copied address or wallet URI target.";
+}
+
+function LocalRelayToggle({ ownerPubkey }: { ownerPubkey: string | null }) {
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem(LOCAL_RELAY_ENABLED_KEY) === "1"; } catch { return false; }
+  });
+  const [stats, setStats] = useState<LocalRelayStats | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !ownerPubkey) {
+      destroyLocalRelay();
+      setStats(null);
+      return;
+    }
+    let cancelled = false;
+    initLocalRelay(ownerPubkey).then((relay) => {
+      if (cancelled) return;
+      setStats(relay.getStats());
+    });
+    return () => { cancelled = true; };
+  }, [enabled, ownerPubkey]);
+
+  // Refresh stats every 10s while enabled.
+  useEffect(() => {
+    if (!enabled) return;
+    const interval = setInterval(() => {
+      const relay = getLocalRelay();
+      if (relay) setStats(relay.getStats());
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [enabled]);
+
+  const toggle = useCallback((checked: boolean) => {
+    try { localStorage.setItem(LOCAL_RELAY_ENABLED_KEY, checked ? "1" : "0"); } catch { /* */ }
+    setEnabled(checked);
+  }, []);
+
+  return (
+    <div className="border-t border-neutral-800 pt-4 mt-4 space-y-2">
+      <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => toggle(e.target.checked)}
+          className="accent-blue-500"
+        />
+        Local relay (stores your events on-device)
+      </label>
+      <p className="text-xs text-neutral-500 pl-5">
+        Keeps your stream announces, chat, and presence in local storage so they&apos;re available even if remote relays drop them. Only stores events from your own identity.
+      </p>
+      {enabled && stats && (
+        <div className="text-xs text-neutral-500 pl-5 font-mono">
+          {stats.eventCount} event{stats.eventCount !== 1 ? "s" : ""} stored
+          {stats.eventCount > 0 && (
+            <span className="ml-2">
+              ({Object.entries(stats.kinds).map(([k, v]) => `kind ${k}: ${v}`).join(", ")})
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -615,6 +681,12 @@ export default function SettingsPage() {
           >
             Monetization
           </Link>
+          <Link
+            href="/pair"
+            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
+          >
+            Pair Mobile App
+          </Link>
         </section>
 
         {social.isLoading || identityLoading ? (
@@ -906,6 +978,8 @@ export default function SettingsPage() {
                   />
                 </label>
               </div>
+
+              <LocalRelayToggle ownerPubkey={identity?.pubkey ?? null} />
             </section>
 
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">

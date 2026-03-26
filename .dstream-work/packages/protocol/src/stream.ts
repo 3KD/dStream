@@ -385,6 +385,7 @@ export interface BuildStreamAnnounceInput {
   captions?: StreamCaptionTrack[];
   renditions?: StreamRendition[];
   topics?: string[];
+  p2pOnly?: boolean;
 }
 
 export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<NostrEvent, "id" | "sig"> {
@@ -486,6 +487,8 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   for (const topic of sortTopicTags(input.topics ?? [])) {
     tags.push(["t", topic]);
   }
+
+  if (input.p2pOnly) tags.push(["p2p_only", "1"]);
 
   return {
     kind: NOSTR_KINDS.STREAM_ANNOUNCE,
@@ -597,6 +600,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     captions,
     renditions,
     topics: sortTopicTags(getAllTagValues(event.tags, "t")),
+    p2pOnly: parseBooleanFlag(getFirstTagValue(event.tags, "p2p_only")) ?? false,
     createdAt: event.created_at,
     raw: event
   };

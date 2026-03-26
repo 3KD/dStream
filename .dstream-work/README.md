@@ -121,6 +121,13 @@ This validates manifest verification + tamper signaling markers from `/dev/e2e`.
 - `/profile` and `/profile/:npub` (kind `0` publish/view)
 - `/inbox`, `/guilds`, `/moderation`, `/analytics`
 - `/whitepaper`, `/docs`, `/use-cases`, `/donate`
+- `/pair` (QR code for mobile app pairing — requires `DSTREAM_PAIR_SECRET`)
+
+## Mobile pairing
+
+After starting your node, visit `http://<server-ip>:5656/pair` from any browser on the same network. A QR code appears. Open the dStream mobile app and tap "Scan QR to pair with home server." The app auto-configures its edge node URL and relay list from the QR payload.
+
+Set `DSTREAM_PAIR_SECRET` to any non-empty value in `.env` to enable pairing.
 
 ## Deployment
 

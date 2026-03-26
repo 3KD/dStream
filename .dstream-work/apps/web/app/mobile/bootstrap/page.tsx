@@ -24,6 +24,23 @@ function MobileBootstrapInner() {
       if (relays.length > 0) {
         localStorage.setItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY, relays.join(","));
       }
+
+      // Import identity from QR pairing if present.
+      const pairIdentityKey = "dstream_pair_identity_v1";
+      const pairIdentity = localStorage.getItem(pairIdentityKey);
+      if (pairIdentity) {
+        try {
+          const parsed = JSON.parse(pairIdentity);
+          if (parsed?.secretKeyHex && typeof parsed.secretKeyHex === "string") {
+            // Store as a pending import. IdentityContext will pick it up on next load.
+            localStorage.setItem("dstream_pending_import_v1", pairIdentity);
+          }
+        } catch {
+          // Invalid — ignore.
+        }
+        localStorage.removeItem(pairIdentityKey);
+      }
+
       localStorage.setItem("dstream_mobile_bootstrap_at_v1", String(Date.now()));
       setStatus("Configuration applied. Opening dStream…");
       router.replace(nextPath);

@@ -21,8 +21,9 @@ function makeStats(byteLength = 0): LoaderStats {
   };
 }
 
-function looksLikeSegment(url: string): boolean {
+function looksLikeSegment(url: string, p2pOnly = false): boolean {
   const u = (url || "").toLowerCase();
+  if (u.startsWith("p2p://") && (u.includes(".ts") || u.includes(".m4s") || u.includes(".mp4"))) return true;
   return u.includes("/api/hls/") && (u.includes(".ts") || u.includes(".m4s") || u.includes(".mp4"));
 }
 
@@ -72,6 +73,7 @@ export class P2PFragmentLoader implements Loader<FragmentLoaderContext> {
   private readonly swarm: P2PSwarm | null;
   private readonly integrity: IntegritySession | null;
   private readonly httpRewrite: { from: string; to: string } | null;
+  private readonly p2pOnly: boolean;
   private aborted = false;
 
   context: FragmentLoaderContext | null = null;
@@ -84,6 +86,7 @@ export class P2PFragmentLoader implements Loader<FragmentLoaderContext> {
     this.swarm = (config as any)?.dstreamP2PSwarm ?? null;
     this.integrity = (config as any)?.dstreamIntegritySession ?? null;
     this.httpRewrite = (config as any)?.dstreamIntegrityHttpRewrite ?? null;
+    this.p2pOnly = !!(config as any)?.dstreamP2POnly;
   }
 
   destroy(): void {
@@ -120,14 +123,25 @@ export class P2PFragmentLoader implements Loader<FragmentLoaderContext> {
       return await this.integrity.verifySegment({ renditionId, uri, data, source });
     };
 
+    const p2pTimeoutMs = this.p2pOnly ? 500 : 180;
+    const p2pRetries = this.p2pOnly ? 3 : 1;
+
     const attemptP2P = async () => {
       if (!this.swarm) return null;
-      if (!looksLikeSegment(url)) return null;
-      try {
-        return await this.swarm.requestSegment(url, { timeoutMs: 180 });
-      } catch {
-        return null;
+      if (!looksLikeSegment(url, this.p2pOnly)) return null;
+      for (let attempt = 0; attempt < p2pRetries; attempt++) {
+        if (this.aborted) return null;
+        try {
+          const result = await this.swarm.requestSegment(url, { timeoutMs: p2pTimeoutMs });
+          if (result) return result;
+        } catch {
+          // retry
+        }
+        if (attempt < p2pRetries - 1) {
+          await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+        }
       }
+      return null;
     };
 
     void (async () => {
@@ -194,6 +208,17 @@ export class P2PFragmentLoader implements Loader<FragmentLoaderContext> {
           callbacks.onError({ code: 0, text: e?.message ?? "loader error" }, context, null, this.stats);
         }
       };
+
+      if (this.p2pOnly) {
+        // No HTTP fallback in P2P-only mode.
+        callbacks.onError(
+          { code: 0, text: "P2P segment fetch failed (no HTTP fallback)" },
+          context,
+          null,
+          this.stats
+        );
+        return;
+      }
 
       try {
         loadHttp(context, true);

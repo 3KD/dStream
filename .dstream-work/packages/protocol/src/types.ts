@@ -101,6 +101,7 @@ export interface StreamAnnounce {
   captions: StreamCaptionTrack[];
   renditions: StreamRendition[];
   topics: string[];
+  p2pOnly: boolean;
   createdAt: number;
   raw: NostrEvent;
 }

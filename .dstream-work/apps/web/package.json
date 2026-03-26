@@ -14,6 +14,7 @@
     "@solana/web3.js": "^1.98.4",
     "hls.js": "^1.6.15",
     "lucide-react": "^0.562.0",
+    "mux.js": "^6.3.0",
     "next": "16.1.4",
     "nostr-tools": "^2.20.0",
     "qrcode": "^1.5.4",

@@ -48,7 +48,10 @@ function pickChunkBytes(pc: RTCPeerConnection): number {
 
 type DcMessage =
   | { v: 1; t: "get"; id: string; url: string }
-  | { v: 1; t: "res"; id: string; ok: boolean; url: string; len?: number; mime?: string; err?: string };
+  | { v: 1; t: "res"; id: string; ok: boolean; url: string; len?: number; mime?: string; err?: string }
+  | { v: 1; t: "push"; id: string; url: string; len: number; mime: string }
+  | { v: 1; t: "manifest"; data: string }
+  | { v: 1; t: "manifest_req" };
 
 function safeJsonParse(input: string): any | null {
   try {
@@ -63,6 +66,9 @@ function isDcMessage(obj: any): obj is DcMessage {
   if (obj.v !== 1) return false;
   if (obj.t === "get") return typeof obj.id === "string" && typeof obj.url === "string";
   if (obj.t === "res") return typeof obj.id === "string" && typeof obj.ok === "boolean" && typeof obj.url === "string";
+  if (obj.t === "push") return typeof obj.id === "string" && typeof obj.url === "string" && typeof obj.len === "number";
+  if (obj.t === "manifest") return typeof obj.data === "string";
+  if (obj.t === "manifest_req") return true;
   return false;
 }
 
@@ -118,6 +124,13 @@ export class P2PSwarm {
   private desiredPeers: string[] = [];
   private closed = false;
   private subClose: (() => void) | null = null;
+
+  /** Current manifest text for P2P-only broadcasts (set by broadcaster, received from peers). */
+  private currentManifest: string | null = null;
+  /** Callback invoked when a new manifest is received from a peer. */
+  onManifestReceived: ((manifest: string) => void) | null = null;
+  /** Pending push receives (similar to inflight but for unsolicited pushes). */
+  private pushExpect = new Map<string, { url: string; len: number; received: number; buffer: Uint8Array }>();
 
   private stats: P2PSwarmStats = {
     peersDesired: 0,
@@ -220,6 +233,53 @@ export class P2PSwarm {
     if (this.closed) return;
     this.cache.set(url, data);
     this.stats.cacheBytes = this.cache.totalBytes;
+  }
+
+  /** Set the current manifest (broadcaster side). */
+  setManifest(manifest: string): void {
+    this.currentManifest = manifest;
+  }
+
+  /** Get the last known manifest (viewer side). */
+  getManifest(): string | null {
+    return this.currentManifest;
+  }
+
+  /** Push a segment to all connected peers (broadcaster side). */
+  pushSegmentToAll(url: string, data: ArrayBuffer, mime = "video/mp2t"): void {
+    if (this.closed) return;
+    this.storeSegment(url, data);
+    const id = randomId(8);
+    const header: DcMessage = { v: 1, t: "push", id, url, len: data.byteLength, mime };
+    for (const peer of this.peers.values()) {
+      if (!peer.dc || peer.dc.readyState !== "open") continue;
+      this.queueSend(peer, JSON.stringify(header));
+      this.queueSendBinary(peer, data);
+      this.stats.bytesToPeers += data.byteLength;
+    }
+  }
+
+  /** Send the current manifest to all connected peers (broadcaster side). */
+  broadcastManifest(): void {
+    if (this.closed || !this.currentManifest) return;
+    const msg: DcMessage = { v: 1, t: "manifest", data: this.currentManifest };
+    const payload = JSON.stringify(msg);
+    for (const peer of this.peers.values()) {
+      if (!peer.dc || peer.dc.readyState !== "open") continue;
+      this.queueSend(peer, payload);
+    }
+  }
+
+  /** Request manifest from the first available peer (viewer side). */
+  requestManifest(): void {
+    if (this.closed) return;
+    const msg: DcMessage = { v: 1, t: "manifest_req" };
+    const payload = JSON.stringify(msg);
+    for (const peer of this.peers.values()) {
+      if (!peer.dc || peer.dc.readyState !== "open") continue;
+      this.queueSend(peer, payload);
+      break; // Only ask one peer.
+    }
   }
 
   async requestSegment(url: string, opts?: { timeoutMs?: number }): Promise<P2PSegmentResponse | null> {
@@ -616,6 +676,50 @@ export class P2PSwarm {
       this.queueSend(peer, JSON.stringify(header));
       this.queueSendBinary(peer, data);
       this.stats.bytesToPeers += data.byteLength;
+      return;
+    }
+
+    if (msg.t === "push") {
+      // Incoming unsolicited segment push — prepare to receive binary data.
+      const len = msg.len;
+      if (len <= 0 || len > 8 * 1024 * 1024) return;
+      peer.expectBinary = { id: msg.id, url: msg.url, len, received: 0, buffer: new Uint8Array(len) };
+      // Create a synthetic inflight so onDcBinary can resolve it.
+      peer.inflight = {
+        id: msg.id,
+        url: msg.url,
+        resolve: (resp) => {
+          if (resp) {
+            this.storeSegment(msg.url, resp.data);
+          }
+        },
+        timer: setTimeout(() => {
+          // Push timed out — clean up.
+          if (peer.expectBinary?.id === msg.id) {
+            peer.inflight = undefined;
+            peer.expectBinary = undefined;
+          }
+        }, 10_000),
+        expectBinary: true,
+      };
+      return;
+    }
+
+    if (msg.t === "manifest") {
+      this.currentManifest = msg.data;
+      try {
+        this.onManifestReceived?.(msg.data);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    if (msg.t === "manifest_req") {
+      if (this.currentManifest) {
+        const resp: DcMessage = { v: 1, t: "manifest", data: this.currentManifest };
+        this.queueSend(peer, JSON.stringify(resp));
+      }
       return;
     }
 

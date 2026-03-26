@@ -252,6 +252,148 @@ function bindHandlers() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// QR Pairing
+// ---------------------------------------------------------------------------
+
+function setPairStatus(message, isError) {
+  const el = document.getElementById("pair-status");
+  if (!el) return;
+  el.textContent = message || "";
+  el.hidden = !message;
+  el.className = "pair-status " + (isError ? "pair-error" : "pair-ok");
+}
+
+async function confirmPairToken(edgeUrl, tok) {
+  try {
+    const res = await fetch(new URL("/api/pair", edgeUrl).toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tok }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return body.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+function decodeQRFromImage(imageDataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.getElementById("pair-canvas");
+      if (!canvas) { resolve(null); return; }
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      if (typeof jsQR === "function") {
+        const code = jsQR(imageData.data, img.width, img.height);
+        resolve(code ? code.data : null);
+      } else {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageDataUrl;
+  });
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handlePairScan() {
+  const input = document.getElementById("pair-camera");
+  if (!input) return;
+
+  setPairStatus("Opening camera...", false);
+
+  // Use a promise to wait for file selection.
+  const file = await new Promise((resolve) => {
+    const handler = () => {
+      input.removeEventListener("change", handler);
+      resolve(input.files && input.files[0] ? input.files[0] : null);
+    };
+    input.addEventListener("change", handler);
+    input.click();
+  });
+
+  if (!file) {
+    setPairStatus("", false);
+    return;
+  }
+
+  setPairStatus("Decoding QR code...", false);
+
+  try {
+    const dataUrl = await readFileAsDataURL(file);
+    const decoded = await decodeQRFromImage(dataUrl);
+    if (!decoded) {
+      setPairStatus("No QR code found in image. Try again with the QR code clearly visible.", true);
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(decoded);
+    } catch {
+      setPairStatus("QR code is not a valid dStream pairing code.", true);
+      return;
+    }
+
+    if (!payload || payload.t !== "dstream-pair" || payload.v !== 1) {
+      setPairStatus("Not a dStream pairing QR code.", true);
+      return;
+    }
+
+    const edgeUrl = normalizeEdgeUrl(payload.edge);
+    if (!edgeUrl) {
+      setPairStatus("QR contains an invalid edge URL.", true);
+      return;
+    }
+
+    const relays = parseRelayList(payload.relays);
+
+    // Confirm the token with the server.
+    if (payload.tok) {
+      setPairStatus("Confirming pairing with server...", false);
+      const confirmed = await confirmPairToken(edgeUrl, payload.tok);
+      if (!confirmed) {
+        setPairStatus("Pairing token expired or invalid. Regenerate the QR on your server and try again.", true);
+        return;
+      }
+    }
+
+    // Success — fill the form and auto-save + launch.
+    setPairStatus("Paired! Launching...", false);
+    const config = { edgeUrl, relays: relays.length > 0 ? relays : DEFAULT_RELAYS };
+    await persistConfig(config);
+    launch(config);
+  } catch (e) {
+    setPairStatus("Scan failed: " + (e.message || String(e)), true);
+  }
+}
+
+function bindPairHandler() {
+  const scanButton = document.getElementById("scan-pair");
+  if (scanButton) {
+    scanButton.addEventListener("click", handlePairScan);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
 async function main() {
   await resolveSecureStorage();
   setStorageMode();
@@ -260,6 +402,7 @@ async function main() {
   setFormValues(state.config);
   setMode(state.config ? "saved" : "edit");
   bindHandlers();
+  bindPairHandler();
 }
 
 void main();
