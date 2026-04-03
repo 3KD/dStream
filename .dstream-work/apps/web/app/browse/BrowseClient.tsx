@@ -12,10 +12,15 @@ import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { useEffect, useMemo, useState } from "react";
+import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 import { isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
 import { formatXmrAtomic, isReplayEligibleStream, resolveVodPolicy, vodModeLabel } from "@/lib/vodPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
+
+function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
+  return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
+}
 
 function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: string } | null {
   const raw = (value ?? "").trim();
@@ -242,7 +247,7 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                        key={`live:${stream.pubkey}:${stream.streamId}`}
+                        key={`live:${streamCanonicalId(stream)}`}
                         className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                       >
                         <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
@@ -333,7 +338,7 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                        key={`vod:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
+                        key={`vod:${streamCanonicalId(stream)}:${stream.createdAt}`}
                         className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
@@ -414,7 +419,7 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                        key={`offline:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
+                        key={`offline:${streamCanonicalId(stream)}:${stream.createdAt}`}
                         className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">

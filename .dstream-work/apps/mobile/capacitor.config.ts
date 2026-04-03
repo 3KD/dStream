@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "stream.dstream",
+  appId: "stream.dstream.mobile",
   appName: "dStream",
   webDir: "www",
   server: {

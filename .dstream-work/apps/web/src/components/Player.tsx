@@ -1099,6 +1099,11 @@ export function Player({
   };
 
   const handleVideoSurfaceInteraction = () => {
+    if (isMobilePlayback && !mobileControlsVisible) {
+      revealMobileControls();
+      return;
+    }
+    
     revealMobileControls();
     const video = videoRef.current;
     if (!video) return;

@@ -9,8 +9,9 @@ import {
 
 export const WORDS = [
   "Decentralized",
-  "Unstoppable",
   "P2P",
+  "Independent",
+  "Unstoppable",
   "Ownerless",
   "Private",
   "Permissionless",
@@ -19,8 +20,7 @@ export const WORDS = [
   "Activism",
   "Music",
   "Gamer",
-  "Influencer",
-  "Independent"
+  "Influencer"
 ];
 
 const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: string }> = {
@@ -36,7 +36,7 @@ const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: strin
   Music: { icon: Music, color: "text-violet-400" },
   Influencer: { icon: Camera, color: "text-rose-400" },
   Gamer: { icon: Gamepad, color: "text-lime-400" },
-  Independent: { icon: Flag, color: "text-amber-400" },
+  Independent: { img: "/bitcoin.svg", color: "text-amber-400" },
 };
 
 export const WORD_COLORS_HEX: Record<string, string> = {
@@ -57,11 +57,11 @@ export const WORD_COLORS_HEX: Record<string, string> = {
 
 // ── Timing ──────────────────────────────────────────────
 // One full cycle: HOLD → LIFT → ROTATE → DROP → repeat
-const HOLD_MS   = 1400;  // word sits visible, flat
-const LIFT_MS   = 600;   // cube rises
-const ROTATE_MS = 1200;  // cube spins 90°
-const PAUSE_MS  = 400;   // hesitation after rotation, before drop
-const DROP_MS   = 600;   // cube settles back down
+const HOLD_MS   = 2200;  // word sits visible, flat — breathe
+const LIFT_MS   = 900;   // cube rises gently
+const ROTATE_MS = 1600;  // cube spins 90° — slow and smooth
+const PAUSE_MS  = 100;   // barely-there beat before settling
+const DROP_MS   = 900;   // cube settles softly
 
 // CSS transition adapts to whichever phase is active
 type Phase = "hold" | "lift" | "rotate" | "pause" | "drop";
@@ -69,10 +69,10 @@ type Phase = "hold" | "lift" | "rotate" | "pause" | "drop";
 function transitionFor(phase: Phase): string {
   switch (phase) {
     case "hold":   return "transform 0ms linear";
-    case "lift":   return `transform ${LIFT_MS}ms ease-out`;
-    case "rotate": return `transform ${ROTATE_MS}ms ease-in-out`;
+    case "lift":   return `transform ${LIFT_MS}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+    case "rotate": return `transform ${ROTATE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
     case "pause":  return "transform 0ms linear";
-    case "drop":   return `transform ${DROP_MS}ms ease-in`;
+    case "drop":   return `transform ${DROP_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
   }
 }
 
@@ -92,7 +92,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
   ]);
 
   const rotRef = useRef(0);
-  const wordIdx = useRef(4); // next word to load (0-3 already placed)
+  const wordIdx = useRef(2); // start at 2 so first overwrites are no-ops, preserving initial faces
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
 
@@ -101,11 +101,11 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
     timer.current = setTimeout(() => { if (mounted.current) fn(); }, ms);
   }, []);
 
-  // Notify parent whenever the visible word changes
+  // Notify parent of initial word on mount
   useEffect(() => {
-    const frontIdx = FACE_SEQ[rotation % 4];
-    onWordChange?.(faces[frontIdx]);
-  }, [rotation, faces, onWordChange]);
+    onWordChange?.(faces[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The state machine
   useEffect(() => {
@@ -134,6 +134,12 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
       rotRef.current += 1;
       setRotation(rotRef.current);
       setPhase("rotate");
+      // Notify parent when the spin starts — color shifts across the rotation + settle
+      setFaces(prev => {
+        const frontIdx = FACE_SEQ[rotRef.current % 4];
+        onWordChange?.(prev[frontIdx]);
+        return prev;
+      });
       schedule(doPause, ROTATE_MS);
     };
 

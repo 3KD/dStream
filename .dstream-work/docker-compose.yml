@@ -65,15 +65,38 @@ services:
       - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/udp"
     restart: unless-stopped
 
-  xmr-mock:
-    profiles: ["mock-wallet"]
-    image: node:20-alpine
-    working_dir: /app
-    command: ["node", "services/monero-mock/index.mjs"]
-    environment:
-      XMR_MOCK_HTTP_PORT: "18083"
+  xmr-wallet-init:
+    build:
+      context: ./infra/xmr-wallet
+    entrypoint: ["monero-wallet-cli"]
+    command: 
+      - "--generate-new-wallet=/wallet/node_wallet"
+      - "--password=${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
+      - "--mnemonic-language=English"
+      - "--command=exit"
     volumes:
-      - .:/app:ro
+      - xmr_wallet_data:/wallet
+    restart: "no"
+
+  xmr-wallet-rpc:
+    build:
+      context: ./infra/xmr-wallet
+    depends_on:
+      xmr-wallet-init:
+        condition: service_completed_successfully
+    command:
+      - "--wallet-file=/wallet/node_wallet"
+      - "--password=${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
+      - "--rpc-bind-port=18083"
+      - "--rpc-bind-ip=0.0.0.0"
+      - "--confirm-external-bind"
+      - "--rpc-login=${DSTREAM_XMR_WALLET_RPC_USER:-dstream}:${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
+      - "--daemon-address=${DSTREAM_XMR_DAEMON_ADDRESS:-node.monerohash.com:18081}"
+      - "--trusted-daemon"
+    volumes:
+      - xmr_wallet_data:/wallet
+    expose:
+      - "18083"
     restart: unless-stopped
 
   manifest:
@@ -157,3 +180,4 @@ volumes:
   relay_data:
   dstream_hls:
   dstream_recordings:
+  xmr_wallet_data:

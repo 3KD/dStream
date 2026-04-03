@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Users, Bitcoin } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
@@ -13,6 +13,11 @@ import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { formatXmrAtomic, isReplayEligibleStream, resolveVodPolicy, vodModeLabel } from "@/lib/vodPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
+import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
+
+function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
+  return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -163,7 +168,7 @@ export default function HomePage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                    key={`${stream.pubkey}:${stream.streamId}`}
+                    key={streamCanonicalId(stream)}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
                     <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
@@ -300,17 +305,17 @@ export default function HomePage() {
 
           <div className="p-6 bg-neutral-900/50 border border-neutral-800/50 rounded-2xl relative group overflow-hidden hover:border-orange-500/30 transition">
             <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-30 transition pointer-events-none">
-              <Users className="w-24 h-24 text-orange-500" />
+              <Bitcoin className="w-24 h-24 text-orange-500" />
             </div>
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-orange-900/30 rounded-lg text-orange-400">
-                <Users className="w-5 h-5" />
+                <Bitcoin className="w-5 h-5" />
               </div>
-              <span className="font-mono text-xs text-orange-400 uppercase tracking-wider font-bold">Presence</span>
+              <span className="font-mono text-xs text-orange-400 uppercase tracking-wider font-bold">De-Fi Payments</span>
             </div>
-            <h3 className="text-xl font-bold mb-2">Approximate Viewers</h3>
+            <h3 className="text-xl font-bold mb-2">Crypto Powered</h3>
             <p className="text-neutral-300 leading-relaxed">
-              Watch pages display an approximate viewer count from lightweight presence events published to configured relays.
+              Monetize instantly using cryptocurrencies. By leveraging decentralized finance, payments bypass traditional middlemen directly to creators.
             </p>
           </div>
         </section>

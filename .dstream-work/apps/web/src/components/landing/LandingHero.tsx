@@ -26,7 +26,7 @@ export function LandingHero({
       <div className="text-5xl md:text-8xl font-black tracking-tighter flex flex-col items-center justify-center gap-6">
         <RotatingCube onWordChange={setCurrentWord} />
         <span
-          className="pb-[0.2em] transition-colors duration-[2000ms] ease-in-out"
+          className="pb-[0.2em] transition-colors duration-[1600ms] ease-linear"
           style={{ color: WORD_COLORS_HEX[currentWord] || "#a855f7" }}
         >
           Streaming
@@ -34,7 +34,7 @@ export function LandingHero({
       </div>
 
       <p className="text-xl text-neutral-400 max-w-2xl mx-auto">
-        <span className="text-blue-500">dStream</span> – Freely built for people of the modern de-fi economy.
+        <span className="text-blue-500">dStream</span> – Broadcast built for the modern de-fi economy.
       </p>
 
       <div className="flex gap-4 justify-center pt-6">

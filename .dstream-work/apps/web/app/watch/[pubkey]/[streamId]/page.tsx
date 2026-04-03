@@ -276,7 +276,7 @@ export default function WatchPage() {
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
   const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>(() => detectWatchLayoutMode());
-  const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(false);
+  const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
   const [mobilePortraitChatHeightPx, setMobilePortraitChatHeightPx] = useState<number | null>(null);
   const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
 

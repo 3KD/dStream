@@ -6,9 +6,9 @@
     "mobileJs": "apps/mobile/www/mobile.js"
   },
   "hashes": {
-    "indexHtml": "sha256:a2bddfd3e64a78405971a99ec796a210d4c563ce87f118c92664d8dd9484ef92",
+    "indexHtml": "sha256:4d5ddb2afa3e62c145e70725ecce5acf1601c52be1f9d662cdc710bff044788b",
     "mobileCss": "sha256:d271fa693103d3b9be4cf0ff9fef816b43c52659294986aaa8a99ac186415800",
-    "mobileJs": "sha256:3c6b0e438458bb5c0bcba209c543446df1eecf4d85b5abfe317b51a847df0777"
+    "mobileJs": "sha256:c5bfb0689ba7f2a1a2f2ea80dcb28c625840f60bde07533721ac56510741568f"
   },
   "copy": {
     "title": "dStream mobile setup",
@@ -21,7 +21,7 @@
       "save-only": "Save only"
     },
     "labels": {
-      "edge-url": "Edge node URL",
+      "edge-url": "Edge node URL (your node by default)",
       "relay-list": "Relay list (comma or newline separated)"
     }
   },

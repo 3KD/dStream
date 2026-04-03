@@ -515,7 +515,7 @@ export function ChatBox({
       </div>
 
       {!identity ? (
-        <div className="p-3 border-t border-neutral-800 bg-neutral-900 text-center text-sm text-neutral-500">
+        <div className="pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-800 bg-neutral-900 text-center text-sm text-neutral-500">
           Connect an identity to chat.
         </div>
       ) : (

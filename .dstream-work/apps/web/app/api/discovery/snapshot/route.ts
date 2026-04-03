@@ -12,45 +12,48 @@ const MAX_LOOKBACK_DAYS = 120;
 const DEFAULT_LIMIT = 360;
 const MIN_LIMIT = 40;
 const MAX_LIMIT = 600;
-const QUERY_TIMEOUT_MS = 6_500;
+const QUERY_TIMEOUT_MS = 20_000;
 const DISCOVERY_POLICY_LOOKBACK_SEC = 14 * 86400;
 const DISCOVERY_POLICY_LIMIT = 2000;
 
-function parseBoundedInt(
-  raw: string | null,
-  fallback: number,
-  min: number,
-  max: number
-): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  const value = Math.floor(parsed);
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
+// ---------------------------------------------------------------------------
+// Background cache: relay queries run in the background on a 60s interval.
+// The GET handler returns whatever is cached — never blocks on relay I/O.
+// ---------------------------------------------------------------------------
+const REFRESH_INTERVAL_MS = 60_000;
+
+interface CachedSnapshot {
+  streams: StreamAnnounce[];
+  queriedAt: number;
+  relays: string[];
 }
 
-export async function GET(req: NextRequest): Promise<Response> {
+let cached: CachedSnapshot | null = null;
+let refreshInFlight = false;
+
+/** Read cache without TS narrowing (module-level var changes between awaits). */
+function getCached(): CachedSnapshot | null { return cached; }
+
+/** Query all relays and rebuild the cached snapshot. */
+async function refreshCache(): Promise<void> {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+
   const relays = getNostrRelays();
   if (relays.length === 0) {
-    return NextResponse.json({
-      streams: [] as StreamAnnounce[],
-      queriedAt: Math.floor(Date.now() / 1000),
-      relays: [] as string[]
-    });
+    cached = { streams: [], queriedAt: Math.floor(Date.now() / 1000), relays: [] };
+    refreshInFlight = false;
+    return;
   }
 
-  const url = new URL(req.url);
-  const lookbackDays = parseBoundedInt(url.searchParams.get("days"), DEFAULT_LOOKBACK_DAYS, MIN_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS);
-  const limit = parseBoundedInt(url.searchParams.get("limit"), DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT);
   const nowSec = Math.floor(Date.now() / 1000);
-  const sinceSec = nowSec - lookbackDays * 86400;
+  const sinceSec = nowSec - DEFAULT_LOOKBACK_DAYS * 86400;
   const operatorPubkeys = getDiscoveryOperatorPubkeys();
 
   const streamFilter: Filter = {
     kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],
     since: sinceSec,
-    limit: Math.max(limit * 2, 200)
+    limit: Math.max(DEFAULT_LIMIT * 2, 200)
   };
   const policyFilter: Filter | null =
     operatorPubkeys.length > 0
@@ -77,7 +80,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       })
     );
 
-    const allEvents = perRelayResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+    const allEvents = perRelayResults.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : []
+    );
     const hiddenPubkeys = new Map<string, { hidden: boolean; createdAt: number }>();
     const hiddenStreams = new Map<string, { hidden: boolean; createdAt: number }>();
     const byStreamKey = new Map<string, StreamAnnounce>();
@@ -121,28 +126,74 @@ export async function GET(req: NextRequest): Promise<Response> {
         return true;
       })
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit);
+      .slice(0, DEFAULT_LIMIT);
 
-    return NextResponse.json({
-      streams,
-      queriedAt: nowSec,
-      relays
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        streams: [] as StreamAnnounce[],
-        relays,
-        queriedAt: nowSec,
-        error: error?.message ?? "discovery snapshot failed"
-      },
-      { status: 502 }
-    );
+    cached = { streams, queriedAt: nowSec, relays };
+  } catch (error: unknown) {
+    // Keep stale cache on error — better than nothing.
+    console.error("[snapshot] refresh failed:", error);
   } finally {
-    try {
-      pool.close(relays);
-    } catch {
-      // no-op
-    }
+    try { pool.close(relays); } catch { /* no-op */ }
+    refreshInFlight = false;
   }
+}
+
+// Kick off the first refresh immediately on module load, then repeat.
+refreshCache();
+setInterval(() => { refreshCache(); }, REFRESH_INTERVAL_MS);
+
+// ---------------------------------------------------------------------------
+// GET handler — always returns instantly from cache.
+// ---------------------------------------------------------------------------
+function parseBoundedInt(
+  raw: string | null,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  const value = Math.floor(parsed);
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+export async function GET(req: NextRequest): Promise<Response> {
+  const url = new URL(req.url);
+  const limit = parseBoundedInt(url.searchParams.get("limit"), DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT);
+
+  // If cache is populated, return immediately.
+  let snap = getCached();
+  if (snap) {
+    return NextResponse.json({
+      streams: snap.streams.slice(0, limit),
+      queriedAt: snap.queriedAt,
+      relays: snap.relays
+    });
+  }
+
+  // Cache not ready yet (first request came before initial refresh finished).
+  // Wait up to 25s for it, polling every 500ms.
+  const deadline = Date.now() + 25_000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    snap = getCached();
+    if (snap) break;
+  }
+
+  if (snap) {
+    return NextResponse.json({
+      streams: snap.streams.slice(0, limit),
+      queriedAt: snap.queriedAt,
+      relays: snap.relays
+    });
+  }
+
+  // Still nothing — return empty.
+  return NextResponse.json({
+    streams: [] as StreamAnnounce[],
+    queriedAt: Math.floor(Date.now() / 1000),
+    relays: getNostrRelays()
+  });
 }

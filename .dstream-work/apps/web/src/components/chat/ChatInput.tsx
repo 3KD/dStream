@@ -37,7 +37,7 @@ export function ChatInput({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="shrink-0 p-3 border-t border-neutral-700 bg-neutral-900">
+    <form onSubmit={handleSubmit} className="shrink-0 pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-700 bg-neutral-900">
       <div className="flex gap-2">
         <input
           type="text"

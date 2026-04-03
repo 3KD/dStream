@@ -31,7 +31,7 @@ const STREAM_ANNOUNCE_MIN_LIMIT_ALL = 320;
 const STREAM_CACHE_MAX_ITEMS = 360;
 const STREAM_CACHE_REFRESH_MS = 90_000;
 const STREAM_DISCOVERY_TIMEOUT_MS = 4_000;
-const STREAM_DISCOVERY_SERVER_FALLBACK_COOLDOWN_MS = 2 * 60 * 1000;
+const STREAM_DISCOVERY_SERVER_FALLBACK_COOLDOWN_MS = 60 * 1000;
 const DISCOVERY_POLICY_LOOKBACK_SEC = 14 * 86400;
 const DISCOVERY_POLICY_LIMIT = 2000;
 const ORIGIN_STREAM_ID_PATTERN = /^[0-9a-f]{64}--(.+)$/i;
@@ -72,6 +72,9 @@ interface StreamDirectoryStore {
   hiddenStreamPolicies: Map<string, HiddenPolicyState>;
   fallbackInFlight: Promise<void> | null;
   fallbackLastAtMs: number;
+  /** Stream keys the server snapshot most recently reported as live. */
+  serverLiveKeys: Set<string>;
+  serverLiveKeysUpdatedAt: number;
 }
 
 function safeDecode(value: string): string {
@@ -116,7 +119,7 @@ function streamIdFromStreamingUrl(streaming: string): string {
   return normalizeStreamId(segment);
 }
 
-function canonicalStreamKey(stream: StreamAnnounce): string {
+export function canonicalStreamKey(stream: StreamAnnounce): string {
   const idFromTag = normalizeStreamId(stream.streamId);
   const idFromUrl = streamIdFromStreamingUrl(stream.streaming ?? "");
   if (idFromTag && idFromUrl) {
@@ -264,7 +267,9 @@ const streamDirectoryStore: StreamDirectoryStore = {
   hiddenPubkeyPolicies: new Map(),
   hiddenStreamPolicies: new Map(),
   fallbackInFlight: null,
-  fallbackLastAtMs: 0
+  fallbackLastAtMs: 0,
+  serverLiveKeys: new Set(),
+  serverLiveKeysUpdatedAt: 0
 };
 
 let applySnapshotTimer: ReturnType<typeof setTimeout> | null = null;
@@ -290,8 +295,24 @@ function applyStreamSnapshot() {
   const hintGraceCutoff = now - LIVE_HINT_GRACE_SEC;
   const oldestCutoff = now - STREAM_ANNOUNCE_LOOKBACK_ALL_SEC;
 
+  // Server-live confirmation is authoritative for up to 2 minutes after the
+  // last snapshot fetch.  After that we fall back to heuristic normalization.
+  const serverLiveStale = (Date.now() - streamDirectoryStore.serverLiveKeysUpdatedAt) > 120_000;
+
   for (const [streamKey, stream] of streamDirectoryStore.streamsByKey) {
-    const normalized = normalizeStaleLiveStatus(stream, staleCutoff, hintGraceCutoff);
+    let normalized = normalizeStaleLiveStatus(stream, staleCutoff, hintGraceCutoff);
+
+    // If the server recently confirmed this stream as live, trust it over the
+    // client-side heuristic.  The server sees the full relay picture with
+    // generous timeouts; the browser may have stale data.
+    if (
+      !serverLiveStale &&
+      normalized.status !== "live" &&
+      streamDirectoryStore.serverLiveKeys.has(streamKey)
+    ) {
+      normalized = { ...normalized, status: "live" };
+    }
+
     if (normalized !== stream) {
       streamDirectoryStore.streamsByKey.set(streamKey, normalized);
     }
@@ -304,34 +325,38 @@ function applyStreamSnapshot() {
 
   const deduped = dedupeByCanonicalStream(Array.from(streamDirectoryStore.streamsByKey.values()));
 
-  // Stable merge: preserve the order of previously-emitted streams,
-  // only append new ones at the end (sorted among themselves).
-  const prevKeys = new Set(
-    streamDirectoryStore.snapshot.streams.map((s) => makeStreamKey(s.pubkey, s.streamId))
-  );
-  const prevMap = new Map(
-    streamDirectoryStore.snapshot.streams.map((s) => [makeStreamKey(s.pubkey, s.streamId), s])
-  );
-
-  // Keep previous streams in their existing order, updating data but NOT position
-  const kept: StreamAnnounce[] = [];
-  for (const prev of streamDirectoryStore.snapshot.streams) {
-    const key = makeStreamKey(prev.pubkey, prev.streamId);
-    const updated = deduped.find((s) => makeStreamKey(s.pubkey, s.streamId) === key);
-    if (updated) kept.push(updated);
+  // Build canonical-key → deduped-stream map for stable matching.
+  // Using canonical keys (not raw pubkey:streamId) ensures that when the dedup
+  // winner changes (different raw streamId for the same logical stream), we see
+  // it as a data update rather than a remove + add.
+  const dedupedByCanonical = new Map<string, StreamAnnounce>();
+  for (const s of deduped) {
+    dedupedByCanonical.set(`${s.pubkey.toLowerCase()}::${canonicalStreamKey(s)}`, s);
   }
 
-  // New streams that weren't in the previous snapshot — sort then append
-  const newStreams = deduped.filter((s) => !prevKeys.has(makeStreamKey(s.pubkey, s.streamId)));
+  // Stable merge: keep previous streams in order, match by canonical key
+  const usedCanonicalKeys = new Set<string>();
+  const kept: StreamAnnounce[] = [];
+  for (const prev of streamDirectoryStore.snapshot.streams) {
+    const ck = `${prev.pubkey.toLowerCase()}::${canonicalStreamKey(prev)}`;
+    const updated = dedupedByCanonical.get(ck);
+    if (updated) {
+      kept.push(updated);
+      usedCanonicalKeys.add(ck);
+    }
+  }
+
+  // New streams not in the previous snapshot (by canonical key)
+  const newStreams = deduped.filter((s) => {
+    const ck = `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s)}`;
+    return !usedCanonicalKeys.has(ck);
+  });
   const sortedNew = sortStreamsStable(newStreams, streamDirectoryStore.orderMeta);
 
-  // Combine: live first within each group, but don't re-sort kept streams
-  const keptLive = kept.filter((s) => s.status === "live");
-  const keptOther = kept.filter((s) => s.status !== "live");
-  const newLive = sortedNew.filter((s) => s.status === "live");
-  const newOther = sortedNew.filter((s) => s.status !== "live");
-
-  const merged = [...keptLive, ...newLive, ...keptOther, ...newOther];
+  // Combine: kept streams hold position, new streams append at end.
+  // Do NOT re-sort kept streams by live status — that causes cards to jump
+  // between sections on every prune cycle when status toggles.
+  const merged = [...kept, ...sortedNew];
   const capped = merged.slice(0, STREAM_CACHE_MAX_ITEMS);
   if (streamDirectoryStore.streamsByKey.size > STREAM_CACHE_MAX_ITEMS) {
     const keep = new Set(capped.map((stream) => makeStreamKey(stream.pubkey, stream.streamId)));
@@ -403,14 +428,36 @@ function mergeFallbackStreams(streams: StreamAnnounce[]) {
   const staleCutoff = now - LIVE_STALE_SEC;
   const hintGraceCutoff = now - LIVE_HINT_GRACE_SEC;
 
+  // Record which streams the server reports as live.  The server-side API
+  // creates a fresh SimplePool with generous per-relay timeouts and sees the
+  // authoritative state.  We trust it over the browser's relay snapshot which
+  // may lag behind.
+  const newServerLiveKeys = new Set<string>();
+  for (const s of streams) {
+    if (s && s.status === "live" && typeof s.pubkey === "string" && typeof s.streamId === "string") {
+      newServerLiveKeys.add(makeStreamKey(s.pubkey, s.streamId));
+    }
+  }
+  streamDirectoryStore.serverLiveKeys = newServerLiveKeys;
+  streamDirectoryStore.serverLiveKeysUpdatedAt = Date.now();
+
   for (const parsed of streams) {
     if (!parsed || typeof parsed !== "object") continue;
     if (typeof parsed.pubkey !== "string" || typeof parsed.streamId !== "string") continue;
     if (!Number.isFinite(parsed.createdAt)) continue;
     const streamKey = makeStreamKey(parsed.pubkey, parsed.streamId);
     const prevCreatedAt = streamDirectoryStore.seen.get(streamKey);
-    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt) continue;
-    streamDirectoryStore.seen.set(streamKey, parsed.createdAt);
+    // Allow the server snapshot to promote "ended" → "live" even when createdAt
+    // matches.  Relays may serve stale "ended" events that the server-side
+    // aggregation (fresh SimplePool with longer per-relay timeout) has already
+    // superseded.  Without this, the relay data wins and the stream stays hidden.
+    const existingStream = streamDirectoryStore.streamsByKey.get(streamKey);
+    const serverPromotion =
+      parsed.status === "live" &&
+      existingStream &&
+      existingStream.status !== "live";
+    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverPromotion) continue;
+    streamDirectoryStore.seen.set(streamKey, Math.max(prevCreatedAt ?? 0, parsed.createdAt));
     if (!streamDirectoryStore.orderMeta.has(streamKey)) {
       streamDirectoryStore.orderMeta.set(streamKey, {
         firstSeenAt: parsed.createdAt,
@@ -506,16 +553,14 @@ function connectDirectoryFeed() {
     },
     oneose: () => {
       emitSnapshot({ isLoading: false });
-      if (streamDirectoryStore.streamsByKey.size === 0) {
-        void hydrateFromServerSnapshotFallback();
-      }
+      // Always merge server snapshot to fill gaps from slow/incomplete relays.
+      // mergeFallbackStreams deduplicates, so this is safe even when relay data is full.
+      void hydrateFromServerSnapshotFallback();
     }
   }) as { close?: () => void };
   streamDirectoryStore.connectTimeout = setTimeout(() => {
     emitSnapshot({ isLoading: false });
-    if (streamDirectoryStore.streamsByKey.size === 0) {
-      void hydrateFromServerSnapshotFallback();
-    }
+    void hydrateFromServerSnapshotFallback();
   }, STREAM_DISCOVERY_TIMEOUT_MS);
 }
 
