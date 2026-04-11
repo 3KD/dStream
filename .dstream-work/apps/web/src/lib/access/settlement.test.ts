@@ -40,9 +40,9 @@ test("stake settlement auto-grant: private live access allowed after verified se
     action: "watch_live",
     announce: {
       privateStream: true,
-      privateVod: false,
-      vodArchiveEnabled: true,
-      vodVisibility: "public",
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
       viewerAllowPubkeys: []
     }
   });
@@ -134,9 +134,9 @@ test("stake settlement auto-revoke: refund revokes session entitlement", async (
     action: "watch_live",
     announce: {
       privateStream: true,
-      privateVod: false,
-      vodArchiveEnabled: true,
-      vodVisibility: "public",
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
       viewerAllowPubkeys: []
     }
   });

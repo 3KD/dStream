@@ -146,6 +146,9 @@ export default function WhitepaperPage() {
               <Link href="/docs" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500 text-sm">
                 Build Docs
               </Link>
+              <Link href="/creator-manual" className="px-4 py-2 rounded-full bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/30 text-sm font-bold">
+                Creator Manual
+              </Link>
               <Link
                 href="/settings#wallet-integrations"
                 className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500 text-sm"

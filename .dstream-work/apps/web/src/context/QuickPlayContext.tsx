@@ -59,7 +59,7 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
         return;
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: next, savedAt: Date.now() }));
     } catch {
       // ignore storage failures
     }
@@ -70,8 +70,19 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (!isValidStreamRef(parsed)) return;
-      setQuickPlayStreamState(normalizeStreamRef(parsed));
+      
+      let payload = parsed;
+      if (parsed && typeof parsed === "object" && "data" in parsed && typeof parsed.savedAt === "number") {
+        const age = Date.now() - parsed.savedAt;
+        if (age > 20 * 60 * 1000) {
+          localStorage.removeItem(STORAGE_KEY);
+          return;
+        }
+        payload = parsed.data;
+      }
+
+      if (!isValidStreamRef(payload)) return;
+      setQuickPlayStreamState(normalizeStreamRef(payload));
     } catch {
       // ignore malformed storage
     }
@@ -115,6 +126,37 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
     }),
     [clearQuickPlayStream, quickPlayStream, setQuickPlayStream]
   );
+
+  useEffect(() => {
+    if (!quickPlayStream) return;
+    
+    let lastActive = Date.now();
+    const updateActivity = () => {
+      lastActive = Date.now();
+    };
+
+    window.addEventListener("mousemove", updateActivity);
+    window.addEventListener("keydown", updateActivity);
+    window.addEventListener("touchstart", updateActivity);
+    window.addEventListener("scroll", updateActivity);
+
+    const interval = setInterval(() => {
+      if (Date.now() - lastActive > 20 * 60 * 1000) {
+        clearQuickPlayStream();
+        if (window.location.pathname.startsWith("/watch")) {
+           window.location.href = "/";
+        }
+      }
+    }, 60000);
+
+    return () => {
+      window.removeEventListener("mousemove", updateActivity);
+      window.removeEventListener("keydown", updateActivity);
+      window.removeEventListener("touchstart", updateActivity);
+      window.removeEventListener("scroll", updateActivity);
+      clearInterval(interval);
+    };
+  }, [quickPlayStream, clearQuickPlayStream]);
 
   return <QuickPlayContext.Provider value={value}>{children}</QuickPlayContext.Provider>;
 }

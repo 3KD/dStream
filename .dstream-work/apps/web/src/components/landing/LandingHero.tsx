@@ -14,9 +14,9 @@ interface LandingHeroProps {
 
 export function LandingHero({
   primaryHref = "/broadcast",
-  secondaryHref = "/browse",
+  secondaryHref = "/use-cases",
   primaryLabel = "Start Streaming",
-  secondaryLabel = "Browse Streams",
+  secondaryLabel = "Who is dStream for?",
   collapseControl
 }: LandingHeroProps) {
   const [currentWord, setCurrentWord] = useState(WORDS[0]);

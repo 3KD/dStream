@@ -1,4 +1,4 @@
-export const ACCESS_ACTIONS = ["watch_live", "watch_vod", "chat_send", "p2p_assist", "rebroadcast"] as const;
+export const ACCESS_ACTIONS = ["watch_live", "watch_video", "chat_send", "p2p_assist", "rebroadcast"] as const;
 export type AccessAction = (typeof ACCESS_ACTIONS)[number];
 
 export const ACCESS_ENTITLEMENT_SOURCES = [
@@ -71,9 +71,9 @@ export interface AccessPolicyContext {
   skipAudit?: boolean;
   announce?: {
     privateStream: boolean;
-    privateVod: boolean;
-    vodArchiveEnabled: boolean;
-    vodVisibility: "public" | "private";
+    privateVideo: boolean;
+    videoArchiveEnabled: boolean;
+    videoVisibility: "public" | "private";
     viewerAllowPubkeys: string[];
     feeWaiverVipPubkeys?: string[];
   };
@@ -85,7 +85,7 @@ export interface AccessDecision {
     | "deny_explicit"
     | "deny_identity_required"
     | "deny_private_allowlist"
-    | "deny_vod_archive_disabled"
+    | "deny_video_archive_disabled"
     | "deny_no_matching_entitlement"
     | "allow_owner"
     | "allow_operator"

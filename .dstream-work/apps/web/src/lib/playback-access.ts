@@ -3,7 +3,7 @@ import { makeOriginStreamId } from "./origin";
 import { parseStreamAnnounceEvent, type NostrEvent } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import { evaluateAccess } from "./access/evaluator";
-import { buildVodAccessResourceCandidates } from "./access/packages";
+import { buildVideoAccessResourceCandidates } from "./access/packages";
 
 const ACCESS_TOKEN_TTL_SEC = 15 * 60;
 const ACCESS_TOKEN_MAX_FUTURE_SEC = 60 * 60;
@@ -20,8 +20,8 @@ interface PlaybackPolicy {
   originStreamId: string;
   viewerAllowPubkeys: string[];
   privateStream: boolean;
-  vodArchiveEnabled: boolean;
-  vodVisibility: "public" | "private";
+  videoArchiveEnabled: boolean;
+  videoVisibility: "public" | "private";
   status: "live" | "ended";
   createdAt: number;
   updatedAtSec: number;
@@ -187,8 +187,8 @@ export function registerPlaybackPolicyFromAnnounceEvent(
     originStreamId,
     viewerAllowPubkeys: parsed.viewerAllowPubkeys.map((value) => value.toLowerCase()),
     privateStream: parsed.viewerAllowPubkeys.length > 0,
-    vodArchiveEnabled: parsed.vodArchiveEnabled === true,
-    vodVisibility: parsed.vodVisibility === "private" ? "private" : "public",
+    videoArchiveEnabled: parsed.videoArchiveEnabled === true,
+    videoVisibility: parsed.videoVisibility === "private" ? "private" : "public",
     status: parsed.status,
     createdAt: parsed.createdAt,
     updatedAtSec: nowSec()
@@ -235,8 +235,8 @@ export function refreshPlaybackAccessToken(params: {
       expiresAtSec: number;
       originStreamId: string;
       privateStream: boolean;
-      privateVod: boolean;
-      vodVisibility: "public" | "private";
+      privateVideo: boolean;
+      videoVisibility: "public" | "private";
       reasonCode: string;
       entitlementId: string | null;
     }
@@ -293,15 +293,15 @@ export function refreshPlaybackAccessToken(params: {
     }
   }
 
-  if (announceContext.privateVod && !subjectPubkey) {
-    const vodDecision = evaluateAccess({
+  if (announceContext.privateVideo && !subjectPubkey) {
+    const videoDecision = evaluateAccess({
       hostPubkey: policy.streamPubkey,
-      resourceId: `${resourceBase}:vod:*`,
-      action: "watch_vod",
+      resourceId: `${resourceBase}:video:*`,
+      action: "watch_video",
       announce: announceContext,
       skipAudit: true
     });
-    return { ok: false, status: 403, error: decisionToVodError(vodDecision) };
+    return { ok: false, status: 403, error: decisionToVideoError(videoDecision) };
   }
 
   const issued = issuePlaybackAccessToken({
@@ -317,8 +317,8 @@ export function refreshPlaybackAccessToken(params: {
     expiresAtSec: issued.expiresAtSec,
     originStreamId: policy.originStreamId,
     privateStream: policy.privateStream,
-    privateVod: announceContext.privateVod,
-    vodVisibility: policy.vodVisibility,
+    privateVideo: announceContext.privateVideo,
+    videoVisibility: policy.videoVisibility,
     reasonCode: liveDecision?.reasonCode ?? "allow_public",
     entitlementId: liveDecision?.entitlementId ?? null
   };
@@ -407,29 +407,29 @@ function decisionToPlaybackError(decision: ReturnType<typeof evaluateAccess>): s
   }
 }
 
-function decisionToVodError(decision: ReturnType<typeof evaluateAccess>): string {
+function decisionToVideoError(decision: ReturnType<typeof evaluateAccess>): string {
   switch (decision.reasonCode) {
     case "deny_identity_required":
-      return "VOD access denied: identity is required.";
+      return "Video access denied: identity is required.";
     case "deny_private_allowlist":
-      return "VOD access denied: viewer is not allowlisted for private archive.";
-    case "deny_vod_archive_disabled":
-      return "VOD access denied: archive is disabled for this stream.";
+      return "Video access denied: viewer is not allowlisted for private archive.";
+    case "deny_video_archive_disabled":
+      return "Video access denied: archive is disabled for this stream.";
     case "deny_explicit":
-      return "VOD access denied: viewer is blocked by stream policy.";
+      return "Video access denied: viewer is blocked by stream policy.";
     case "deny_no_matching_entitlement":
-      return "VOD access denied: viewer does not have required entitlement.";
+      return "Video access denied: viewer does not have required entitlement.";
     default:
-      return "VOD access denied.";
+      return "Video access denied.";
   }
 }
 
 function buildAnnounceContext(policy: PlaybackPolicy) {
   return {
     privateStream: policy.privateStream,
-    privateVod: policy.vodArchiveEnabled && policy.vodVisibility === "private",
-    vodArchiveEnabled: policy.vodArchiveEnabled,
-    vodVisibility: policy.vodVisibility,
+    privateVideo: policy.videoArchiveEnabled && policy.videoVisibility === "private",
+    videoArchiveEnabled: policy.videoArchiveEnabled,
+    videoVisibility: policy.videoVisibility,
     viewerAllowPubkeys: policy.viewerAllowPubkeys,
     feeWaiverVipPubkeys: []
   };
@@ -493,19 +493,19 @@ export function authorizePlaybackProxyRequest(
   return { ok: true };
 }
 
-export function authorizeVodProxyRequest(
+export function authorizeVideoProxyRequest(
   originStreamId: string,
   accessToken: string | null,
   filePathSegments?: string[]
 ): { ok: true } | { ok: false; status: number; error: string } {
   const normalizedOriginStreamId = stripRenditionSuffix((originStreamId ?? "").trim());
   if (!normalizedOriginStreamId) {
-    return { ok: false, status: 400, error: "VOD access denied: invalid stream id." };
+    return { ok: false, status: 400, error: "Video access denied: invalid stream id." };
   }
 
   const verified = verifyPlaybackAccessToken(accessToken, normalizedOriginStreamId);
   if (!verified.ok) {
-    return { ok: false, status: 403, error: `VOD access denied: ${verified.error}.` };
+    return { ok: false, status: 403, error: `Video access denied: ${verified.error}.` };
   }
 
   const policy = getPlaybackPolicy(normalizedOriginStreamId);
@@ -515,7 +515,7 @@ export function authorizeVodProxyRequest(
     .map((segment) => decodeURIComponent(String(segment ?? "")).trim())
     .filter((segment) => !!segment && segment !== "." && segment !== "..");
   const relativePath = safeSegments.join("/") || undefined;
-  const resourceCandidates = buildVodAccessResourceCandidates({
+  const resourceCandidates = buildVideoAccessResourceCandidates({
     hostPubkey: policy.streamPubkey,
     streamId: policy.streamId,
     relativePath
@@ -525,14 +525,14 @@ export function authorizeVodProxyRequest(
       hostPubkey: policy.streamPubkey,
       subjectPubkey: normalizePubkey(verified.payload.v) ?? undefined,
       resourceId,
-      action: "watch_vod",
+      action: "watch_video",
       announce: buildAnnounceContext(policy),
       skipAudit: true
     })
   );
-  const hardDeny = decisions.find((decision) => decision.reasonCode === "deny_explicit" || decision.reasonCode === "deny_vod_archive_disabled");
-  if (hardDeny) return { ok: false, status: 403, error: decisionToVodError(hardDeny) };
+  const hardDeny = decisions.find((decision) => decision.reasonCode === "deny_explicit" || decision.reasonCode === "deny_video_archive_disabled");
+  if (hardDeny) return { ok: false, status: 403, error: decisionToVideoError(hardDeny) };
   if (decisions.some((decision) => decision.allowed)) return { ok: true };
   const lastDecision = decisions[decisions.length - 1] ?? ({ allowed: false, reasonCode: "deny_no_matching_entitlement" } as ReturnType<typeof evaluateAccess>);
-  return { ok: false, status: 403, error: decisionToVodError(lastDecision) };
+  return { ok: false, status: 403, error: decisionToVideoError(lastDecision) };
 }

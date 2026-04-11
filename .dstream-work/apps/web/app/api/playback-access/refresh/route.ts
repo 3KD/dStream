@@ -35,8 +35,8 @@ export async function POST(req: Request): Promise<Response> {
     expiresAtSec: result.expiresAtSec,
     originStreamId: result.originStreamId,
     privateStream: result.privateStream,
-    privateVod: result.privateVod,
-    vodVisibility: result.vodVisibility,
+    privateVideo: result.privateVideo,
+    videoVisibility: result.videoVisibility,
     reasonCode: result.reasonCode,
     entitlementId: result.entitlementId
   });

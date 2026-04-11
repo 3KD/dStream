@@ -74,6 +74,6 @@ export function deriveQuickPlayPlaybackStateKey(input: QuickPlayStateKeyInput): 
   const pubkey = (input.pubkey ?? "").trim().toLowerCase();
   const streamId = (input.streamId ?? "").trim();
   const hlsUrl = (input.hlsUrl ?? "").trim();
-  const vodIdentity = hlsUrl ? hlsUrl.split("?")[0] : "live";
-  return `quickplay:${pubkey}:${streamId}:${vodIdentity}`;
+  const videoIdentity = hlsUrl ? hlsUrl.split("?")[0] : "live";
+  return `quickplay:${pubkey}:${streamId}:${videoIdentity}`;
 }

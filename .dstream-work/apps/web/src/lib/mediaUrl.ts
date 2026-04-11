@@ -19,8 +19,8 @@ const DIRECT_MEDIA_EXTENSIONS = [
 const HLS_PATH_MARKERS = ["/hls/", "/api/hls/", "/whep", "/whip", "/master.m3u8", "/manifest.m3u8"] as const;
 const LIVE_PATH_MARKERS = ["/hls/live.m3u8", "/live.m3u8", "/whep", "/whip"] as const;
 const LIVE_PATH_REGEXES = [/\/stream\/[^/]+\/index\.m3u8$/i, /\/api\/hls\/[^/]+\/index\.m3u8$/i, /\/hls\/[^/]+\/index\.m3u8$/i] as const;
-const VOD_PATH_MARKERS = ["/vod/", "/replay/", "/replays/", "/archive/", "/recording/", "/recordings/", "/dvr/"] as const;
-const VOD_QUERY_MARKERS = ["vod=1", "replay=1", "archive=1", "vod=true", "replay=true", "archive=true"] as const;
+const Video_PATH_MARKERS = ["/video/", "/replay/", "/replays/", "/archive/", "/recording/", "/recordings/", "/dvr/"] as const;
+const Video_QUERY_MARKERS = ["video=1", "replay=1", "archive=1", "video=true", "replay=true", "archive=true"] as const;
 
 function splitPathFromUrl(input: string): string {
   const value = input.trim();
@@ -88,26 +88,26 @@ export function isLikelyLivePlaybackUrl(input: string | null | undefined): boole
   return /\/live(\.|\/|$)/i.test(path);
 }
 
-export function isLikelyVodPlaybackUrl(input: string | null | undefined): boolean {
+export function isLikelyVideoPlaybackUrl(input: string | null | undefined): boolean {
   if (!isHttpLikeMediaUrl(input)) return false;
   const path = splitPathFromUrl(input);
   if (!path) return false;
   const hasDirectExtension = DIRECT_MEDIA_EXTENSIONS.some((ext) => path.endsWith(ext));
-  if (VOD_PATH_MARKERS.some((marker) => path.includes(marker))) return true;
-  if (path.includes("/api/vod/")) return true;
+  if (Video_PATH_MARKERS.some((marker) => path.includes(marker))) return true;
+  if (path.includes("/api/video/")) return true;
 
   const query = splitQueryFromUrl(input);
-  if (VOD_QUERY_MARKERS.some((marker) => query.includes(marker))) return true;
+  if (Video_QUERY_MARKERS.some((marker) => query.includes(marker))) return true;
   if (hasDirectExtension) return false;
   if (!path.endsWith(".m3u8")) return false;
   if (isLikelyLivePlaybackUrl(input)) return false;
 
-  return path.includes("/playlist/") || path.includes("/recorded/") || path.includes("/vod/");
+  return path.includes("/playlist/") || path.includes("/recorded/") || path.includes("/video/");
 }
 
 export function isLikelyLivePlayableMediaUrl(input: string | null | undefined): boolean {
   if (!isLikelyPublicPlayableMediaUrl(input)) return false;
-  if (isLikelyVodPlaybackUrl(input)) return false;
+  if (isLikelyVideoPlaybackUrl(input)) return false;
   if (isLikelyLivePlaybackUrl(input)) return true;
   return inferMediaUrlKind(input) === "hls";
 }
@@ -148,7 +148,8 @@ export function isLikelyPublicPlaybackUrl(input: string | null | undefined): boo
     const parsed = new URL(value);
     if (!/^https?:$/i.test(parsed.protocol)) return false;
     if (isLocalOnlyHost(parsed.hostname)) return false;
-    if (isMixedContentRisk(parsed)) return false;
+    // Relaxed mixed-content check to restore global HTTP-only broadcast relays.
+    // if (isMixedContentRisk(parsed)) return false;
     return true;
   } catch {
     return false;

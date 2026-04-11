@@ -19,8 +19,8 @@ services:
       # Next.js reverse proxy targets (server-only).
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
       DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
-      # Read-only VOD archive mount path exposed by API routes.
-      DSTREAM_VOD_DIR: "${DSTREAM_VOD_DIR:-/recordings}"
+      # Read-only Video archive mount path exposed by API routes.
+      DSTREAM_VIDEO_DIR: "${DSTREAM_VIDEO_DIR:-/recordings}"
       # Monero verified tips (server-only). Set to real wallet-rpc in real deployments.
       DSTREAM_XMR_WALLET_RPC_ORIGIN: "${DSTREAM_XMR_WALLET_RPC_ORIGIN:-}"
       DSTREAM_XMR_WALLET_RPC_USER: "${DSTREAM_XMR_WALLET_RPC_USER:-}"
@@ -68,12 +68,14 @@ services:
   xmr-wallet-init:
     build:
       context: ./infra/xmr-wallet
-    entrypoint: ["monero-wallet-cli"]
+    entrypoint: ["sh", "-c"]
     command: 
-      - "--generate-new-wallet=/wallet/node_wallet"
-      - "--password=${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
-      - "--mnemonic-language=English"
-      - "--command=exit"
+      - |
+        if [ ! -f /wallet/node_wallet.keys ]; then
+          monero-wallet-cli --generate-new-wallet=/wallet/node_wallet --password=$${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password} --mnemonic-language=English --command=exit
+        else
+          echo "XMR wallet already exists, skipping initialization."
+        fi
     volumes:
       - xmr_wallet_data:/wallet
     restart: "no"

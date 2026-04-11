@@ -42,8 +42,8 @@ function actionLabel(action: AccessAction): string {
   switch (action) {
     case "watch_live":
       return "Watch live";
-    case "watch_vod":
-      return "Watch VOD";
+    case "watch_video":
+      return "Watch Video";
     case "chat_send":
       return "Chat";
     case "p2p_assist":
@@ -73,7 +73,7 @@ export function AccessDenyAuditPanel() {
   const [resourceDenyInput, setResourceDenyInput] = useState("");
   const [denyReasonInput, setDenyReasonInput] = useState("");
   const [denyExpiresHoursInput, setDenyExpiresHoursInput] = useState("");
-  const [denyActions, setDenyActions] = useState<AccessAction[]>(["watch_live", "watch_vod", "chat_send"]);
+  const [denyActions, setDenyActions] = useState<AccessAction[]>(["watch_live", "watch_video", "chat_send"]);
 
   const [denyRules, setDenyRules] = useState<AccessDenyRule[]>([]);
   const [auditRows, setAuditRows] = useState<AccessAuditRecord[]>([]);

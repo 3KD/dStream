@@ -41,9 +41,9 @@ export async function POST(req: Request): Promise<Response> {
   let announceContext:
     | {
         privateStream: boolean;
-        privateVod: boolean;
-        vodArchiveEnabled: boolean;
-        vodVisibility: "public" | "private";
+        privateVideo: boolean;
+        videoArchiveEnabled: boolean;
+        videoVisibility: "public" | "private";
         viewerAllowPubkeys: string[];
         feeWaiverVipPubkeys: string[];
       }
@@ -54,9 +54,9 @@ export async function POST(req: Request): Promise<Response> {
     if (!registration.ok) return Response.json({ ok: false, error: registration.error }, { status: registration.status });
     announceContext = {
       privateStream: registration.policy.privateStream,
-      privateVod: registration.policy.vodArchiveEnabled && registration.policy.vodVisibility === "private",
-      vodArchiveEnabled: registration.policy.vodArchiveEnabled,
-      vodVisibility: registration.policy.vodVisibility,
+      privateVideo: registration.policy.videoArchiveEnabled && registration.policy.videoVisibility === "private",
+      videoArchiveEnabled: registration.policy.videoArchiveEnabled,
+      videoVisibility: registration.policy.videoVisibility,
       viewerAllowPubkeys: registration.policy.viewerAllowPubkeys,
       feeWaiverVipPubkeys: []
     };

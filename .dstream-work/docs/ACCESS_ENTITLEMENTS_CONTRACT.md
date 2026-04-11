@@ -5,7 +5,7 @@
 Create one canonical backend model for **who can do what** across:
 
 - live stream watch
-- VOD watch
+- Video watch
 - chat send
 - P2P assist / rebroadcast participation
 
@@ -16,7 +16,7 @@ The same evaluator must power all access checks so behavior is deterministic and
 Current implementation already has:
 
 - short-lived playback token issuance (`POST /api/playback-access/issue`)
-- private stream / private VOD checks from signed stream announce + allowlist
+- private stream / private Video checks from signed stream announce + allowlist
 - Monero verified backend settlement flows (`/api/xmr/*`)
 
 This contract layers a persistent entitlement model under that token issuance path.
@@ -33,13 +33,13 @@ Resource IDs are canonical strings:
 
 - `stream:<hostPubkey>:<streamId>:live`
 - `stream:<hostPubkey>:<streamId>:chat`
-- `stream:<hostPubkey>:<streamId>:vod:<vodId>`
+- `stream:<hostPubkey>:<streamId>:video:<videoId>`
 - `stream:<hostPubkey>:<streamId>:playlist:<playlistId>`
 
 ### Actions
 
 - `watch_live`
-- `watch_vod`
+- `watch_video`
 - `chat_send`
 - `p2p_assist`
 - `rebroadcast`
@@ -241,7 +241,7 @@ Request:
   "subjectPubkey": "hex64",
   "hostPubkey": "hex64",
   "resourceId": "stream:<host>:<streamId>:playlist:gold",
-  "actions": ["watch_vod"],
+  "actions": ["watch_video"],
   "source": "purchase_verified",
   "sourceRef": "settlement:<uuid>",
   "startsAt": "2026-02-24T10:00:00Z",

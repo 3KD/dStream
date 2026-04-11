@@ -1,7 +1,7 @@
 import type {
   NostrEvent,
   StreamAnnounce,
-  StreamVodAccessScope,
+  StreamVideoAccessScope,
   StreamCaptionTrack,
   StreamGuildFeeWaiver,
   StreamPaymentAsset,
@@ -9,9 +9,9 @@ import type {
   StreamHostMode,
   StreamRendition,
   StreamStatus,
-  StreamVodMode,
-  StreamVodPolicy,
-  StreamVodVisibility
+  StreamVideoMode,
+  StreamVideoPolicy,
+  StreamVideoVisibility
 } from "./types";
 import { NOSTR_KINDS, STREAM_PAYMENT_ASSETS } from "./types";
 import {
@@ -203,41 +203,41 @@ function normalizeHostMode(input: string | undefined): StreamHostMode | undefine
   return undefined;
 }
 
-function normalizeVodVisibility(input: string | undefined): StreamVodVisibility | undefined {
+function normalizeVideoVisibility(input: string | undefined): StreamVideoVisibility | undefined {
   if (!input) return undefined;
   const value = input.trim().toLowerCase();
   if (value === "public" || value === "private") return value;
   return undefined;
 }
 
-function normalizeVodMode(input: string | undefined): StreamVodMode | undefined {
+function normalizeVideoMode(input: string | undefined): StreamVideoMode | undefined {
   if (!input) return undefined;
   if (input === "off" || input === "public" || input === "paid") return input;
   return undefined;
 }
 
-function normalizeVodCurrency(input: string | undefined): string | undefined {
+function normalizeVideoCurrency(input: string | undefined): string | undefined {
   if (!input) return undefined;
   const value = input.trim().toLowerCase();
   if (!/^[a-z0-9_-]{2,24}$/.test(value)) return undefined;
   return value;
 }
 
-function normalizeVodAccessScope(input: string | undefined): StreamVodAccessScope | undefined {
+function normalizeVideoAccessScope(input: string | undefined): StreamVideoAccessScope | undefined {
   if (!input) return undefined;
   if (input === "stream" || input === "playlist") return input;
   return undefined;
 }
 
-function normalizeVodPolicy(input: StreamVodPolicy | undefined): StreamVodPolicy | undefined {
+function normalizeVideoPolicy(input: StreamVideoPolicy | undefined): StreamVideoPolicy | undefined {
   if (!input) return undefined;
-  const mode = normalizeVodMode(input.mode);
+  const mode = normalizeVideoMode(input.mode);
   if (!mode) return undefined;
   const priceAtomic = (input.priceAtomic ?? "").trim();
-  const currency = normalizeVodCurrency(input.currency);
+  const currency = normalizeVideoCurrency(input.currency);
   const accessSeconds = parsePositiveInt(input.accessSeconds ? String(input.accessSeconds) : "");
   const playlistId = (input.playlistId ?? "").trim() || undefined;
-  const accessScope = normalizeVodAccessScope(input.accessScope);
+  const accessScope = normalizeVideoAccessScope(input.accessScope);
 
   return {
     mode,
@@ -374,9 +374,9 @@ export interface BuildStreamAnnounceInput {
   discoverable?: boolean;
   matureContent?: boolean;
   viewerAllowPubkeys?: string[];
-  vodArchiveEnabled?: boolean;
-  vodVisibility?: StreamVodVisibility;
-  vod?: StreamVodPolicy;
+  videoArchiveEnabled?: boolean;
+  videoVisibility?: StreamVideoVisibility;
+  video?: StreamVideoPolicy;
   feeWaiverGuilds?: StreamGuildFeeWaiver[];
   feeWaiverVipPubkeys?: string[];
   manifestSignerPubkey?: string;
@@ -435,20 +435,20 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   for (const viewerPubkey of viewerAllowPubkeys) {
     tags.push(["viewer_allow", viewerPubkey]);
   }
-  if (typeof input.vodArchiveEnabled === "boolean") {
-    tags.push(["vod_archive", input.vodArchiveEnabled ? "1" : "0"]);
+  if (typeof input.videoArchiveEnabled === "boolean") {
+    tags.push(["video_archive", input.videoArchiveEnabled ? "1" : "0"]);
   }
-  if (input.vodArchiveEnabled || input.vodVisibility) {
-    tags.push(["vod_visibility", input.vodVisibility === "private" ? "private" : "public"]);
+  if (input.videoArchiveEnabled || input.videoVisibility) {
+    tags.push(["video_visibility", input.videoVisibility === "private" ? "private" : "public"]);
   }
-  const vodPolicy = normalizeVodPolicy(input.vod);
-  if (vodPolicy) {
-    tags.push(["vod_mode", vodPolicy.mode]);
-    if (vodPolicy.priceAtomic) tags.push(["vod_price", vodPolicy.priceAtomic]);
-    if (vodPolicy.currency) tags.push(["vod_currency", vodPolicy.currency]);
-    if (vodPolicy.accessSeconds) tags.push(["vod_access_sec", String(vodPolicy.accessSeconds)]);
-    if (vodPolicy.playlistId) tags.push(["vod_playlist", vodPolicy.playlistId]);
-    if (vodPolicy.accessScope) tags.push(["vod_scope", vodPolicy.accessScope]);
+  const videoPolicy = normalizeVideoPolicy(input.video);
+  if (videoPolicy) {
+    tags.push(["video_mode", videoPolicy.mode]);
+    if (videoPolicy.priceAtomic) tags.push(["video_price", videoPolicy.priceAtomic]);
+    if (videoPolicy.currency) tags.push(["video_currency", videoPolicy.currency]);
+    if (videoPolicy.accessSeconds) tags.push(["video_access_sec", String(videoPolicy.accessSeconds)]);
+    if (videoPolicy.playlistId) tags.push(["video_playlist", videoPolicy.playlistId]);
+    if (videoPolicy.accessScope) tags.push(["video_scope", videoPolicy.accessScope]);
   }
 
   const feeWaiverGuilds = normalizeGuildFeeWaivers(input.feeWaiverGuilds ?? []);
@@ -501,7 +501,26 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   if (!event.pubkey || !event.tags) return null;
 
   const streamId = getFirstTagValue(event.tags, "d");
-  const title = getFirstTagValue(event.tags, "title") ?? streamId ?? "";
+  let title = getFirstTagValue(event.tags, "title");
+  
+  if (!title && streamId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(streamId)) {
+    const streamingRaw = getFirstTagValue(event.tags, "streaming") || "";
+    try {
+      const url = new URL(streamingRaw);
+      const parts = url.pathname.split("/").filter(Boolean);
+      const idx = parts.findIndex((part) => ["stream", "api", "hls", "whip"].includes(part.toLowerCase()));
+      if (idx >= 0 && idx + 1 < parts.length) {
+        const candidate = parts[idx + 1] ?? "";
+        if (candidate && !/^[0-9a-f]{8}-/i.test(candidate)) {
+           title = candidate;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  title = title ?? streamId ?? "";
   const statusRaw = getFirstTagValue(event.tags, "status");
 
   if (!streamId) return null;
@@ -523,25 +542,25 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   const discoverable = parseBooleanFlag(getFirstTagValue(event.tags, "discoverable")) ?? true;
   const matureContent = parseBooleanFlag(getFirstTagValue(event.tags, "mature")) ?? false;
   const viewerAllowPubkeys = normalizeVipPubkeys(getAllTagValues(event.tags, "viewer_allow"));
-  const vodArchiveEnabled = parseBooleanFlag(getFirstTagValue(event.tags, "vod_archive"));
-  const vodVisibility = normalizeVodVisibility(getFirstTagValue(event.tags, "vod_visibility")) ?? "public";
-  const vodMode = normalizeVodMode(getFirstTagValue(event.tags, "vod_mode"));
-  const vodPriceAtomicRaw = getFirstTagValue(event.tags, "vod_price");
-  const vodPriceAtomic = vodPriceAtomicRaw && /^\d+$/.test(vodPriceAtomicRaw) ? vodPriceAtomicRaw : undefined;
-  const vodCurrency = normalizeVodCurrency(getFirstTagValue(event.tags, "vod_currency"));
-  const vodAccessSeconds = parsePositiveInt(getFirstTagValue(event.tags, "vod_access_sec"));
-  const vodPlaylistId = (getFirstTagValue(event.tags, "vod_playlist") ?? "").trim() || undefined;
-  const vodAccessScope = normalizeVodAccessScope(getFirstTagValue(event.tags, "vod_scope"));
-  let vod: StreamVodPolicy | undefined;
-  if (vodMode || vodPriceAtomic || vodCurrency || vodAccessSeconds || vodPlaylistId || vodAccessScope) {
-    const defaultScope: StreamVodAccessScope = vodMode === "paid" && vodPlaylistId ? "playlist" : "stream";
-    vod = {
-      mode: vodMode ?? "public",
-      priceAtomic: vodPriceAtomic,
-      currency: vodCurrency,
-      accessSeconds: vodAccessSeconds,
-      playlistId: vodPlaylistId,
-      accessScope: vodAccessScope ?? defaultScope
+  const videoArchiveEnabled = parseBooleanFlag(getFirstTagValue(event.tags, "video_archive"));
+  const videoVisibility = normalizeVideoVisibility(getFirstTagValue(event.tags, "video_visibility")) ?? "public";
+  const videoMode = normalizeVideoMode(getFirstTagValue(event.tags, "video_mode"));
+  const videoPriceAtomicRaw = getFirstTagValue(event.tags, "video_price");
+  const videoPriceAtomic = videoPriceAtomicRaw && /^\d+$/.test(videoPriceAtomicRaw) ? videoPriceAtomicRaw : undefined;
+  const videoCurrency = normalizeVideoCurrency(getFirstTagValue(event.tags, "video_currency"));
+  const videoAccessSeconds = parsePositiveInt(getFirstTagValue(event.tags, "video_access_sec"));
+  const videoPlaylistId = (getFirstTagValue(event.tags, "video_playlist") ?? "").trim() || undefined;
+  const videoAccessScope = normalizeVideoAccessScope(getFirstTagValue(event.tags, "video_scope"));
+  let video: StreamVideoPolicy | undefined;
+  if (videoMode || videoPriceAtomic || videoCurrency || videoAccessSeconds || videoPlaylistId || videoAccessScope) {
+    const defaultScope: StreamVideoAccessScope = videoMode === "paid" && videoPlaylistId ? "playlist" : "stream";
+    video = {
+      mode: videoMode ?? "public",
+      priceAtomic: videoPriceAtomic,
+      currency: videoCurrency,
+      accessSeconds: videoAccessSeconds,
+      playlistId: videoPlaylistId,
+      accessScope: videoAccessScope ?? defaultScope
     };
   }
   const feeWaiverGuilds = (() => {
@@ -585,9 +604,9 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     discoverable,
     matureContent,
     viewerAllowPubkeys,
-    vodArchiveEnabled,
-    vodVisibility,
-    vod,
+    videoArchiveEnabled,
+    videoVisibility,
+    video,
     feeWaiverGuilds,
     feeWaiverVipPubkeys,
     manifestSignerPubkey,

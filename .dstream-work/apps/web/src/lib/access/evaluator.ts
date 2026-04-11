@@ -57,11 +57,11 @@ function isLivePublicAllowed(context: AccessPolicyContext): boolean {
   return !announce.privateStream;
 }
 
-function isVodAllowedByPolicy(context: AccessPolicyContext): AccessDecision | null {
+function isVideoAllowedByPolicy(context: AccessPolicyContext): AccessDecision | null {
   const announce = context.announce;
   if (!announce) return allow({ reasonCode: "allow_public" });
-  if (!announce.vodArchiveEnabled) return deny({ reasonCode: "deny_vod_archive_disabled" });
-  if (announce.vodVisibility !== "private") return allow({ reasonCode: "allow_public" });
+  if (!announce.videoArchiveEnabled) return deny({ reasonCode: "deny_video_archive_disabled" });
+  if (announce.videoVisibility !== "private") return allow({ reasonCode: "allow_public" });
   return null;
 }
 
@@ -92,8 +92,8 @@ export function evaluateAccess(contextInput: AccessPolicyContext): AccessDecisio
     return deny({ reasonCode: "deny_no_matching_entitlement" });
   }
 
-  if (action === "watch_vod" && contextInput.announce && !contextInput.announce.vodArchiveEnabled) {
-    const result = deny({ reasonCode: "deny_vod_archive_disabled" });
+  if (action === "watch_video" && contextInput.announce && !contextInput.announce.videoArchiveEnabled) {
+    const result = deny({ reasonCode: "deny_video_archive_disabled" });
     recordAudit(contextInput, {
       hostPubkey,
       subjectPubkey: subjectPubkey ?? undefined,
@@ -110,9 +110,9 @@ export function evaluateAccess(contextInput: AccessPolicyContext): AccessDecisio
     if (action === "watch_live") {
       return isLivePublicAllowed(contextInput) ? allow({ reasonCode: "allow_public" }) : deny({ reasonCode: "deny_identity_required" });
     }
-    if (action === "watch_vod") {
-      const vodDecision = isVodAllowedByPolicy(contextInput);
-      if (vodDecision) return vodDecision;
+    if (action === "watch_video") {
+      const videoDecision = isVideoAllowedByPolicy(contextInput);
+      if (videoDecision) return videoDecision;
       return deny({ reasonCode: "deny_identity_required" });
     }
   }
@@ -259,31 +259,31 @@ export function evaluateAccess(contextInput: AccessPolicyContext): AccessDecisio
     return result;
   }
 
-  if (action === "watch_vod") {
-    const vodDecision = isVodAllowedByPolicy(contextInput);
-    if (vodDecision?.allowed) {
+  if (action === "watch_video") {
+    const videoDecision = isVideoAllowedByPolicy(contextInput);
+    if (videoDecision?.allowed) {
       recordAudit(contextInput, {
         hostPubkey,
         subjectPubkey: subjectPubkey ?? undefined,
         resourceId,
         action,
         allowed: true,
-        reasonCode: vodDecision.reasonCode,
+        reasonCode: videoDecision.reasonCode,
         requestId: contextInput.requestId
       });
-      return vodDecision;
+      return videoDecision;
     }
-    if (vodDecision && !vodDecision.allowed) {
+    if (videoDecision && !videoDecision.allowed) {
       recordAudit(contextInput, {
         hostPubkey,
         subjectPubkey: subjectPubkey ?? undefined,
         resourceId,
         action,
         allowed: false,
-        reasonCode: vodDecision.reasonCode,
+        reasonCode: videoDecision.reasonCode,
         requestId: contextInput.requestId
       });
-      return vodDecision;
+      return videoDecision;
     }
     const result = deny({
       reasonCode: subjectPubkey ? "deny_private_allowlist" : "deny_identity_required"

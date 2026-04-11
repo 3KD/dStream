@@ -19,16 +19,16 @@ function normalizePubkey(value: string): string {
   return /^[a-f0-9]{64}$/.test(normalized) ? normalized : "";
 }
 
-function decisionErrorMessage(decision: AccessDecision, opts: { privateStream: boolean; privateVod: boolean }): string {
+function decisionErrorMessage(decision: AccessDecision, opts: { privateStream: boolean; privateVideo: boolean }): string {
   switch (decision.reasonCode) {
     case "deny_identity_required":
-      if (opts.privateStream || opts.privateVod) return "identity proof is required for private access";
+      if (opts.privateStream || opts.privateVideo) return "identity proof is required for private access";
       return "identity is required";
     case "deny_private_allowlist":
-      return opts.privateVod ? "viewer is not allowlisted for this private archive" : "viewer is not allowlisted for this private stream";
+      return opts.privateVideo ? "viewer is not allowlisted for this private archive" : "viewer is not allowlisted for this private stream";
     case "deny_explicit":
       return "viewer is blocked by stream access policy";
-    case "deny_vod_archive_disabled":
+    case "deny_video_archive_disabled":
       return "archive is disabled for this stream";
     case "deny_no_matching_entitlement":
       return "viewer does not have entitlement for this access tier";
@@ -74,11 +74,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   let viewerPubkey: string | null = null;
-  const privateVod = policy.vodArchiveEnabled && policy.vodVisibility === "private";
-  if (policy.privateStream || privateVod || viewerProofEvent) {
+  const privateVideo = policy.videoArchiveEnabled && policy.videoVisibility === "private";
+  if (policy.privateStream || privateVideo || viewerProofEvent) {
     const proof = verifyViewerProofEvent(viewerProofEvent, { originStreamId: expectedOriginStreamId });
     if (!proof.ok) {
-      if (policy.privateStream || privateVod) {
+      if (policy.privateStream || privateVideo) {
         return Response.json(
           { ok: false, error: policy.privateStream ? proof.error : `Private archive access requires identity proof: ${proof.error}` },
           { status: proof.status }
@@ -92,9 +92,9 @@ export async function POST(req: Request): Promise<Response> {
   const baseResource = `stream:${policy.streamPubkey}:${policy.streamId}`;
   const announceContext = {
     privateStream: policy.privateStream,
-    privateVod,
-    vodArchiveEnabled: policy.vodArchiveEnabled,
-    vodVisibility: policy.vodVisibility,
+    privateVideo,
+    videoArchiveEnabled: policy.videoArchiveEnabled,
+    videoVisibility: policy.videoVisibility,
     viewerAllowPubkeys: policy.viewerAllowPubkeys,
     feeWaiverVipPubkeys: []
   };
@@ -111,22 +111,22 @@ export async function POST(req: Request): Promise<Response> {
     });
     if (!liveDecision.allowed) {
       return Response.json(
-        { ok: false, error: decisionErrorMessage(liveDecision, { privateStream: policy.privateStream, privateVod }) },
+        { ok: false, error: decisionErrorMessage(liveDecision, { privateStream: policy.privateStream, privateVideo }) },
         { status: 403 }
       );
     }
   }
 
-  if (privateVod && !viewerPubkey) {
-    const vodDecision = evaluateAccess({
+  if (privateVideo && !viewerPubkey) {
+    const videoDecision = evaluateAccess({
       hostPubkey: policy.streamPubkey,
-      resourceId: `${baseResource}:vod:*`,
-      action: "watch_vod",
+      resourceId: `${baseResource}:video:*`,
+      action: "watch_video",
       requestId: providedOriginStreamId || expectedOriginStreamId,
       announce: announceContext
     });
     return Response.json(
-      { ok: false, error: decisionErrorMessage(vodDecision, { privateStream: policy.privateStream, privateVod }) },
+      { ok: false, error: decisionErrorMessage(videoDecision, { privateStream: policy.privateStream, privateVideo }) },
       { status: 403 }
     );
   }
@@ -143,8 +143,8 @@ export async function POST(req: Request): Promise<Response> {
     expiresAtSec: issued.expiresAtSec,
     originStreamId: expectedOriginStreamId,
     privateStream: policy.privateStream,
-    privateVod,
-    vodVisibility: policy.vodVisibility,
+    privateVideo,
+    videoVisibility: policy.videoVisibility,
     reasonCode: liveDecision?.reasonCode ?? "allow_public",
     entitlementId: liveDecision?.entitlementId ?? null
   });

@@ -6,7 +6,7 @@ const samplePackage = {
   id: "pkg-test",
   hostPubkey: "a".repeat(64),
   streamId: "stream-test",
-  resourceId: `stream:${"a".repeat(64)}:stream-test:vod:*`,
+  resourceId: `stream:${"a".repeat(64)}:stream-test:video:*`,
   title: "Sample package",
   paymentAsset: "btc",
   paymentAmount: "0.01",

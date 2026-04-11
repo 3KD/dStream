@@ -15,6 +15,7 @@ import { publishEventDetailed } from "@/lib/publish";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { describeOriginStreamIdRules, makeOriginStreamId } from "@/lib/origin";
 import { buildXmrTipReceiptEvent } from "@dstream/protocol";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 
 type StoredBroadcastSession = { pubkey: string; streamId: string; originStreamId: string; startedAt: number };
 type CheckStatus = "idle" | "checking" | "ok" | "fail";
@@ -727,7 +728,7 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
       <main className="max-w-7xl mx-auto p-6 space-y-6">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold flex items-center gap-3">
               <Gauge className="w-6 h-6 text-blue-500" />
@@ -735,48 +736,9 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
             </h1>
             <p className="text-sm text-neutral-400">{headingSummary}</p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Link
-              href="/broadcast"
-              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 inline-flex items-center gap-2"
-            >
-              <Radio className="w-4 h-4" /> Broadcast
-            </Link>
-            <Link
-              href="/browse"
-              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800"
-            >
-              Browse
-            </Link>
-            <Link
-              href="/analytics"
-              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800"
-            >
-              Analytics
-            </Link>
-            <Link
-              href="/settings/operations"
-              className={`px-4 py-2 rounded-xl border ${
-                mode === "operations"
-                  ? "bg-blue-600 border-blue-500 text-white"
-                  : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800"
-              }`}
-            >
-              Operations
-            </Link>
-            <Link
-              href="/settings/monetization"
-              className={`px-4 py-2 rounded-xl border ${
-                mode === "monetization"
-                  ? "bg-blue-600 border-blue-500 text-white"
-                  : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800"
-              }`}
-            >
-              Monetization
-            </Link>
-          </div>
         </header>
+
+        <SettingsNav />
 
         {!identity ? (
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300">

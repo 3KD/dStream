@@ -15,6 +15,7 @@ import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
+import { TipDialog } from "@/components/monero/TipDialog";
 import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
 
 interface ChatReportTarget {
@@ -66,6 +67,7 @@ export function ChatBox({
   const [localChatClearedAt, setLocalChatClearedAt] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
   const [composerDraftVersion, setComposerDraftVersion] = useState(0);
+  const [tipDialogOpen, setTipDialogOpen] = useState(false);
 
   const lastMessageSentAtRef = useRef<number>(0);
   const clearRequestSeenRef = useRef<number>(0);
@@ -425,9 +427,19 @@ export function ChatBox({
           ) : null}
           {!isConnected && moderation.isLoading && <span className="text-[10px] text-neutral-500">syncing moderation…</span>}
         </div>
-        <span className="text-xs text-neutral-500">
-          {visibleMessages.length} msgs{hiddenCount > 0 ? ` (+${hiddenCount} hidden)` : ""}
-        </span>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setTipDialogOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 hover:text-orange-400 text-neutral-300 rounded-lg text-xs font-bold transition-all"
+            title="Drop a Tip (XMR Zap)"
+          >
+            <span className="text-orange-500 text-sm leading-none pt-0.5">M</span> Drop Tip
+          </button>
+          <span className="text-xs text-neutral-500 hidden sm:inline-block">
+            {visibleMessages.length} msgs{hiddenCount > 0 ? ` (+${hiddenCount} hidden)` : ""}
+          </span>
+        </div>
       </div>
       {moderationError && <div className="px-3 py-2 text-xs text-red-300 border-b border-neutral-800 bg-red-950/20">{moderationError}</div>}
       {identity && nip05Policy === "require" && !nip05GateSatisfied && (
@@ -536,6 +548,12 @@ export function ChatBox({
         error={reportError}
         onClose={closeReportDialog}
         onSubmit={handleSubmitReport}
+      />
+      <TipDialog 
+        open={tipDialogOpen} 
+        streamPubkey={streamPubkey} 
+        streamId={streamId} 
+        onClose={() => setTipDialogOpen(false)} 
       />
     </div>
   );

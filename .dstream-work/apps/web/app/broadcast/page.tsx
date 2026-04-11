@@ -35,7 +35,7 @@ import {
   type StreamPaymentAsset,
   type StreamPaymentMethod,
   type StreamRendition,
-  type StreamVodVisibility
+  type StreamVideoVisibility
 } from "@dstream/protocol";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
@@ -234,8 +234,8 @@ export default function BroadcastPage() {
   const [topicsCsv, setTopicsCsv] = useState("");
   const [hostMode, setHostMode] = useState<StreamHostMode>("p2p_economy");
   const [rebroadcastThresholdInput, setRebroadcastThresholdInput] = useState("6");
-  const [vodArchiveEnabled, setVodArchiveEnabled] = useState(false);
-  const [vodVisibility, setVodVisibility] = useState<StreamVodVisibility>("public");
+  const [videoArchiveEnabled, setVideoArchiveEnabled] = useState(false);
+  const [videoVisibility, setVideoVisibility] = useState<StreamVideoVisibility>("public");
   const [feeWaiverGuilds, setFeeWaiverGuilds] = useState<StreamGuildFeeWaiver[]>([]);
   const [vipPubkeys, setVipPubkeys] = useState<string[]>([]);
   const [viewerAllowPubkeys, setViewerAllowPubkeys] = useState<string[]>([]);
@@ -411,8 +411,8 @@ export default function BroadcastPage() {
         setChatFollowerOnly(false);
         setDiscoverable(true);
         setMatureContent(false);
-        setVodArchiveEnabled(false);
-        setVodVisibility("public");
+        setVideoArchiveEnabled(false);
+        setVideoVisibility("public");
         setFeeWaiverGuilds([]);
         setVipPubkeys([]);
         setViewerAllowPubkeys([]);
@@ -460,9 +460,9 @@ export default function BroadcastPage() {
       if (parsed.hostMode === "host_only" || parsed.hostMode === "p2p_economy") setHostMode(parsed.hostMode);
       if (typeof parsed.rebroadcastThresholdInput === "string") setRebroadcastThresholdInput(parsed.rebroadcastThresholdInput);
       else if (typeof parsed.rebroadcastThresholdInput === "number") setRebroadcastThresholdInput(String(parsed.rebroadcastThresholdInput));
-      if (typeof parsed.vodArchiveEnabled === "boolean") setVodArchiveEnabled(parsed.vodArchiveEnabled);
-      if (parsed.vodVisibility === "public" || parsed.vodVisibility === "private") setVodVisibility(parsed.vodVisibility);
-      else setVodVisibility("public");
+      if (typeof parsed.videoArchiveEnabled === "boolean") setVideoArchiveEnabled(parsed.videoArchiveEnabled);
+      if (parsed.videoVisibility === "public" || parsed.videoVisibility === "private") setVideoVisibility(parsed.videoVisibility);
+      else setVideoVisibility("public");
       if (Array.isArray(parsed.feeWaiverGuilds)) {
         const normalizedGuilds = parsed.feeWaiverGuilds
           .map((item: any) => {
@@ -529,7 +529,7 @@ export default function BroadcastPage() {
       setChatFollowerOnly(false);
       setDiscoverable(true);
       setMatureContent(false);
-      setVodArchiveEnabled(false);
+      setVideoArchiveEnabled(false);
       setFeeWaiverGuilds([]);
       setVipPubkeys([]);
       setViewerAllowPubkeys([]);
@@ -574,8 +574,8 @@ export default function BroadcastPage() {
           stakeNote,
           hostMode,
           rebroadcastThresholdInput,
-          vodArchiveEnabled,
-          vodVisibility,
+          videoArchiveEnabled,
+          videoVisibility,
           feeWaiverGuilds,
           vipPubkeys,
           viewerAllowPubkeys,
@@ -617,8 +617,8 @@ export default function BroadcastPage() {
     stakeNote,
     stakeXmr,
     rebroadcastThresholdInput,
-    vodArchiveEnabled,
-    vodVisibility,
+    videoArchiveEnabled,
+    videoVisibility,
     feeWaiverGuilds,
     vipPubkeys,
     viewerAllowPubkeys,
@@ -1329,8 +1329,8 @@ export default function BroadcastPage() {
       discoverable,
       matureContent,
       viewerAllowPubkeys,
-      vodArchiveEnabled,
-      vodVisibility,
+      videoArchiveEnabled,
+      videoVisibility,
       feeWaiverGuilds,
       feeWaiverVipPubkeys: vipPubkeys,
       stakeAmountAtomic,
@@ -1376,8 +1376,8 @@ export default function BroadcastPage() {
     discoverable,
     matureContent,
     viewerAllowPubkeys,
-    vodArchiveEnabled,
-    vodVisibility,
+    videoArchiveEnabled,
+    videoVisibility,
     feeWaiverGuilds,
     vipPubkeys,
     relays,
@@ -1716,7 +1716,6 @@ export default function BroadcastPage() {
               <Radio className="w-6 h-6 text-blue-500" />
               Broadcast
             </h1>
-            <p className="text-sm text-neutral-400">WHIP → MediaMTX, then announce on Nostr (kind 30311).</p>
           </div>
           <div className="flex items-end gap-3">
             <span
@@ -2268,7 +2267,7 @@ export default function BroadcastPage() {
                           setChatSubscriberOnly(false);
                           setChatFollowerOnly(false);
                           setMatureContent(false);
-                          setVodArchiveEnabled(false);
+                          setVideoArchiveEnabled(false);
                           setFeeWaiverGuilds([]);
                           setVipPubkeys([]);
                           setViewerAllowPubkeys([]);
@@ -2517,24 +2516,24 @@ export default function BroadcastPage() {
                     <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={vodArchiveEnabled}
-                        onChange={(e) => setVodArchiveEnabled(e.target.checked)}
+                        checked={videoArchiveEnabled}
+                        onChange={(e) => setVideoArchiveEnabled(e.target.checked)}
                         className="mt-0.5 accent-blue-500"
                         disabled={status === "connecting" || status === "live"}
                       />
                       <span className="space-y-1">
-                        <span className="font-medium text-neutral-200">Enable VOD archive and DVR controls</span>
+                        <span className="font-medium text-neutral-200">Enable Video archive and DVR controls</span>
                         <span className="block text-xs text-neutral-500">
                           Default is off for decentralized mode. Turn on only if you explicitly want server-side recording and viewer rewind/archive playback.
                         </span>
                       </span>
                     </label>
-                    {vodArchiveEnabled ? (
+                    {videoArchiveEnabled ? (
                       <div className="mt-3 pt-3 border-t border-neutral-800/80 space-y-2">
-                        <label className="text-xs text-neutral-400">VOD visibility</label>
+                        <label className="text-xs text-neutral-400">Video visibility</label>
                         <select
-                          value={vodVisibility}
-                          onChange={(event) => setVodVisibility(event.target.value === "private" ? "private" : "public")}
+                          value={videoVisibility}
+                          onChange={(event) => setVideoVisibility(event.target.value === "private" ? "private" : "public")}
                           className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
                           disabled={status === "connecting" || status === "live"}
                         >
@@ -2542,7 +2541,7 @@ export default function BroadcastPage() {
                           <option value="private">Private (owner + allowlist only)</option>
                         </select>
                         <div className="text-xs text-neutral-500">
-                          Simple mode: choose one default. Public VOD is visible to everyone; private VOD requires stream-owner or allowlisted identity.
+                          Simple mode: choose one default. Public Video is visible to everyone; private Video requires stream-owner or allowlisted identity.
                         </div>
                       </div>
                     ) : null}

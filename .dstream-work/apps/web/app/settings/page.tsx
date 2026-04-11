@@ -11,6 +11,7 @@ import { useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { hexToBytes, shortenText } from "@/lib/encoding";
 import { parseStreamFavoriteKey } from "@/lib/social/store";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 import { ProfileMetadataEditor } from "@/components/settings/ProfileMetadataEditor";
 import {
   getWalletIntegrationsForAsset,
@@ -591,31 +592,14 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
       <main className="max-w-4xl mx-auto p-8 space-y-8">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-2xl font-bold">Settings</h1>
-            <p className="text-sm text-neutral-500">Local-only (stored in this browser).</p>
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <p className="text-sm text-neutral-500">Identity and preferences.</p>
           </div>
-          <Link className="text-sm text-neutral-300 hover:text-white" href="/browse">
-            Browse
-          </Link>
         </header>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-neutral-500 mr-1">Operator Tools:</span>
-          <Link
-            href="/settings/operations"
-            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-          >
-            Operations
-          </Link>
-          <Link
-            href="/settings/monetization"
-            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-          >
-            Monetization
-          </Link>
-        </section>
+        <SettingsNav />
 
         {social.isLoading || identityLoading ? (
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">

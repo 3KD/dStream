@@ -28,19 +28,19 @@ export const NOSTR_KINDS = {
 
 export type StreamStatus = "live" | "ended";
 export type StreamHostMode = "p2p_economy" | "host_only";
-export type StreamVodVisibility = "public" | "private";
-export type StreamVodMode = "off" | "public" | "paid";
-export type StreamVodAccessScope = "stream" | "playlist";
+export type StreamVideoVisibility = "public" | "private";
+export type StreamVideoMode = "off" | "public" | "paid";
+export type StreamVideoAccessScope = "stream" | "playlist";
 export const STREAM_PAYMENT_ASSETS = ["xmr", "eth", "btc", "usdt", "xrp", "usdc", "sol", "trx", "doge", "bch", "ada", "pepe"] as const;
 export type StreamPaymentAsset = (typeof STREAM_PAYMENT_ASSETS)[number];
 
-export interface StreamVodPolicy {
-  mode: StreamVodMode;
+export interface StreamVideoPolicy {
+  mode: StreamVideoMode;
   priceAtomic?: string;
   currency?: string;
   accessSeconds?: number;
   playlistId?: string;
-  accessScope?: StreamVodAccessScope;
+  accessScope?: StreamVideoAccessScope;
 }
 
 export interface StreamPaymentMethod {
@@ -89,9 +89,9 @@ export interface StreamAnnounce {
   discoverable: boolean;
   matureContent: boolean;
   viewerAllowPubkeys: string[];
-  vodArchiveEnabled?: boolean;
-  vodVisibility: StreamVodVisibility;
-  vod?: StreamVodPolicy;
+  videoArchiveEnabled?: boolean;
+  videoVisibility: StreamVideoVisibility;
+  video?: StreamVideoPolicy;
   feeWaiverGuilds: StreamGuildFeeWaiver[];
   feeWaiverVipPubkeys: string[];
   manifestSignerPubkey?: string;

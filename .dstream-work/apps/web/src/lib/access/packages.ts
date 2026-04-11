@@ -5,17 +5,17 @@ import type { AccessEntitlement, AccessEntitlementSource } from "./types";
 import { readTextFileWithBackup, writeJsonFileAtomic } from "../storage/jsonFileStore";
 
 const STORE_PATH =
-  (process.env.DSTREAM_VOD_PACKAGE_STORE_PATH ?? "/var/lib/dstream/vod-packages.json").trim() ||
-  "/var/lib/dstream/vod-packages.json";
+  (process.env.DSTREAM_Video_PACKAGE_STORE_PATH ?? "/var/lib/dstream/video-packages.json").trim() ||
+  "/var/lib/dstream/video-packages.json";
 const MAX_PACKAGES = 10000;
 const MAX_PURCHASES = 100000;
 const STREAM_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const PLAYLIST_ID_RE = /^(?:__root__|[A-Za-z0-9][A-Za-z0-9._-]{0,79})$/;
 
-export type VodAccessPackageStatus = "active" | "disabled";
-export type VodAccessPackageVisibility = "public" | "unlisted";
+export type VideoAccessPackageStatus = "active" | "disabled";
+export type VideoAccessPackageVisibility = "public" | "unlisted";
 
-export interface VodAccessPackage {
+export interface VideoAccessPackage {
   id: string;
   hostPubkey: string;
   streamId: string;
@@ -28,23 +28,23 @@ export interface VodAccessPackage {
   paymentAmount: string;
   paymentRailId?: string;
   durationHours: number;
-  status: VodAccessPackageStatus;
-  visibility: VodAccessPackageVisibility;
+  status: VideoAccessPackageStatus;
+  visibility: VideoAccessPackageVisibility;
   metadata: Record<string, unknown>;
   createdAtSec: number;
   updatedAtSec: number;
 }
 
-export type VodPackagePurchaseStatus = "granted" | "existing";
+export type VideoPackagePurchaseStatus = "granted" | "existing";
 
-export interface VodPackagePurchaseRecord {
+export interface VideoPackagePurchaseRecord {
   id: string;
   packageId: string;
   hostPubkey: string;
   viewerPubkey: string;
   source: AccessEntitlementSource;
   sourceRef: string;
-  status: VodPackagePurchaseStatus;
+  status: VideoPackagePurchaseStatus;
   entitlementId: string;
   resourceId: string;
   createdAtSec: number;
@@ -53,7 +53,7 @@ export interface VodPackagePurchaseRecord {
   metadata: Record<string, unknown>;
 }
 
-export interface VodPackagePurchaseStats {
+export interface VideoPackagePurchaseStats {
   packageId: string;
   totalPurchases: number;
   grantedPurchases: number;
@@ -68,8 +68,8 @@ export interface VodPackagePurchaseStats {
 }
 
 let loaded = false;
-let packagesCache: VodAccessPackage[] = [];
-let purchasesCache: VodPackagePurchaseRecord[] = [];
+let packagesCache: VideoAccessPackage[] = [];
+let purchasesCache: VideoPackagePurchaseRecord[] = [];
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -103,12 +103,12 @@ function parsePositiveInt(input: unknown): number | null {
   return Math.trunc(value);
 }
 
-function parseStatus(input: unknown): VodAccessPackageStatus {
+function parseStatus(input: unknown): VideoAccessPackageStatus {
   const value = typeof input === "string" ? input.trim().toLowerCase() : "";
   return value === "disabled" ? "disabled" : "active";
 }
 
-function parseVisibility(input: unknown): VodAccessPackageVisibility {
+function parseVisibility(input: unknown): VideoAccessPackageVisibility {
   const value = typeof input === "string" ? input.trim().toLowerCase() : "";
   return value === "unlisted" ? "unlisted" : "public";
 }
@@ -167,9 +167,9 @@ function normalizeSource(input: unknown): AccessEntitlementSource {
   return "purchase_unverified";
 }
 
-function parseStoredPackage(input: unknown): VodAccessPackage | null {
+function parseStoredPackage(input: unknown): VideoAccessPackage | null {
   if (!input || typeof input !== "object") return null;
-  const row = input as Partial<VodAccessPackage>;
+  const row = input as Partial<VideoAccessPackage>;
   if (typeof row.id !== "string" || !row.id) return null;
   const hostPubkey = normalizePubkeyHex(row.hostPubkey);
   const streamId = normalizeStreamId(row.streamId);
@@ -203,9 +203,9 @@ function parseStoredPackage(input: unknown): VodAccessPackage | null {
   };
 }
 
-function parseStoredPurchase(input: unknown): VodPackagePurchaseRecord | null {
+function parseStoredPurchase(input: unknown): VideoPackagePurchaseRecord | null {
   if (!input || typeof input !== "object") return null;
-  const row = input as Partial<VodPackagePurchaseRecord>;
+  const row = input as Partial<VideoPackagePurchaseRecord>;
   if (typeof row.id !== "string" || !row.id) return null;
   if (typeof row.packageId !== "string" || !row.packageId) return null;
   const hostPubkey = normalizePubkeyHex(row.hostPubkey);
@@ -241,8 +241,8 @@ function ensureLoaded(): void {
     const parsed = JSON.parse(raw) as { packages?: unknown[]; purchases?: unknown[] } | null;
     const packageRows = Array.isArray(parsed?.packages) ? parsed!.packages! : [];
     const purchaseRows = Array.isArray(parsed?.purchases) ? parsed!.purchases! : [];
-    packagesCache = packageRows.map(parseStoredPackage).filter((row): row is VodAccessPackage => !!row);
-    purchasesCache = purchaseRows.map(parseStoredPurchase).filter((row): row is VodPackagePurchaseRecord => !!row);
+    packagesCache = packageRows.map(parseStoredPackage).filter((row): row is VideoAccessPackage => !!row);
+    purchasesCache = purchaseRows.map(parseStoredPurchase).filter((row): row is VideoPackagePurchaseRecord => !!row);
   } catch {
     packagesCache = [];
     purchasesCache = [];
@@ -267,17 +267,17 @@ function includeAction(candidate: string[], required: string): boolean {
   return candidate.includes(required);
 }
 
-export function buildVodPackageResourceId(hostPubkey: string, streamId: string, playlistId?: string): string {
+export function buildVideoPackageResourceId(hostPubkey: string, streamId: string, playlistId?: string): string {
   const playlist = normalizePlaylistId(playlistId);
-  if (playlist) return `stream:${hostPubkey}:${streamId}:vod:${playlist}:*`;
-  return `stream:${hostPubkey}:${streamId}:vod:*`;
+  if (playlist) return `stream:${hostPubkey}:${streamId}:video:${playlist}:*`;
+  return `stream:${hostPubkey}:${streamId}:video:*`;
 }
 
-export function buildVodFileResourceId(hostPubkey: string, streamId: string, relativePath: string): string {
+export function buildVideoFileResourceId(hostPubkey: string, streamId: string, relativePath: string): string {
   const normalizedPath = normalizeRelativePath(relativePath);
   if (!normalizedPath) throw new Error("relativePath is invalid.");
   const encodedPath = Buffer.from(normalizedPath, "utf8").toString("base64url");
-  return `stream:${hostPubkey}:${streamId}:vod:file:${encodedPath}`;
+  return `stream:${hostPubkey}:${streamId}:video:file:${encodedPath}`;
 }
 
 export function inferPlaylistIdFromRelativePath(relativePath: string): string {
@@ -288,7 +288,7 @@ export function inferPlaylistIdFromRelativePath(relativePath: string): string {
   return normalizePlaylistId(firstSegment) ?? "__root__";
 }
 
-export function buildVodAccessResourceCandidates(input: {
+export function buildVideoAccessResourceCandidates(input: {
   hostPubkey: string;
   streamId: string;
   relativePath?: string;
@@ -303,11 +303,11 @@ export function buildVodAccessResourceCandidates(input: {
   const candidates: string[] = [];
 
   if (normalizedPath) {
-    candidates.push(buildVodFileResourceId(hostPubkey, streamId, normalizedPath));
-    candidates.push(buildVodPackageResourceId(hostPubkey, streamId, inferPlaylistIdFromRelativePath(normalizedPath)));
+    candidates.push(buildVideoFileResourceId(hostPubkey, streamId, normalizedPath));
+    candidates.push(buildVideoPackageResourceId(hostPubkey, streamId, inferPlaylistIdFromRelativePath(normalizedPath)));
   }
-  if (explicitPlaylistId) candidates.push(buildVodPackageResourceId(hostPubkey, streamId, explicitPlaylistId));
-  candidates.push(buildVodPackageResourceId(hostPubkey, streamId));
+  if (explicitPlaylistId) candidates.push(buildVideoPackageResourceId(hostPubkey, streamId, explicitPlaylistId));
+  candidates.push(buildVideoPackageResourceId(hostPubkey, streamId));
 
   const deduped = new Set<string>();
   for (const resourceId of candidates) {
@@ -340,7 +340,7 @@ function buildSourceRefFromInput(input: {
   return `purchase:${input.packageId}:${fingerprint}`;
 }
 
-export function getVodAccessPackageById(packageId: string): VodAccessPackage | null {
+export function getVideoAccessPackageById(packageId: string): VideoAccessPackage | null {
   ensureLoaded();
   const normalizedId = sanitizeShortText(packageId, 120);
   if (!normalizedId) return null;
@@ -348,13 +348,13 @@ export function getVodAccessPackageById(packageId: string): VodAccessPackage | n
   return row ? { ...row } : null;
 }
 
-export function listVodAccessPackages(options: {
+export function listVideoAccessPackages(options: {
   hostPubkey: string;
   streamId?: string;
   includeDisabled?: boolean;
   includeUnlisted?: boolean;
   limit?: number;
-}): VodAccessPackage[] {
+}): VideoAccessPackage[] {
   ensureLoaded();
   const hostPubkey = normalizePubkeyHex(options.hostPubkey);
   if (!hostPubkey) return [];
@@ -376,7 +376,7 @@ export function listVodAccessPackages(options: {
     .map((row) => ({ ...row }));
 }
 
-export function upsertVodAccessPackage(input: {
+export function upsertVideoAccessPackage(input: {
   packageId?: string;
   hostPubkey: string;
   streamId: string;
@@ -388,10 +388,10 @@ export function upsertVodAccessPackage(input: {
   paymentAmount: string;
   paymentRailId?: string;
   durationHours: number;
-  status?: VodAccessPackageStatus;
-  visibility?: VodAccessPackageVisibility;
+  status?: VideoAccessPackageStatus;
+  visibility?: VideoAccessPackageVisibility;
   metadata?: Record<string, unknown>;
-}): VodAccessPackage {
+}): VideoAccessPackage {
   ensureLoaded();
   const timestamp = nowSec();
   const hostPubkey = normalizePubkeyHex(input.hostPubkey);
@@ -415,12 +415,12 @@ export function upsertVodAccessPackage(input: {
   if (playlistId && relativePath) throw new Error("Only one package scope is allowed: playlistId or relativePath.");
 
   const resourceId = relativePath
-    ? buildVodFileResourceId(hostPubkey, streamId, relativePath)
-    : buildVodPackageResourceId(hostPubkey, streamId, playlistId);
+    ? buildVideoFileResourceId(hostPubkey, streamId, relativePath)
+    : buildVideoPackageResourceId(hostPubkey, streamId, playlistId);
   const packageId = sanitizeShortText(input.packageId, 120);
   if (packageId) {
     const existing = packagesCache.find((entry) => entry.id === packageId);
-    if (!existing) throw new Error("VOD package not found.");
+    if (!existing) throw new Error("Video package not found.");
     if (existing.hostPubkey !== hostPubkey) throw new Error("Cannot update package for a different host.");
     existing.streamId = streamId;
     existing.playlistId = playlistId;
@@ -440,7 +440,7 @@ export function upsertVodAccessPackage(input: {
     return { ...existing };
   }
 
-  const created: VodAccessPackage = {
+  const created: VideoAccessPackage = {
     id: randomUUID(),
     hostPubkey,
     streamId,
@@ -468,13 +468,13 @@ export function upsertVodAccessPackage(input: {
   return { ...created };
 }
 
-export function disableVodAccessPackage(input: { packageId: string; hostPubkey?: string }): VodAccessPackage {
+export function disableVideoAccessPackage(input: { packageId: string; hostPubkey?: string }): VideoAccessPackage {
   ensureLoaded();
   const packageId = sanitizeShortText(input.packageId, 120);
   if (!packageId) throw new Error("packageId is required.");
   const hostPubkey = input.hostPubkey ? normalizePubkeyHex(input.hostPubkey) : null;
   const existing = packagesCache.find((entry) => entry.id === packageId);
-  if (!existing) throw new Error("VOD package not found.");
+  if (!existing) throw new Error("Video package not found.");
   if (hostPubkey && existing.hostPubkey !== hostPubkey) throw new Error("Package host mismatch.");
   existing.status = "disabled";
   existing.updatedAtSec = nowSec();
@@ -482,7 +482,7 @@ export function disableVodAccessPackage(input: { packageId: string; hostPubkey?:
   return { ...existing };
 }
 
-export function grantVodPackagePurchaseAccess(input: {
+export function grantVideoPackagePurchaseAccess(input: {
   packageId: string;
   viewerPubkey: string;
   source?: AccessEntitlementSource;
@@ -490,11 +490,11 @@ export function grantVodPackagePurchaseAccess(input: {
   settlementRef?: string;
   startsAtSec?: number;
   metadata?: Record<string, unknown>;
-}): { package: VodAccessPackage; entitlement: AccessEntitlement; purchase: VodPackagePurchaseRecord; granted: boolean } {
+}): { package: VideoAccessPackage; entitlement: AccessEntitlement; purchase: VideoPackagePurchaseRecord; granted: boolean } {
   ensureLoaded();
-  const pkg = getVodAccessPackageById(input.packageId);
-  if (!pkg) throw new Error("VOD package not found.");
-  if (pkg.status !== "active") throw new Error("VOD package is disabled.");
+  const pkg = getVideoAccessPackageById(input.packageId);
+  if (!pkg) throw new Error("Video package not found.");
+  if (pkg.status !== "active") throw new Error("Video package is disabled.");
   const viewerPubkey = normalizePubkeyHex(input.viewerPubkey);
   if (!viewerPubkey) throw new Error("viewerPubkey must be a 64-char hex pubkey.");
 
@@ -514,7 +514,7 @@ export function grantVodPackagePurchaseAccess(input: {
     resourceId: pkg.resourceId,
     status: "active",
     limit: 2000
-  }).find((row) => row.source === source && row.sourceRef === sourceRef && includeAction(row.actions, "watch_vod"));
+  }).find((row) => row.source === source && row.sourceRef === sourceRef && includeAction(row.actions, "watch_video"));
 
   const entitlement =
     activeMatch ??
@@ -522,7 +522,7 @@ export function grantVodPackagePurchaseAccess(input: {
       hostPubkey: pkg.hostPubkey,
       subjectPubkey: viewerPubkey,
       resourceId: pkg.resourceId,
-      actions: ["watch_vod"],
+      actions: ["watch_video"],
       source,
       sourceRef,
       startsAtSec,
@@ -538,7 +538,7 @@ export function grantVodPackagePurchaseAccess(input: {
       }
     });
 
-  const purchase: VodPackagePurchaseRecord = {
+  const purchase: VideoPackagePurchaseRecord = {
     id: randomUUID(),
     packageId: pkg.id,
     hostPubkey: pkg.hostPubkey,
@@ -567,12 +567,12 @@ export function grantVodPackagePurchaseAccess(input: {
   };
 }
 
-export function listVodPackagePurchases(options: {
+export function listVideoPackagePurchases(options: {
   hostPubkey: string;
   viewerPubkey?: string;
   packageId?: string;
   limit?: number;
-}): VodPackagePurchaseRecord[] {
+}): VideoPackagePurchaseRecord[] {
   ensureLoaded();
   const hostPubkey = normalizePubkeyHex(options.hostPubkey);
   if (!hostPubkey) return [];
@@ -591,11 +591,11 @@ export function listVodPackagePurchases(options: {
     .map((row) => ({ ...row }));
 }
 
-export function listVodPackagePurchaseStats(options: {
+export function listVideoPackagePurchaseStats(options: {
   hostPubkey: string;
   packageIds?: string[];
   limit?: number;
-}): Record<string, VodPackagePurchaseStats> {
+}): Record<string, VideoPackagePurchaseStats> {
   ensureLoaded();
   const hostPubkey = normalizePubkeyHex(options.hostPubkey);
   if (!hostPubkey) return {};
@@ -611,7 +611,7 @@ export function listVodPackagePurchaseStats(options: {
   const summaries = new Map<
     string,
     {
-      row: VodPackagePurchaseStats;
+      row: VideoPackagePurchaseStats;
       viewers: Set<string>;
     }
   >();
@@ -655,7 +655,7 @@ export function listVodPackagePurchaseStats(options: {
     summary.viewers.add(purchase.viewerPubkey);
   }
 
-  const out: Record<string, VodPackagePurchaseStats> = {};
+  const out: Record<string, VideoPackagePurchaseStats> = {};
   for (const [packageId, summary] of summaries.entries()) {
     summary.row.uniqueViewerCount = summary.viewers.size;
     out[packageId] = summary.row;

@@ -8,17 +8,17 @@ import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import {
   buildAccessAdminProof,
   grantAccessEntitlementClient,
-  listVodPlaylistCatalogClient,
+  listVideoPlaylistCatalogClient,
   listAccessEntitlementsClient,
   revokeAccessEntitlementClient,
   type AccessEntitlementStatusFilter,
-  type VodPlaylistCatalogRow
+  type VideoPlaylistCatalogRow
 } from "@/lib/access/client";
 import { ACCESS_ACTIONS, ACCESS_ENTITLEMENT_SOURCES, type AccessAction, type AccessEntitlement } from "@/lib/access/types";
 
 const STREAM_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const PLAYLIST_ID_RE = /^(?:__root__|[a-zA-Z0-9][a-zA-Z0-9._-]{0,79})$/;
-type VodPackageDurationPreset = "24h" | "7d" | "30d" | "365d" | "custom";
+type VideoPackageDurationPreset = "24h" | "7d" | "30d" | "365d" | "custom";
 
 function formatPubkey(pubkey: string): string {
   const npub = pubkeyHexToNpub(pubkey);
@@ -42,8 +42,8 @@ function actionLabel(action: AccessAction): string {
   switch (action) {
     case "watch_live":
       return "Watch live";
-    case "watch_vod":
-      return "Watch VOD";
+    case "watch_video":
+      return "Watch Video";
     case "chat_send":
       return "Chat";
     case "p2p_assist":
@@ -81,7 +81,7 @@ function normalizePlaylistIdInput(raw: string): string | null {
   return value;
 }
 
-function presetDurationHours(preset: VodPackageDurationPreset, customHoursInput: string): number | null {
+function presetDurationHours(preset: VideoPackageDurationPreset, customHoursInput: string): number | null {
   if (preset === "24h") return 24;
   if (preset === "7d") return 24 * 7;
   if (preset === "30d") return 24 * 30;
@@ -90,17 +90,17 @@ function presetDurationHours(preset: VodPackageDurationPreset, customHoursInput:
   return custom ?? null;
 }
 
-function formatVodPlaylistLabel(row: VodPlaylistCatalogRow): string {
+function formatVideoPlaylistLabel(row: VideoPlaylistCatalogRow): string {
   if (row.id === "__root__") return "Root files";
   return row.id;
 }
 
-function formatVodPlaylistTitle(row: VodPlaylistCatalogRow): string {
+function formatVideoPlaylistTitle(row: VideoPlaylistCatalogRow): string {
   const modified =
     Number.isFinite(row.latestModifiedAtMs) && row.latestModifiedAtMs > 0
       ? new Date(row.latestModifiedAtMs).toLocaleString()
       : "unknown";
-  return `${formatVodPlaylistLabel(row)} · ${row.fileCount} file${row.fileCount === 1 ? "" : "s"} · updated ${modified}`;
+  return `${formatVideoPlaylistLabel(row)} · ${row.fileCount} file${row.fileCount === 1 ? "" : "s"} · updated ${modified}`;
 }
 
 function formatHoursCompact(hours: number): string {
@@ -125,17 +125,17 @@ export function AccessEntitlementsPanel() {
   const [grantSourceRef, setGrantSourceRef] = useState("");
   const [grantExpiresHoursInput, setGrantExpiresHoursInput] = useState("");
   const [grantActions, setGrantActions] = useState<AccessAction[]>(["watch_live", "chat_send"]);
-  const [vodPackageSubjectInput, setVodPackageSubjectInput] = useState("");
-  const [vodPackageStreamIdInput, setVodPackageStreamIdInput] = useState("");
-  const [vodPackagePlaylistIdInput, setVodPackagePlaylistIdInput] = useState("");
-  const [vodPackageDurationPreset, setVodPackageDurationPreset] = useState<VodPackageDurationPreset>("30d");
-  const [vodPackageCustomHoursInput, setVodPackageCustomHoursInput] = useState("");
-  const [vodPackageSource, setVodPackageSource] = useState<(typeof ACCESS_ENTITLEMENT_SOURCES)[number]>("purchase_verified");
-  const [vodPackageSourceRef, setVodPackageSourceRef] = useState("");
-  const [vodCatalogRows, setVodCatalogRows] = useState<VodPlaylistCatalogRow[]>([]);
-  const [vodCatalogFileCount, setVodCatalogFileCount] = useState(0);
-  const [isLoadingVodCatalog, setIsLoadingVodCatalog] = useState(false);
-  const [isGrantingVodPackage, setIsGrantingVodPackage] = useState(false);
+  const [videoPackageSubjectInput, setVideoPackageSubjectInput] = useState("");
+  const [videoPackageStreamIdInput, setVideoPackageStreamIdInput] = useState("");
+  const [videoPackagePlaylistIdInput, setVideoPackagePlaylistIdInput] = useState("");
+  const [videoPackageDurationPreset, setVideoPackageDurationPreset] = useState<VideoPackageDurationPreset>("30d");
+  const [videoPackageCustomHoursInput, setVideoPackageCustomHoursInput] = useState("");
+  const [videoPackageSource, setVideoPackageSource] = useState<(typeof ACCESS_ENTITLEMENT_SOURCES)[number]>("purchase_verified");
+  const [videoPackageSourceRef, setVideoPackageSourceRef] = useState("");
+  const [videoCatalogRows, setVideoCatalogRows] = useState<VideoPlaylistCatalogRow[]>([]);
+  const [videoCatalogFileCount, setVideoCatalogFileCount] = useState(0);
+  const [isLoadingVideoCatalog, setIsLoadingVideoCatalog] = useState(false);
+  const [isGrantingVideoPackage, setIsGrantingVideoPackage] = useState(false);
 
   const [entitlements, setEntitlements] = useState<AccessEntitlement[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
@@ -150,46 +150,46 @@ export function AccessEntitlementsPanel() {
   }, [identity?.pubkey]);
 
   useEffect(() => {
-    setVodCatalogRows([]);
-    setVodCatalogFileCount(0);
-  }, [hostInput, vodPackageStreamIdInput]);
+    setVideoCatalogRows([]);
+    setVideoCatalogFileCount(0);
+  }, [hostInput, videoPackageStreamIdInput]);
 
   const normalizedHostPubkey = useMemo(() => normalizePubkeyInput(hostInput), [hostInput]);
   const hostPubkeyForActions = normalizedHostPubkey ?? identity?.pubkey ?? null;
-  const normalizedVodPlaylistSelection = useMemo(() => {
-    const raw = vodPackagePlaylistIdInput.trim();
+  const normalizedVideoPlaylistSelection = useMemo(() => {
+    const raw = videoPackagePlaylistIdInput.trim();
     if (!raw) return "";
     return normalizePlaylistIdInput(raw) ?? "__invalid__";
-  }, [vodPackagePlaylistIdInput]);
-  const normalizedVodStreamId = useMemo(
-    () => normalizeStreamIdInput(vodPackageStreamIdInput),
-    [vodPackageStreamIdInput]
+  }, [videoPackagePlaylistIdInput]);
+  const normalizedVideoStreamId = useMemo(
+    () => normalizeStreamIdInput(videoPackageStreamIdInput),
+    [videoPackageStreamIdInput]
   );
-  const normalizedVodPlaylistId = useMemo(() => {
-    const raw = vodPackagePlaylistIdInput.trim();
+  const normalizedVideoPlaylistId = useMemo(() => {
+    const raw = videoPackagePlaylistIdInput.trim();
     if (!raw) return null;
     return normalizePlaylistIdInput(raw);
-  }, [vodPackagePlaylistIdInput]);
-  const vodPackageDurationHours = useMemo(
-    () => presetDurationHours(vodPackageDurationPreset, vodPackageCustomHoursInput),
-    [vodPackageCustomHoursInput, vodPackageDurationPreset]
+  }, [videoPackagePlaylistIdInput]);
+  const videoPackageDurationHours = useMemo(
+    () => presetDurationHours(videoPackageDurationPreset, videoPackageCustomHoursInput),
+    [videoPackageCustomHoursInput, videoPackageDurationPreset]
   );
-  const vodResourcePreview = useMemo(() => {
-    if (!normalizedHostPubkey || !normalizedVodStreamId) return "";
-    if (normalizedVodPlaylistId) {
-      return `stream:${normalizedHostPubkey}:${normalizedVodStreamId}:vod:${normalizedVodPlaylistId}:*`;
+  const videoResourcePreview = useMemo(() => {
+    if (!normalizedHostPubkey || !normalizedVideoStreamId) return "";
+    if (normalizedVideoPlaylistId) {
+      return `stream:${normalizedHostPubkey}:${normalizedVideoStreamId}:video:${normalizedVideoPlaylistId}:*`;
     }
-    return `stream:${normalizedHostPubkey}:${normalizedVodStreamId}:vod:*`;
-  }, [normalizedHostPubkey, normalizedVodPlaylistId, normalizedVodStreamId]);
-  const vodScopePreviewLabel = useMemo(() => {
-    if (!normalizedVodPlaylistId) return "All VOD folders";
-    if (normalizedVodPlaylistId === "__root__") return "Root files";
-    return normalizedVodPlaylistId;
-  }, [normalizedVodPlaylistId]);
-  const vodDurationPreview = useMemo(() => {
-    if (!vodPackageDurationHours || vodPackageDurationHours <= 0) return "—";
-    return formatHoursCompact(vodPackageDurationHours);
-  }, [vodPackageDurationHours]);
+    return `stream:${normalizedHostPubkey}:${normalizedVideoStreamId}:video:*`;
+  }, [normalizedHostPubkey, normalizedVideoPlaylistId, normalizedVideoStreamId]);
+  const videoScopePreviewLabel = useMemo(() => {
+    if (!normalizedVideoPlaylistId) return "All Video folders";
+    if (normalizedVideoPlaylistId === "__root__") return "Root files";
+    return normalizedVideoPlaylistId;
+  }, [normalizedVideoPlaylistId]);
+  const videoDurationPreview = useMemo(() => {
+    if (!videoPackageDurationHours || videoPackageDurationHours <= 0) return "—";
+    return formatHoursCompact(videoPackageDurationHours);
+  }, [videoPackageDurationHours]);
 
   const buildProof = useCallback(
     async (hostPubkey: string) => {
@@ -201,7 +201,7 @@ export function AccessEntitlementsPanel() {
     [identity?.pubkey, signEvent]
   );
 
-  const loadVodCatalog = useCallback(async () => {
+  const loadVideoCatalog = useCallback(async () => {
     setError(null);
     setNotice(null);
 
@@ -210,37 +210,37 @@ export function AccessEntitlementsPanel() {
       setError("Host pubkey must be a valid npub or 64-hex pubkey.");
       return;
     }
-    const streamId = normalizeStreamIdInput(vodPackageStreamIdInput);
+    const streamId = normalizeStreamIdInput(videoPackageStreamIdInput);
     if (!streamId) {
       setError("Stream ID must use letters, digits, '-' or '_' (max 128 chars).");
       return;
     }
 
-    setIsLoadingVodCatalog(true);
+    setIsLoadingVideoCatalog(true);
     try {
       const proof = await buildProof(hostPubkey);
-      const response = await listVodPlaylistCatalogClient({
+      const response = await listVideoPlaylistCatalogClient({
         hostPubkey,
         streamId,
         operatorProofEvent: proof
       });
-      setVodCatalogRows(response.playlists);
-      setVodCatalogFileCount(response.fileCount);
+      setVideoCatalogRows(response.playlists);
+      setVideoCatalogFileCount(response.fileCount);
       if (response.playlists.length === 0) {
-        setNotice("No VOD files found for this stream yet.");
+        setNotice("No Video files found for this stream yet.");
       } else {
         setNotice(
-          `Loaded ${response.playlists.length} VOD folder${response.playlists.length === 1 ? "" : "s"} (${response.fileCount} file${
+          `Loaded ${response.playlists.length} Video folder${response.playlists.length === 1 ? "" : "s"} (${response.fileCount} file${
             response.fileCount === 1 ? "" : "s"
           }).`
         );
       }
     } catch (loadError: any) {
-      setError(loadError?.message ?? "Failed to load VOD catalog.");
+      setError(loadError?.message ?? "Failed to load Video catalog.");
     } finally {
-      setIsLoadingVodCatalog(false);
+      setIsLoadingVideoCatalog(false);
     }
-  }, [buildProof, hostInput, vodPackageStreamIdInput]);
+  }, [buildProof, hostInput, videoPackageStreamIdInput]);
 
   const loadEntitlements = useCallback(async () => {
     setError(null);
@@ -278,7 +278,7 @@ export function AccessEntitlementsPanel() {
     }
   }, [buildProof, hostInput, limitInput, resourceFilterInput, statusFilter, subjectFilterInput]);
 
-  const grantVodPackage = useCallback(async () => {
+  const grantVideoPackage = useCallback(async () => {
     setError(null);
     setNotice(null);
 
@@ -287,73 +287,73 @@ export function AccessEntitlementsPanel() {
       setError("Host pubkey must be a valid npub or 64-hex pubkey.");
       return;
     }
-    const subjectPubkey = normalizePubkeyInput(vodPackageSubjectInput);
+    const subjectPubkey = normalizePubkeyInput(videoPackageSubjectInput);
     if (!subjectPubkey) {
-      setError("VOD package subject must be a valid npub or 64-hex pubkey.");
+      setError("Video package subject must be a valid npub or 64-hex pubkey.");
       return;
     }
-    const streamId = normalizeStreamIdInput(vodPackageStreamIdInput);
+    const streamId = normalizeStreamIdInput(videoPackageStreamIdInput);
     if (!streamId) {
       setError("Stream ID must use letters, digits, '-' or '_' (max 128 chars).");
       return;
     }
-    const playlistIdInput = vodPackagePlaylistIdInput.trim();
+    const playlistIdInput = videoPackagePlaylistIdInput.trim();
     const playlistId = normalizePlaylistIdInput(playlistIdInput);
     if (playlistIdInput && !playlistId) {
       setError("Playlist ID must use letters, digits, '.', '-' or '_' (max 80 chars), or __root__.");
       return;
     }
 
-    const durationHours = presetDurationHours(vodPackageDurationPreset, vodPackageCustomHoursInput);
+    const durationHours = presetDurationHours(videoPackageDurationPreset, videoPackageCustomHoursInput);
     if (!durationHours || durationHours <= 0) {
       setError("Select a valid package duration.");
       return;
     }
     const expiresAtSec = Math.floor(Date.now() / 1000) + durationHours * 60 * 60;
     const resourceId = playlistId
-      ? `stream:${hostPubkey}:${streamId}:vod:${playlistId}:*`
-      : `stream:${hostPubkey}:${streamId}:vod:*`;
+      ? `stream:${hostPubkey}:${streamId}:video:${playlistId}:*`
+      : `stream:${hostPubkey}:${streamId}:video:*`;
 
-    setIsGrantingVodPackage(true);
+    setIsGrantingVideoPackage(true);
     try {
       const proof = await buildProof(hostPubkey);
       const result = await grantAccessEntitlementClient({
         hostPubkey,
         subjectPubkey,
         resourceId,
-        actions: ["watch_vod"],
-        source: vodPackageSource,
-        sourceRef: vodPackageSourceRef.trim() || undefined,
+        actions: ["watch_video"],
+        source: videoPackageSource,
+        sourceRef: videoPackageSourceRef.trim() || undefined,
         expiresAtSec,
         operatorProofEvent: proof
       });
       setEntitlements((prev) => [result.entitlement, ...prev.filter((row) => row.id !== result.entitlement.id)]);
       setNotice(
         `Granted ${
-          playlistId ? `${playlistId === "__root__" ? "root files" : `playlist ${playlistId}`}` : "all VOD"
+          playlistId ? `${playlistId === "__root__" ? "root files" : `playlist ${playlistId}`}` : "all Video"
         } access to ${formatPubkey(result.entitlement.subjectPubkey)} for ${durationHours}h.`
       );
-      setVodPackageSubjectInput("");
-      setVodPackagePlaylistIdInput("");
-      setVodPackageSourceRef("");
-      setVodPackageCustomHoursInput("");
+      setVideoPackageSubjectInput("");
+      setVideoPackagePlaylistIdInput("");
+      setVideoPackageSourceRef("");
+      setVideoPackageCustomHoursInput("");
       await loadEntitlements();
     } catch (grantError: any) {
-      setError(grantError?.message ?? "Failed to grant VOD package.");
+      setError(grantError?.message ?? "Failed to grant Video package.");
     } finally {
-      setIsGrantingVodPackage(false);
+      setIsGrantingVideoPackage(false);
     }
   }, [
     buildProof,
     hostInput,
     loadEntitlements,
-    vodPackageCustomHoursInput,
-    vodPackageDurationPreset,
-    vodPackagePlaylistIdInput,
-    vodPackageSource,
-    vodPackageSourceRef,
-    vodPackageStreamIdInput,
-    vodPackageSubjectInput
+    videoPackageCustomHoursInput,
+    videoPackageDurationPreset,
+    videoPackagePlaylistIdInput,
+    videoPackageSource,
+    videoPackageSourceRef,
+    videoPackageStreamIdInput,
+    videoPackageSubjectInput
   ]);
 
   const toggleGrantAction = useCallback((action: AccessAction) => {
@@ -464,7 +464,7 @@ export function AccessEntitlementsPanel() {
       <div>
         <h2 className="text-sm font-semibold text-neutral-200">Access Entitlements</h2>
         <p className="text-xs text-neutral-500 mt-1">
-          Creator controls are grouped by workflow: scope → VOD packages → manual overrides → active grants.
+          Creator controls are grouped by workflow: scope → Video packages → manual overrides → active grants.
         </p>
       </div>
 
@@ -519,33 +519,33 @@ export function AccessEntitlementsPanel() {
       </div>
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-        <div className="text-xs uppercase tracking-wide text-neutral-500">2) VOD package grant</div>
+        <div className="text-xs uppercase tracking-wide text-neutral-500">2) Video package grant</div>
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-3">
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <input
-                value={vodPackageSubjectInput}
-                onChange={(event) => setVodPackageSubjectInput(event.target.value)}
+                value={videoPackageSubjectInput}
+                onChange={(event) => setVideoPackageSubjectInput(event.target.value)}
                 placeholder="Buyer pubkey (npub or 64-hex)"
                 className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
               />
               <input
-                value={vodPackageStreamIdInput}
-                onChange={(event) => setVodPackageStreamIdInput(event.target.value)}
+                value={videoPackageStreamIdInput}
+                onChange={(event) => setVideoPackageStreamIdInput(event.target.value)}
                 placeholder="Stream ID (required)"
                 className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <input
-                value={vodPackagePlaylistIdInput}
-                onChange={(event) => setVodPackagePlaylistIdInput(event.target.value)}
-                placeholder="Playlist ID (optional, top-level VOD folder or __root__)"
+                value={videoPackagePlaylistIdInput}
+                onChange={(event) => setVideoPackagePlaylistIdInput(event.target.value)}
+                placeholder="Playlist ID (optional, top-level Video folder or __root__)"
                 className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
               />
               <select
-                value={vodPackageDurationPreset}
-                onChange={(event) => setVodPackageDurationPreset(event.target.value as VodPackageDurationPreset)}
+                value={videoPackageDurationPreset}
+                onChange={(event) => setVideoPackageDurationPreset(event.target.value as VideoPackageDurationPreset)}
                 className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
               >
                 <option value="24h">24 hours</option>
@@ -555,10 +555,10 @@ export function AccessEntitlementsPanel() {
                 <option value="custom">Custom hours</option>
               </select>
               <input
-                value={vodPackageCustomHoursInput}
-                onChange={(event) => setVodPackageCustomHoursInput(event.target.value)}
+                value={videoPackageCustomHoursInput}
+                onChange={(event) => setVideoPackageCustomHoursInput(event.target.value)}
                 placeholder="Custom hours"
-                disabled={vodPackageDurationPreset !== "custom"}
+                disabled={videoPackageDurationPreset !== "custom"}
                 className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono disabled:opacity-50"
               />
             </div>
@@ -566,68 +566,68 @@ export function AccessEntitlementsPanel() {
           <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-3 py-2 space-y-1.5">
             <div className="text-[11px] uppercase tracking-wide text-neutral-500">Package preview</div>
             <div className="text-xs text-neutral-400">
-              Scope: <span className="text-neutral-200">{vodScopePreviewLabel}</span>
+              Scope: <span className="text-neutral-200">{videoScopePreviewLabel}</span>
             </div>
             <div className="text-xs text-neutral-400">
-              Duration: <span className="text-neutral-200">{vodDurationPreview}</span>
+              Duration: <span className="text-neutral-200">{videoDurationPreview}</span>
             </div>
             <div className="text-xs text-neutral-400">
-              Access: <span className="text-neutral-200 font-mono">watch_vod</span>
+              Access: <span className="text-neutral-200 font-mono">watch_video</span>
             </div>
             <div className="text-[11px] text-neutral-500 break-all">
-              {vodResourcePreview || "Resource preview will appear after host + stream are valid."}
+              {videoResourcePreview || "Resource preview will appear after host + stream are valid."}
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={isLoadingVodCatalog}
-            onClick={() => void loadVodCatalog()}
+            disabled={isLoadingVideoCatalog}
+            onClick={() => void loadVideoCatalog()}
             className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
           >
-            {isLoadingVodCatalog ? "Loading VOD folders…" : "Load VOD folders"}
+            {isLoadingVideoCatalog ? "Loading Video folders…" : "Load Video folders"}
           </button>
-          {vodCatalogRows.length > 0 && (
+          {videoCatalogRows.length > 0 && (
             <span className="text-[11px] text-neutral-500">
-              {vodCatalogRows.length} folder{vodCatalogRows.length === 1 ? "" : "s"} · {vodCatalogFileCount} file{vodCatalogFileCount === 1 ? "" : "s"}
+              {videoCatalogRows.length} folder{videoCatalogRows.length === 1 ? "" : "s"} · {videoCatalogFileCount} file{videoCatalogFileCount === 1 ? "" : "s"}
             </span>
           )}
         </div>
-        {vodCatalogRows.length > 0 && (
+        {videoCatalogRows.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setVodPackagePlaylistIdInput("")}
+              onClick={() => setVideoPackagePlaylistIdInput("")}
               className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border text-xs ${
-                normalizedVodPlaylistSelection === ""
+                normalizedVideoPlaylistSelection === ""
                   ? "bg-blue-600/20 border-blue-500 text-blue-200"
                   : "bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
               }`}
             >
-              All VOD
+              All Video
             </button>
-            {vodCatalogRows.map((row) => (
+            {videoCatalogRows.map((row) => (
               <button
                 key={row.id}
                 type="button"
-                title={formatVodPlaylistTitle(row)}
-                onClick={() => setVodPackagePlaylistIdInput(row.id)}
+                title={formatVideoPlaylistTitle(row)}
+                onClick={() => setVideoPackagePlaylistIdInput(row.id)}
                 className={`inline-flex items-center px-2.5 py-1.5 rounded-lg border text-xs ${
-                  normalizedVodPlaylistSelection === row.id
+                  normalizedVideoPlaylistSelection === row.id
                     ? "bg-blue-600/20 border-blue-500 text-blue-200"
                     : "bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
                 }`}
               >
-                {formatVodPlaylistLabel(row)} ({row.fileCount})
+                {formatVideoPlaylistLabel(row)} ({row.fileCount})
               </button>
             ))}
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <select
-            value={vodPackageSource}
-            onChange={(event) => setVodPackageSource(event.target.value as (typeof ACCESS_ENTITLEMENT_SOURCES)[number])}
+            value={videoPackageSource}
+            onChange={(event) => setVideoPackageSource(event.target.value as (typeof ACCESS_ENTITLEMENT_SOURCES)[number])}
             className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
           >
             {ACCESS_ENTITLEMENT_SOURCES.map((source) => (
@@ -637,25 +637,25 @@ export function AccessEntitlementsPanel() {
             ))}
           </select>
           <input
-            value={vodPackageSourceRef}
-            onChange={(event) => setVodPackageSourceRef(event.target.value)}
+            value={videoPackageSourceRef}
+            onChange={(event) => setVideoPackageSourceRef(event.target.value)}
             placeholder="Payment/session ref (optional)"
             className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
           />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[11px] text-neutral-500">
-            Grants <span className="text-neutral-300 font-mono">watch_vod</span> only. Playlist scope maps to
-            <span className="text-neutral-300 font-mono"> stream:&lt;host&gt;:&lt;streamId&gt;:vod:&lt;playlist&gt;:*</span>.
+            Grants <span className="text-neutral-300 font-mono">watch_video</span> only. Playlist scope maps to
+            <span className="text-neutral-300 font-mono"> stream:&lt;host&gt;:&lt;streamId&gt;:video:&lt;playlist&gt;:*</span>.
           </div>
           <button
             type="button"
-            disabled={isGrantingVodPackage}
-            onClick={() => void grantVodPackage()}
+            disabled={isGrantingVideoPackage}
+            onClick={() => void grantVideoPackage()}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-50"
           >
             <ShieldPlus className="w-4 h-4" />
-            {isGrantingVodPackage ? "Granting…" : "Grant VOD package"}
+            {isGrantingVideoPackage ? "Granting…" : "Grant Video package"}
           </button>
         </div>
       </div>

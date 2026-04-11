@@ -329,7 +329,6 @@ export default function GuildsPage() {
               <Users className="w-6 h-6 text-blue-500" />
               Guilds
             </h1>
-            <p className="text-sm text-neutral-400">Curated discovery published on Nostr (kind 30315), independent of whether a guild is live right now.</p>
           </div>
           <Link className="text-sm text-neutral-300 hover:text-white" href="/">
             Home

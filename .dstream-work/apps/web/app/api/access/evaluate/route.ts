@@ -32,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   const payload = (body ?? {}) as Record<string, unknown>;
   const action = parseAction(payload.action);
   if (!action) {
-    return Response.json({ ok: false, error: "action must be one of watch_live|watch_vod|chat_send|p2p_assist|rebroadcast" }, { status: 400 });
+    return Response.json({ ok: false, error: "action must be one of watch_live|watch_video|chat_send|p2p_assist|rebroadcast" }, { status: 400 });
   }
 
   const hostPubkey = normalizePubkey(payload.hostPubkey);
@@ -44,9 +44,9 @@ export async function POST(req: Request): Promise<Response> {
   let announceContext:
     | {
         privateStream: boolean;
-        privateVod: boolean;
-        vodArchiveEnabled: boolean;
-        vodVisibility: "public" | "private";
+        privateVideo: boolean;
+        videoArchiveEnabled: boolean;
+        videoVisibility: "public" | "private";
         viewerAllowPubkeys: string[];
         feeWaiverVipPubkeys: string[];
       }
@@ -59,9 +59,9 @@ export async function POST(req: Request): Promise<Response> {
     }
     announceContext = {
       privateStream: registration.policy.privateStream,
-      privateVod: registration.policy.vodArchiveEnabled && registration.policy.vodVisibility === "private",
-      vodArchiveEnabled: registration.policy.vodArchiveEnabled,
-      vodVisibility: registration.policy.vodVisibility,
+      privateVideo: registration.policy.videoArchiveEnabled && registration.policy.videoVisibility === "private",
+      videoArchiveEnabled: registration.policy.videoArchiveEnabled,
+      videoVisibility: registration.policy.videoVisibility,
       viewerAllowPubkeys: registration.policy.viewerAllowPubkeys,
       feeWaiverVipPubkeys: []
     };

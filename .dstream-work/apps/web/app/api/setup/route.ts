@@ -5,6 +5,11 @@ import path from 'path';
 
 export async function POST(req: Request) {
   try {
+    const currentSecret = process.env.DSTREAM_XMR_SESSION_SECRET;
+    if (currentSecret && currentSecret !== 'dev-session-secret-0123456789abcdef') {
+      return NextResponse.json({ success: false, error: "Node is already initialized and secured." }, { status: 403 });
+    }
+
     const { domain, xmrAddress, email } = await req.json();
 
     // Generate highly secure entropy for the node

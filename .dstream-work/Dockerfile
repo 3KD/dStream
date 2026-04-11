@@ -32,7 +32,7 @@ ENV NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING=$NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING
 ENV NEXT_PUBLIC_SUPPORT_ETH_ADDRESS=$NEXT_PUBLIC_SUPPORT_ETH_ADDRESS
 ENV NEXT_PUBLIC_SUPPORT_TRX_ADDRESS=$NEXT_PUBLIC_SUPPORT_TRX_ADDRESS
 
-RUN npm run build
+RUN if [ ! -d "apps/web/.next" ]; then npm run build; else echo "Skipping build, apps/web/.next exists"; fi
 
 FROM base AS runner
 ENV NODE_ENV=production

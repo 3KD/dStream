@@ -52,7 +52,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
   };
 
   return (
-    <header className="relative isolate border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md sticky top-0 z-[80] px-3 py-2 sm:px-4 sm:py-2.5 lg:px-6">
+    <header className="relative isolate border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md z-[80] px-3 py-2 sm:px-4 sm:py-2.5 lg:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link href="/" className="flex items-center gap-1.5 sm:gap-2 group min-w-0 shrink-0">

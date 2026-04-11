@@ -99,6 +99,7 @@ function isLikelyMobilePlaybackDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent ?? "";
   if (/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)) return true;
+  if (typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 0) return true;
   if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
     try {
       if (window.matchMedia("(pointer: coarse)").matches) return true;
@@ -170,8 +171,15 @@ export function Player({
   const [needsClick, setNeedsClick] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
-  const isMobilePlayback = useMemo(() => isLikelyMobilePlaybackDevice(), []);
-  const preferNativeHls = useMemo(() => isLikelySafariBrowser(), []);
+  const [isMobilePlayback, setIsMobilePlayback] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [preferNativeHls, setPreferNativeHls] = useState(false);
+
+  useEffect(() => {
+    setIsMobilePlayback(isLikelyMobilePlaybackDevice());
+    setPreferNativeHls(isLikelySafariBrowser());
+  }, []);
+
   const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
@@ -1099,18 +1107,14 @@ export function Player({
   };
 
   const handleVideoSurfaceInteraction = () => {
-    if (isMobilePlayback && !mobileControlsVisible) {
-      revealMobileControls();
-      return;
-    }
-    
-    revealMobileControls();
     const video = videoRef.current;
     if (!video) return;
 
     const currentlyMuted = video.muted || volume === 0;
     const currentlyPaused = video.paused || video.ended;
 
+    // 1. If the video needs intervention (muted, paused, or requires click)
+    // Any interaction immediately unmutes and plays.
     if (needsClick || currentlyMuted || currentlyPaused) {
       unmuteFromGesture();
       setNeedsClick(false);
@@ -1118,31 +1122,44 @@ export function Player({
         setStatus("Click to play");
         setNeedsClick(true);
       });
+      // On mobile, keep the menu hidden during the initial unmute tap
+      if (isMobilePlayback) {
+        setMobileControlsVisible(false);
+      }
       return;
     }
 
-    setUnmuteHintPhase("hidden");
-    setVolume(0);
-    setStatus("Paused");
-    try {
-      video.muted = true;
-      video.volume = 0;
+    // 2. The video is actively playing and unmuted
+    if (isMobilePlayback) {
+      // Mobile: Tap toggles the overlay controls
+      if (mobileControlsVisible) {
+        setMobileControlsVisible(false);
+        if (mobileControlsHideTimerRef.current) {
+          clearTimeout(mobileControlsHideTimerRef.current);
+          mobileControlsHideTimerRef.current = null;
+        }
+      } else {
+        revealMobileControls();
+      }
+    } else {
+      // Desktop: Clicking the video surface pauses it
       video.pause();
-    } catch {
-      video.pause();
+      setStatus("Paused");
     }
   };
 
   return (
     <div className={`relative w-full ${layoutMode === "fill" ? "flex h-full min-h-[24rem] flex-col" : ""}`}>
       <div
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={`group/player relative w-full bg-black rounded-2xl overflow-hidden border border-neutral-800 ${
           layoutMode === "fill" ? "min-h-[16rem] flex-1" : "aspect-video"
         }`}
       >
         <video
           ref={videoRef}
-          className="w-full h-full"
+          className="w-full h-full cursor-pointer"
           playsInline
           controls={effectiveNativeControls}
           autoPlay
@@ -1180,10 +1197,12 @@ export function Player({
                 ? mobileControlsVisible
                   ? "opacity-100"
                   : "opacity-0"
-                : "opacity-0 group-hover/player:opacity-100"
+                : isHovered
+                  ? "opacity-100"
+                  : "opacity-0"
             }`}
           >
-            <div className="pointer-events-auto max-h-full w-full overflow-y-auto rounded-xl border border-neutral-700/80 bg-black/75 backdrop-blur px-3 py-2 text-xs text-neutral-200">
+            <div className={`${(isMobilePlayback ? mobileControlsVisible : isHovered) ? "pointer-events-auto" : "pointer-events-none"} max-h-full w-full overflow-y-auto rounded-xl border border-neutral-700/80 bg-black/75 backdrop-blur px-3 py-2 text-xs text-neutral-200`}>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -1194,13 +1213,13 @@ export function Player({
                 </button>
 
                 {hasSeekWindow && (
-                  <label className="inline-flex items-center gap-2 min-w-[13rem]">
+                  <label className={`inline-flex items-center gap-2 min-w-[6rem] sm:min-w-[13rem] flex-[1_0_100%] sm:flex-1 ${isLiveStream ? "order-last ml-auto sm:order-none" : ""}`}>
                     <input
                       type="range"
                       min={timelineStart}
                       max={timelineEnd}
                       step={0.01}
-                      value={clampedTimelinePosition}
+                      value={isAtLiveEdge ? timelineEnd : clampedTimelinePosition}
                       onChange={(e) => {
                         const video = videoRef.current;
                         if (!video) return;
@@ -1213,7 +1232,7 @@ export function Player({
                           // ignore
                         }
                       }}
-                      className="accent-blue-500 w-32"
+                      className="accent-blue-500 min-w-[8rem] flex-1"
                       aria-label="Seek"
                     />
                     <span className="font-mono text-neutral-300 text-[11px] tabular-nums whitespace-nowrap">

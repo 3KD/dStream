@@ -9,6 +9,7 @@ import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
+import { buildWatchHref } from "@/lib/watchHref";
 
 const STORAGE_KEY = "dstream_mini_player_layout_v3";
 const BACKGROUND_PLAY_PREF_KEY = "dstream_player_background_play_v1";
@@ -184,7 +185,7 @@ export function GlobalQuickPlayDock() {
   }, [originStreamId, quickPlayStream?.whepUrl]);
 
   const watchHref = quickPlayStream
-    ? `/watch/${pubkeyHexToNpub(quickPlayStream.streamPubkey) ?? quickPlayStream.streamPubkey}/${quickPlayStream.streamId}`
+    ? buildWatchHref(quickPlayStream.streamPubkey, quickPlayStream.streamId)
     : null;
   const tipHref = watchHref ? `${watchHref}?tip=1` : null;
   const playbackStateKey = useMemo(() => {
@@ -478,25 +479,39 @@ export function GlobalQuickPlayDock() {
   useEffect(() => {
     if (interactionMode === "idle") return;
 
-    const onMove = (event: MouseEvent) => {
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      e.stopPropagation();
+      const isTouch = "touches" in e;
+      const clientX = isTouch ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = isTouch ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+
       if (interactionMode === "drag") {
-        setPosition(() =>
-          clampPosition(event.clientX - dragOffsetRef.current.x, event.clientY - dragOffsetRef.current.y, width, height)
-        );
+        const nextX = clientX - dragOffsetRef.current.x;
+        const nextY = clientY - dragOffsetRef.current.y;
+        setPosition(clampPosition(nextX, nextY, width, height));
         return;
       }
 
       const activeResize = resizeRef.current;
       if (!activeResize) return;
 
-      const dx = event.clientX - activeResize.startMouseX;
-      const dy = event.clientY - activeResize.startMouseY;
-      const horizontalSign = activeResize.handle.includes("left") ? -1 : 1;
-      const verticalSign = activeResize.handle.includes("top") ? -1 : 1;
-      const widthDeltaX = horizontalSign * dx;
-      const widthDeltaY = verticalSign * dy * (16 / 9);
-      const widthDelta = Math.abs(widthDeltaX) >= Math.abs(widthDeltaY) ? widthDeltaX : widthDeltaY;
-      const nextWidth = clampWidth(activeResize.startWidth + widthDelta);
+      const deltaX = clientX - activeResize.startMouseX;
+      const deltaY = clientY - activeResize.startMouseY;
+
+      let nextWidth = activeResize.startWidth;
+      if (activeResize.handle.includes("right")) {
+        nextWidth = clampWidth(activeResize.startWidth + deltaX);
+      } else if (activeResize.handle.includes("left")) {
+        nextWidth = clampWidth(activeResize.startWidth - deltaX);
+        if (nextWidth <= MIN_WIDTH) nextWidth = MIN_WIDTH;
+        if (nextWidth >= MAX_WIDTH) nextWidth = MAX_WIDTH;
+      } else if (activeResize.handle.includes("bottom")) {
+        const potentialWidth = Math.round(((activeResize.startHeight + deltaY) * 16) / 9);
+        nextWidth = clampWidth(potentialWidth);
+      } else {
+        const potentialWidth = Math.round(((activeResize.startHeight - deltaY) * 16) / 9);
+        nextWidth = clampWidth(potentialWidth);
+      }
       const nextHeight = toHeight(nextWidth);
 
       let nextX = activeResize.startX;
@@ -520,17 +535,31 @@ export function GlobalQuickPlayDock() {
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
     };
   }, [height, interactionMode, width]);
 
   const handleContainerMouseDown = useCallback(
-    (event: React.MouseEvent) => {
-      if (event.button !== 0) return;
+    (event: React.MouseEvent | React.TouchEvent) => {
+      const isTouch = "touches" in event;
+      if (!isTouch && (event as React.MouseEvent).button !== 0) return;
       if (isDragBlockedTarget(event.target)) return;
-      dragOffsetRef.current = { x: event.clientX - position.x, y: event.clientY - position.y };
+
+      if (!isTouch) {
+        event.preventDefault();
+      }
+      event.stopPropagation();
+      
+      const clientX = isTouch ? (event as React.TouchEvent).touches[0].clientX : (event as React.MouseEvent).clientX;
+      const clientY = isTouch ? (event as React.TouchEvent).touches[0].clientY : (event as React.MouseEvent).clientY;
+
+      dragOffsetRef.current = { x: clientX - position.x, y: clientY - position.y };
       setInteractionMode("drag");
     },
     [position.x, position.y]
@@ -598,13 +627,14 @@ export function GlobalQuickPlayDock() {
   return (
     <div
       onMouseDown={handleContainerMouseDown}
-      style={{ left: position.x, top: position.y, width, height, position: "fixed" }}
+      onTouchStart={handleContainerMouseDown}
+      style={{ left: position.x, top: position.y, width, height, position: "fixed", touchAction: "none" }}
       className={`z-[9999] bg-black rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col group backdrop-blur-xl ring-1 ring-white/20 select-none ${
         interactionMode === "drag" ? "cursor-grabbing" : interactionMode === "resize" ? "cursor-move" : "cursor-grab"
       }`}
       aria-label="Floating mini player"
     >
-      <div ref={playerHostRef} className="h-full relative">
+      <div ref={playerHostRef} className="h-full relative pointer-events-none select-none">
         <Player
           src={hlsSrc}
           whepSrc={whepSrc}

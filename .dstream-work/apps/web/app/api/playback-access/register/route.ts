@@ -21,8 +21,8 @@ export async function POST(req: Request): Promise<Response> {
     ok: true,
     originStreamId: result.policy.originStreamId,
     privateStream: result.policy.privateStream,
-    privateVod: result.policy.vodArchiveEnabled && result.policy.vodVisibility === "private",
-    vodVisibility: result.policy.vodVisibility,
+    privateVideo: result.policy.videoArchiveEnabled && result.policy.videoVisibility === "private",
+    videoVisibility: result.policy.videoVisibility,
     viewerAllowCount: result.policy.viewerAllowPubkeys.length,
     status: result.policy.status
   });

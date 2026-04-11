@@ -1,7 +1,7 @@
 import { grantAccessEntitlement, listAccessEntitlements, revokeAccessEntitlement } from "./store";
 import { ACCESS_ACTIONS, type AccessAction, type AccessEntitlement } from "./types";
 
-const DEFAULT_STAKE_GRANT_ACTIONS: AccessAction[] = ["watch_live", "watch_vod", "chat_send", "p2p_assist", "rebroadcast"];
+const DEFAULT_STAKE_GRANT_ACTIONS: AccessAction[] = ["watch_live", "watch_video", "chat_send", "p2p_assist", "rebroadcast"];
 
 function normalizePubkeyHex(input: string | null | undefined): string | null {
   const value = (input ?? "").trim().toLowerCase();

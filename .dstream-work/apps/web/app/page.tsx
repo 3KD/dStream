@@ -8,10 +8,10 @@ import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
-import { isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
+
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
-import { formatXmrAtomic, isReplayEligibleStream, resolveVodPolicy, vodModeLabel } from "@/lib/vodPolicy";
+import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 
@@ -22,7 +22,7 @@ function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: st
 export default function HomePage() {
   const router = useRouter();
   const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
-  const { streams: announcedStreams, isLoading: vodLoading } = useStreamAnnounces({ liveOnly: false, limit: 180 });
+  const { streams: announcedStreams, isLoading: videoLoading } = useStreamAnnounces({ liveOnly: false, limit: 180 });
   const [searchQuery, setSearchQuery] = useState("");
   const [heroCollapsed, setHeroCollapsed] = useState(false);
 
@@ -32,7 +32,7 @@ export default function HomePage() {
   }, []);
 
   const visibleStreams = useMemo(() => {
-    const playable = liveStreams.filter((stream) => isLikelyPublicPlayableMediaUrl(stream.streaming));
+    const playable = liveStreams;
     if (!searchQuery.trim()) return playable;
     const q = searchQuery.toLowerCase();
     const qHex = pubkeyParamToHex(searchQuery);
@@ -49,7 +49,7 @@ export default function HomePage() {
     });
   }, [liveStreams, searchQuery]);
 
-  const vodStreams = useMemo(() => {
+  const videoStreams = useMemo(() => {
     return announcedStreams
       .filter((stream) => isReplayEligibleStream(stream))
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -207,37 +207,37 @@ export default function HomePage() {
 
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">Latest Replays (VOD)</h2>
-            <Link href="/vod" className="text-sm text-neutral-400 hover:text-white">
+            <h2 className="text-xl font-bold">Latest Replays (Video)</h2>
+            <Link href="/video" className="text-sm text-neutral-400 hover:text-white">
               View all
             </Link>
           </div>
 
-          {vodLoading ? (
+          {videoLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
               ))}
             </div>
-          ) : vodStreams.length === 0 ? (
+          ) : videoStreams.length === 0 ? (
             <div className="p-10 border border-dashed border-neutral-800 rounded-xl text-center text-neutral-500">
               No recent replays found.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {vodStreams.map((stream) => {
+              {videoStreams.map((stream) => {
                 const npub = pubkeyHexToNpub(stream.pubkey);
                 const pubkeyParam = npub ?? stream.pubkey;
                 const pubkeyLabel = npub
                   ? shortenText(npub, { head: 14, tail: 8 })
                   : shortenText(stream.pubkey, { head: 14, tail: 8 });
-                const vodPolicy = resolveVodPolicy(stream);
-                const vodBadge = vodModeLabel(vodPolicy);
+                const videoPolicy = resolveVideoPolicy(stream);
+                const videoBadge = videoModeLabel(videoPolicy);
 
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                    key={`vod:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
+                    key={`video:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
                     <div className="aspect-video bg-neutral-800 relative overflow-hidden">
@@ -245,7 +245,7 @@ export default function HomePage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={stream.image}
-                          alt={stream.title || "VOD thumbnail"}
+                          alt={stream.title || "Video thumbnail"}
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
@@ -253,14 +253,14 @@ export default function HomePage() {
                         <div className="w-full h-full flex items-center justify-center text-neutral-500 text-sm">No thumbnail</div>
                       )}
                       <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                        {vodBadge}
+                        {videoBadge}
                       </div>
                     </div>
                     <div className="p-4">
                       <h3 className="font-bold text-lg line-clamp-1">{stream.title || "Untitled Replay"}</h3>
                       <p className="text-sm text-neutral-500 font-mono mt-1">{pubkeyLabel}</p>
-                      {vodPolicy.mode === "paid" && vodPolicy.priceAtomic && (
-                        <p className="text-xs text-amber-300 mt-2">Unlock: {formatXmrAtomic(vodPolicy.priceAtomic)}</p>
+                      {videoPolicy.mode === "paid" && videoPolicy.priceAtomic && (
+                        <p className="text-xs text-amber-300 mt-2">Unlock: {formatXmrAtomic(videoPolicy.priceAtomic)}</p>
                       )}
                     </div>
                   </Link>
@@ -297,9 +297,9 @@ export default function HomePage() {
               </div>
               <span className="font-mono text-xs text-green-400 uppercase tracking-wider font-bold">P2P Scale</span>
             </div>
-            <h3 className="text-xl font-bold mb-2">Replaceable Delivery</h3>
+            <h3 className="text-xl font-bold mb-2">Peer-Assisted Streaming</h3>
             <p className="text-neutral-300 leading-relaxed">
-              The media layer is a hint, not an authority. Clients can fail over across origins and peer swarms (when enabled).
+              When enabled, viewers can automatically help support the broadcaster by securely relaying the video and audio feeds directly to other viewers, unlocking massive P2P scale.
             </p>
           </div>
 
@@ -320,10 +320,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="border border-neutral-800 rounded-xl p-4 text-sm text-neutral-300">
-          <p className="font-medium text-white mb-2">Watch route (ADR 0003)</p>
-          <p className="font-mono text-neutral-400">/watch/:npub/:streamId</p>
-        </section>
+
       </main>
     </div>
   );

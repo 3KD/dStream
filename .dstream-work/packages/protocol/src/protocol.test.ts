@@ -51,7 +51,7 @@ test("stream announce: build + parse roundtrip", () => {
     manifestSignerPubkey: "b".repeat(64),
     stakeAmountAtomic: "1000",
     stakeNote: "bond",
-    vod: {
+    video: {
       mode: "paid",
       priceAtomic: "250000000000",
       currency: "xmr",
@@ -100,7 +100,7 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(parsed.manifestSignerPubkey, "b".repeat(64));
   assert.equal(parsed.stakeAmountAtomic, "1000");
   assert.equal(parsed.stakeNote, "bond");
-  assert.deepEqual(parsed.vod, {
+  assert.deepEqual(parsed.video, {
     mode: "paid",
     priceAtomic: "250000000000",
     currency: "xmr",

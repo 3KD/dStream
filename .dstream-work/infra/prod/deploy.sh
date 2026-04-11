@@ -24,11 +24,17 @@ echo "========================================="
 echo "📁 Preparing remote directory..."
 ssh "$SSH_TARGET" "mkdir -p ${REMOTE_DIR}"
 
-# 2. Rsync codebase (with strict exclusions to prevent overwriting production data)
+# 2. Build local binaries to alleviate server memory spikes
+echo "🔨 Building web client locally..."
+cd "$LOCAL_DIR"
+npm run build
+echo "🧹 Wiping compilation cache bloat..."
+rm -rf apps/web/.next/cache
+
+# 3. Rsync codebase (with strict exclusions to prevent overwriting production data)
 echo "☁️  Uploading node architecture via rsync..."
 rsync -avz --delete \
   --exclude="node_modules/" \
-  --exclude="apps/web/.next/" \
   --exclude=".env" \
   --exclude=".env.production" \
   --exclude="relay_data/" \
@@ -39,9 +45,9 @@ rsync -avz --delete \
   --exclude=".DS_Store" \
   "$LOCAL_DIR/" "$SSH_TARGET:$REMOTE_DIR/"
 
-# 3. Boot the remote containers natively
+# 4. Boot the remote containers natively and flush server caches
 echo "🐳 Rebuilding and booting remote Docker infrastructure..."
-ssh "$SSH_TARGET" "cd ${REMOTE_DIR} && docker compose -f docker-compose.yml up -d --build --remove-orphans"
+ssh "$SSH_TARGET" "cd ${REMOTE_DIR} && docker compose -f docker-compose.yml up -d --build --remove-orphans && docker system prune -fa --volumes"
 
 echo "========================================="
 echo "✅ DEPLOYMENT SUCCESSFUL!"

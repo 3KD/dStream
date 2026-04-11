@@ -119,6 +119,9 @@ async function refreshCache(): Promise<void> {
     const streams = Array.from(byStreamKey.values())
       .filter((stream) => {
         if (!stream.discoverable) return false;
+        
+        // Final sanity check for playable stream validity
+        if (!stream.streaming) return false;
         const pubkeyPolicy = hiddenPubkeys.get(stream.pubkey.toLowerCase());
         if (pubkeyPolicy?.hidden) return false;
         const streamPolicy = hiddenStreams.get(makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId));

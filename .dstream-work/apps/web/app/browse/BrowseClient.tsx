@@ -14,8 +14,8 @@ import { shortenText } from "@/lib/encoding";
 import { useEffect, useMemo, useState } from "react";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
-import { isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
-import { formatXmrAtomic, isReplayEligibleStream, resolveVodPolicy, vodModeLabel } from "@/lib/vodPolicy";
+
+import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
 
 function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
@@ -62,7 +62,7 @@ export default function BrowseClient() {
     return keys;
   }, [guilds, selectedGuild]);
 
-  const vodStreams = useMemo(
+  const videoStreams = useMemo(
     () =>
       allStreams
         .filter((stream) => isReplayEligibleStream(stream))
@@ -74,14 +74,12 @@ export default function BrowseClient() {
     () =>
       allStreams
         .filter((stream) => stream.status !== "live" && !isReplayEligibleStream(stream))
-        .filter((stream) => isLikelyPublicPlayableMediaUrl(stream.streaming))
         .sort((a, b) => b.createdAt - a.createdAt),
     [allStreams]
   );
 
   const visibleLiveStreams = useMemo(() => {
     const base = liveStreams
-      .filter((stream) => isLikelyPublicPlayableMediaUrl(stream.streaming))
       .filter((stream) => !social.isBlocked(stream.pubkey));
     const favoriteFiltered = favoritesOnly
       ? base.filter((stream) => social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId))
@@ -90,15 +88,15 @@ export default function BrowseClient() {
     return favoriteFiltered.filter((stream) => curatedKeys.has(makeStreamKey(stream.pubkey, stream.streamId)));
   }, [curatedKeys, curatedOnly, favoritesOnly, liveStreams, social]);
 
-  const visibleVodStreams = useMemo(() => {
+  const visibleVideoStreams = useMemo(() => {
     if (liveOnly) return [];
-    const base = vodStreams.filter((stream) => !social.isBlocked(stream.pubkey));
+    const base = videoStreams.filter((stream) => !social.isBlocked(stream.pubkey));
     const favoriteFiltered = favoritesOnly
       ? base.filter((stream) => social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId))
       : base;
     if (!curatedOnly) return favoriteFiltered;
     return favoriteFiltered.filter((stream) => curatedKeys.has(makeStreamKey(stream.pubkey, stream.streamId)));
-  }, [curatedKeys, curatedOnly, favoritesOnly, liveOnly, social, vodStreams]);
+  }, [curatedKeys, curatedOnly, favoritesOnly, liveOnly, social, videoStreams]);
 
   const visibleOfflineStreams = useMemo(() => {
     if (liveOnly) return [];
@@ -141,7 +139,7 @@ export default function BrowseClient() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main id="vod" className="max-w-[1800px] mx-auto p-8 space-y-8">
+      <main id="video" className="max-w-[1800px] mx-auto p-8 space-y-8">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-2xl font-bold">Browse</h1>
@@ -154,9 +152,9 @@ export default function BrowseClient() {
               </Link>
               <Link
                 className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                href="/vod"
+                href="/video"
               >
-                VOD
+                Video
               </Link>
               <Link
                 className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
@@ -214,7 +212,7 @@ export default function BrowseClient() {
               <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
             ))}
           </div>
-        ) : visibleLiveStreams.length === 0 && visibleVodStreams.length === 0 && visibleOfflineStreams.length === 0 ? (
+        ) : visibleLiveStreams.length === 0 && visibleVideoStreams.length === 0 && visibleOfflineStreams.length === 0 ? (
           <div className="rounded-xl border border-neutral-800 p-8 text-neutral-400 text-center">
             {favoritesOnly && curatedOnly
               ? "No favorite curated streams found."
@@ -316,15 +314,15 @@ export default function BrowseClient() {
               )}
             </section>
 
-            <section className="space-y-4" id="vod-section">
-              <h2 className="text-lg font-semibold">Replays (VOD) ({visibleVodStreams.length})</h2>
-              {visibleVodStreams.length === 0 ? (
+            <section className="space-y-4" id="video-section">
+              <h2 className="text-lg font-semibold">Replays (Video) ({visibleVideoStreams.length})</h2>
+              {visibleVideoStreams.length === 0 ? (
                 <div className="rounded-xl border border-neutral-800 p-8 text-neutral-400 text-center">
                   No replay streams match current filters.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-                  {visibleVodStreams.map((stream) => {
+                  {visibleVideoStreams.map((stream) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
                     const pubkeyParam = npub ?? stream.pubkey;
@@ -333,12 +331,12 @@ export default function BrowseClient() {
                       : shortenText(stream.pubkey, { head: 14, tail: 8 });
                     const favorite =
                       social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId);
-                    const vodPolicy = resolveVodPolicy(stream);
+                    const videoPolicy = resolveVideoPolicy(stream);
 
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                        key={`vod:${streamCanonicalId(stream)}:${stream.createdAt}`}
+                        key={`video:${streamCanonicalId(stream)}:${stream.createdAt}`}
                         className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
@@ -357,7 +355,7 @@ export default function BrowseClient() {
                             </div>
                           )}
                           <div className="absolute top-2 left-2 bg-neutral-950/80 border border-neutral-700 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                            {vodModeLabel(vodPolicy)}
+                            {videoModeLabel(videoPolicy)}
                           </div>
                         </div>
                         <div className="p-4 space-y-1">
@@ -387,8 +385,8 @@ export default function BrowseClient() {
                               pubkeyLabel
                             )}
                           </p>
-                          {vodPolicy.mode === "paid" && vodPolicy.priceAtomic && (
-                            <p className="text-xs text-amber-300">Unlock: {formatXmrAtomic(vodPolicy.priceAtomic)}</p>
+                          {videoPolicy.mode === "paid" && videoPolicy.priceAtomic && (
+                            <p className="text-xs text-amber-300">Unlock: {formatXmrAtomic(videoPolicy.priceAtomic)}</p>
                           )}
                         </div>
                       </Link>

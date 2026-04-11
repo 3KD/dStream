@@ -4,45 +4,45 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-const tempDir = mkdtempSync(join(tmpdir(), "dstream-vod-packages-test-"));
+const tempDir = mkdtempSync(join(tmpdir(), "dstream-video-packages-test-"));
 process.env.DSTREAM_ACCESS_STORE_PATH = join(tempDir, "access.json");
-process.env.DSTREAM_VOD_PACKAGE_STORE_PATH = join(tempDir, "vod-packages.json");
+process.env.DSTREAM_Video_PACKAGE_STORE_PATH = join(tempDir, "video-packages.json");
 
-test("vod packages: upsert + list + disable", async () => {
-  const { listVodAccessPackages, upsertVodAccessPackage, disableVodAccessPackage } = await import("./packages");
+test("video packages: upsert + list + disable", async () => {
+  const { listVideoAccessPackages, upsertVideoAccessPackage, disableVideoAccessPackage } = await import("./packages");
 
   const hostPubkey = "1".repeat(64);
-  const created = upsertVodAccessPackage({
+  const created = upsertVideoAccessPackage({
     hostPubkey,
-    streamId: "vod-alpha",
-    title: "Monthly all-VOD",
+    streamId: "video-alpha",
+    title: "Monthly all-Video",
     paymentAsset: "xmr",
     paymentAmount: "0.35",
     durationHours: 24 * 30
   });
   assert.equal(created.status, "active");
-  assert.equal(created.resourceId, `stream:${hostPubkey}:vod-alpha:vod:*`);
+  assert.equal(created.resourceId, `stream:${hostPubkey}:video-alpha:video:*`);
 
-  const listed = listVodAccessPackages({ hostPubkey, includeDisabled: true, includeUnlisted: true, limit: 20 });
+  const listed = listVideoAccessPackages({ hostPubkey, includeDisabled: true, includeUnlisted: true, limit: 20 });
   assert.equal(listed.length >= 1, true);
-  assert.equal(listed.find((row) => row.id === created.id)?.title, "Monthly all-VOD");
+  assert.equal(listed.find((row) => row.id === created.id)?.title, "Monthly all-Video");
 
-  const disabled = disableVodAccessPackage({ packageId: created.id, hostPubkey });
+  const disabled = disableVideoAccessPackage({ packageId: created.id, hostPubkey });
   assert.equal(disabled.status, "disabled");
 
-  const activeOnly = listVodAccessPackages({ hostPubkey, includeDisabled: false, includeUnlisted: true, limit: 20 });
+  const activeOnly = listVideoAccessPackages({ hostPubkey, includeDisabled: false, includeUnlisted: true, limit: 20 });
   assert.equal(activeOnly.some((row) => row.id === created.id), false);
 });
 
-test("vod packages: purchase grants watch_vod and is idempotent by sourceRef", async () => {
-  const { grantVodPackagePurchaseAccess, upsertVodAccessPackage } = await import("./packages");
+test("video packages: purchase grants watch_video and is idempotent by sourceRef", async () => {
+  const { grantVideoPackagePurchaseAccess, upsertVideoAccessPackage } = await import("./packages");
   const { evaluateAccess } = await import("./evaluator");
 
   const hostPubkey = "2".repeat(64);
   const viewerPubkey = "3".repeat(64);
-  const streamId = "vod-beta";
+  const streamId = "video-beta";
 
-  const pkg = upsertVodAccessPackage({
+  const pkg = upsertVideoAccessPackage({
     hostPubkey,
     streamId,
     title: "Episode pass",
@@ -53,7 +53,7 @@ test("vod packages: purchase grants watch_vod and is idempotent by sourceRef", a
   });
 
   const sourceRef = "tx:abc123";
-  const first = grantVodPackagePurchaseAccess({
+  const first = grantVideoPackagePurchaseAccess({
     packageId: pkg.id,
     viewerPubkey,
     source: "purchase_verified",
@@ -62,9 +62,9 @@ test("vod packages: purchase grants watch_vod and is idempotent by sourceRef", a
   assert.equal(first.granted, true);
   assert.equal(first.purchase.status, "granted");
   assert.equal(first.entitlement.sourceRef, sourceRef);
-  assert.equal(first.entitlement.actions.includes("watch_vod"), true);
+  assert.equal(first.entitlement.actions.includes("watch_video"), true);
 
-  const second = grantVodPackagePurchaseAccess({
+  const second = grantVideoPackagePurchaseAccess({
     packageId: pkg.id,
     viewerPubkey,
     source: "purchase_verified",
@@ -77,13 +77,13 @@ test("vod packages: purchase grants watch_vod and is idempotent by sourceRef", a
   const decision = evaluateAccess({
     hostPubkey,
     subjectPubkey: viewerPubkey,
-    resourceId: `stream:${hostPubkey}:${streamId}:vod:season1:*`,
-    action: "watch_vod",
+    resourceId: `stream:${hostPubkey}:${streamId}:video:season1:*`,
+    action: "watch_video",
     announce: {
       privateStream: false,
-      privateVod: true,
-      vodArchiveEnabled: true,
-      vodVisibility: "private",
+      privateVideo: true,
+      videoArchiveEnabled: true,
+      videoVisibility: "private",
       viewerAllowPubkeys: []
     }
   });
@@ -91,34 +91,34 @@ test("vod packages: purchase grants watch_vod and is idempotent by sourceRef", a
   assert.equal(decision.reasonCode, "allow_paid");
 });
 
-test("vod packages: resource id helper + package lookup + purchase listing", async () => {
+test("video packages: resource id helper + package lookup + purchase listing", async () => {
   const {
-    buildVodAccessResourceCandidates,
-    buildVodFileResourceId,
-    buildVodPackageResourceId,
-    getVodAccessPackageById,
-    listVodPackagePurchases,
-    upsertVodAccessPackage,
-    grantVodPackagePurchaseAccess
+    buildVideoAccessResourceCandidates,
+    buildVideoFileResourceId,
+    buildVideoPackageResourceId,
+    getVideoAccessPackageById,
+    listVideoPackagePurchases,
+    upsertVideoAccessPackage,
+    grantVideoPackagePurchaseAccess
   } = await import("./packages");
 
   const hostPubkey = "4".repeat(64);
-  const streamId = "vod-gamma";
+  const streamId = "video-gamma";
   const playlistId = "season2";
   const relativePath = "season2/episode01.mp4";
   const viewerPubkey = "5".repeat(64);
-  const resourceId = buildVodPackageResourceId(hostPubkey, streamId, playlistId);
-  const fileResourceId = buildVodFileResourceId(hostPubkey, streamId, relativePath);
-  assert.equal(resourceId, `stream:${hostPubkey}:${streamId}:vod:${playlistId}:*`);
-  assert.equal(fileResourceId.startsWith(`stream:${hostPubkey}:${streamId}:vod:file:`), true);
-  const candidateResources = buildVodAccessResourceCandidates({
+  const resourceId = buildVideoPackageResourceId(hostPubkey, streamId, playlistId);
+  const fileResourceId = buildVideoFileResourceId(hostPubkey, streamId, relativePath);
+  assert.equal(resourceId, `stream:${hostPubkey}:${streamId}:video:${playlistId}:*`);
+  assert.equal(fileResourceId.startsWith(`stream:${hostPubkey}:${streamId}:video:file:`), true);
+  const candidateResources = buildVideoAccessResourceCandidates({
     hostPubkey,
     streamId,
     relativePath
   });
   assert.deepEqual(candidateResources.slice(0, 2), [fileResourceId, resourceId]);
 
-  const created = upsertVodAccessPackage({
+  const created = upsertVideoAccessPackage({
     hostPubkey,
     streamId,
     relativePath,
@@ -127,13 +127,13 @@ test("vod packages: resource id helper + package lookup + purchase listing", asy
     paymentAmount: "0.2",
     durationHours: 48
   });
-  const found = getVodAccessPackageById(created.id);
+  const found = getVideoAccessPackageById(created.id);
   assert.ok(found);
   if (!found) return;
   assert.equal(found.resourceId, fileResourceId);
   assert.equal(found.relativePath, relativePath);
 
-  const grant = grantVodPackagePurchaseAccess({
+  const grant = grantVideoPackagePurchaseAccess({
     packageId: created.id,
     viewerPubkey,
     source: "purchase_verified",
@@ -141,7 +141,7 @@ test("vod packages: resource id helper + package lookup + purchase listing", asy
   });
   assert.equal(grant.purchase.status, "granted");
 
-  const purchases = listVodPackagePurchases({
+  const purchases = listVideoPackagePurchases({
     hostPubkey,
     viewerPubkey,
     packageId: created.id,
@@ -151,11 +151,11 @@ test("vod packages: resource id helper + package lookup + purchase listing", asy
   assert.equal(purchases[0]?.packageId, created.id);
 });
 
-test("vod packages: purchase stats aggregate by package id", async () => {
-  const { listVodPackagePurchaseStats, upsertVodAccessPackage, grantVodPackagePurchaseAccess } = await import("./packages");
+test("video packages: purchase stats aggregate by package id", async () => {
+  const { listVideoPackagePurchaseStats, upsertVideoAccessPackage, grantVideoPackagePurchaseAccess } = await import("./packages");
   const hostPubkey = "7".repeat(64);
-  const streamId = "vod-epsilon";
-  const packageA = upsertVodAccessPackage({
+  const streamId = "video-epsilon";
+  const packageA = upsertVideoAccessPackage({
     hostPubkey,
     streamId,
     title: "Stats A",
@@ -163,7 +163,7 @@ test("vod packages: purchase stats aggregate by package id", async () => {
     paymentAmount: "0.11",
     durationHours: 24
   });
-  const packageB = upsertVodAccessPackage({
+  const packageB = upsertVideoAccessPackage({
     hostPubkey,
     streamId,
     title: "Stats B",
@@ -174,34 +174,34 @@ test("vod packages: purchase stats aggregate by package id", async () => {
   const viewerA = "8".repeat(64);
   const viewerB = "9".repeat(64);
 
-  grantVodPackagePurchaseAccess({
+  grantVideoPackagePurchaseAccess({
     packageId: packageA.id,
     viewerPubkey: viewerA,
     source: "purchase_verified",
     sourceRef: "stats:a:1",
     metadata: { operatorOverride: true }
   });
-  grantVodPackagePurchaseAccess({
+  grantVideoPackagePurchaseAccess({
     packageId: packageA.id,
     viewerPubkey: viewerB,
     source: "purchase_unverified",
     sourceRef: "stats:a:2",
     metadata: { unverifiedFallback: true }
   });
-  grantVodPackagePurchaseAccess({
+  grantVideoPackagePurchaseAccess({
     packageId: packageA.id,
     viewerPubkey: viewerA,
     source: "purchase_verified",
     sourceRef: "stats:a:1"
   });
-  grantVodPackagePurchaseAccess({
+  grantVideoPackagePurchaseAccess({
     packageId: packageB.id,
     viewerPubkey: viewerA,
     source: "purchase_verified",
     sourceRef: "stats:b:1"
   });
 
-  const stats = listVodPackagePurchaseStats({ hostPubkey, packageIds: [packageA.id, packageB.id], limit: 200 });
+  const stats = listVideoPackagePurchaseStats({ hostPubkey, packageIds: [packageA.id, packageB.id], limit: 200 });
   assert.equal(stats[packageA.id]?.totalPurchases, 3);
   assert.equal(stats[packageA.id]?.grantedPurchases, 2);
   assert.equal(stats[packageA.id]?.existingPurchases, 1);
@@ -214,14 +214,14 @@ test("vod packages: purchase stats aggregate by package id", async () => {
   assert.equal(stats[packageB.id]?.grantedPurchases, 1);
 });
 
-test("vod packages: rejects mixed playlist + relative path scope", async () => {
-  const { upsertVodAccessPackage } = await import("./packages");
+test("video packages: rejects mixed playlist + relative path scope", async () => {
+  const { upsertVideoAccessPackage } = await import("./packages");
   const hostPubkey = "6".repeat(64);
   assert.throws(
     () =>
-      upsertVodAccessPackage({
+      upsertVideoAccessPackage({
         hostPubkey,
-        streamId: "vod-delta",
+        streamId: "video-delta",
         playlistId: "season-a",
         relativePath: "season-a/ep-01.mp4",
         title: "Invalid mixed scope",
@@ -233,29 +233,29 @@ test("vod packages: rejects mixed playlist + relative path scope", async () => {
   );
 });
 
-test("vod package policy: normalize + metadata defaults", async () => {
-  const { getVodPurchasePolicyFromMetadata, getVodPurchasePolicyLabel, normalizeVodPurchasePolicy } = await import(
-    "./vodPackagePolicy"
+test("video package policy: normalize + metadata defaults", async () => {
+  const { getVideoPurchasePolicyFromMetadata, getVideoPurchasePolicyLabel, normalizeVideoPurchasePolicy } = await import(
+    "./videoPackagePolicy"
   );
 
-  assert.equal(normalizeVodPurchasePolicy("verified_only"), "verified_only");
-  assert.equal(normalizeVodPurchasePolicy("unverified_ok"), "unverified_ok");
-  assert.equal(normalizeVodPurchasePolicy(""), "operator_or_verified");
-  assert.equal(getVodPurchasePolicyFromMetadata({ purchasePolicy: "verified_only" }), "verified_only");
-  assert.equal(getVodPurchasePolicyFromMetadata({}), "operator_or_verified");
-  assert.equal(getVodPurchasePolicyLabel("operator_or_verified"), "Verified or operator override");
+  assert.equal(normalizeVideoPurchasePolicy("verified_only"), "verified_only");
+  assert.equal(normalizeVideoPurchasePolicy("unverified_ok"), "unverified_ok");
+  assert.equal(normalizeVideoPurchasePolicy(""), "operator_or_verified");
+  assert.equal(getVideoPurchasePolicyFromMetadata({ purchasePolicy: "verified_only" }), "verified_only");
+  assert.equal(getVideoPurchasePolicyFromMetadata({}), "operator_or_verified");
+  assert.equal(getVideoPurchasePolicyLabel("operator_or_verified"), "Verified or operator override");
 });
 
-test("vod checkout helpers: verification labels + error normalization", async () => {
-  const { formatVodCheckoutVerificationMode, normalizeVodPurchaseErrorMessage } = await import("./vodCheckout");
-  assert.equal(formatVodCheckoutVerificationMode("stake_verified"), "verified stake settlement");
-  assert.equal(formatVodCheckoutVerificationMode("operator_override"), "host operator confirmation");
+test("video checkout helpers: verification labels + error normalization", async () => {
+  const { formatVideoCheckoutVerificationMode, normalizeVideoPurchaseErrorMessage } = await import("./videoCheckout");
+  assert.equal(formatVideoCheckoutVerificationMode("stake_verified"), "verified stake settlement");
+  assert.equal(formatVideoCheckoutVerificationMode("operator_override"), "host operator confirmation");
   assert.equal(
-    normalizeVodPurchaseErrorMessage("This package requires verified settlement.", "verified_only"),
+    normalizeVideoPurchaseErrorMessage("This package requires verified settlement.", "verified_only"),
     "This package requires verified settlement. Use verified stake flow or host confirmation."
   );
   assert.equal(
-    normalizeVodPurchaseErrorMessage("verification failed", "operator_or_verified"),
+    normalizeVideoPurchaseErrorMessage("verification failed", "operator_or_verified"),
     "Verification failed. Ask host operator to confirm purchase or complete verified settlement."
   );
 });

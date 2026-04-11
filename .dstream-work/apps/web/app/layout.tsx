@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { GlobalQuickPlayDock } from "@/components/player/GlobalQuickPlayDock";
 import { GlobalStreamDirectoryPrefetch } from "@/components/stream/GlobalStreamDirectoryPrefetch";
 
-const FAVICON_URL = "/logo_favicon_upright.png?v=2";
+const FAVICON_URL = "/logo_favicon_aligned.png?v=3";
 
 export const metadata: Metadata = {
   title: "dStream",

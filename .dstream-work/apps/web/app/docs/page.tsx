@@ -83,19 +83,19 @@ const productionGate = [
 
 const troubleshooting = [
   {
-    error: "HLS `404` on `/api/hls/.../index.m3u8`",
-    reason: "Origin stream not live yet, stale streamId, or old announce record.",
-    action: "Re-open watch using current live announce and verify `/api/dev/log` + MediaMTX path list."
+    error: "HLS / WebRTC 404 Failure",
+    reason: "The streamer's media pipeline has disconnected, or the P2P swarm cannot find their raw video track.",
+    action: "Refresh the page. If the issue persists, the Creator has ended the live stream or their Node lost connection."
   },
   {
-    error: "WHEP timeout waiting for remote track",
-    reason: "Publisher not sending media, ICE/TURN path mismatch, or origin path mismatch.",
-    action: "Check WHIP publish success, TURN env values, and exact originStreamId mapping."
+    error: "WebRTC Assist Latency",
+    reason: "Viewer's browser is attempting to pull P2P segments from other viewers but is failing network ICE checks.",
+    action: "System will automatically fallback to the central HLS node to preserve video playback."
   },
   {
-    error: "Announce relay warning",
-    reason: "Media is live but relay publish failed or partially failed.",
-    action: "Use `Update Announce`, inspect relay statuses, and validate configured relay URLs."
+    error: "Announce Relay Drop",
+    reason: "The broadcaster's video feed is actively running, but their Chat Relay disconnected from Nostr.",
+    action: "Broadcaster must trigger an 'Update Announce' on their control panel to physically reconnect their identity to the stream."
   }
 ];
 
@@ -275,6 +275,9 @@ export default function DocsPage() {
           <div className="flex flex-wrap gap-3 text-sm">
             <Link href="/whitepaper" className="px-4 py-2 rounded-full bg-blue-600/20 border border-blue-500/40 hover:bg-blue-600/30">
               Whitepaper
+            </Link>
+            <Link href="/creator-manual" className="px-4 py-2 rounded-full bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/30 font-bold">
+              Creator Manual
             </Link>
             <Link href="/use-cases" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">
               Use Cases

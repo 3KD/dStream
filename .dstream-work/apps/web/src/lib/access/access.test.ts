@@ -31,9 +31,9 @@ test("access evaluator: paid entitlement allows private live watch", async () =>
     action: "watch_live",
     announce: {
       privateStream: true,
-      privateVod: false,
-      vodArchiveEnabled: true,
-      vodVisibility: "public",
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
       viewerAllowPubkeys: []
     }
   });
@@ -73,9 +73,9 @@ test("access evaluator: explicit deny overrides paid entitlement", async () => {
     action: "watch_live",
     announce: {
       privateStream: false,
-      privateVod: false,
-      vodArchiveEnabled: true,
-      vodVisibility: "public",
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
       viewerAllowPubkeys: []
     }
   });
@@ -96,9 +96,9 @@ test("access evaluator: private stream requires identity when no subject pubkey"
     action: "watch_live",
     announce: {
       privateStream: true,
-      privateVod: false,
-      vodArchiveEnabled: true,
-      vodVisibility: "public",
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
       viewerAllowPubkeys: []
     }
   });

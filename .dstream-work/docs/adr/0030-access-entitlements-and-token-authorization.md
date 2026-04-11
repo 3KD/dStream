@@ -15,7 +15,7 @@ Current access behavior is split across:
 This works for basic private streams but does not provide one persistent, auditable model for:
 
 - who can watch live,
-- who can watch specific VOD items/playlists,
+- who can watch specific Video items/playlists,
 - who can chat,
 - who can participate in P2P assist/rebroadcast.
 
@@ -62,7 +62,7 @@ Existing announce allowlist/private/public semantics remain valid and are mapped
 ## Consequences
 
 - Access behavior becomes deterministic and auditable.
-- Revocation/expiry works consistently across live, VOD, and chat.
+- Revocation/expiry works consistently across live, Video, and chat.
 - Paid access packages (per-item/per-playlist/time-window) become implementable without custom one-off logic.
 - Non-verified rails can be supported with explicit provisional/manual grant policy instead of implicit trust.
 

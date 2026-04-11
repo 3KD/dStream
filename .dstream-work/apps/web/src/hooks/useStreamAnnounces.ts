@@ -663,14 +663,13 @@ export function useStreamAnnounces({
         .filter((stream) => {
           if (!liveOnly) return true;
           if (stream.status !== "live") return false;
-          return isLikelyLivePlayableMediaUrl(stream.streaming);
+          return true;
         })
         .slice(0, limit);
     }
     return allStreams
       .filter((stream) => {
         if (liveOnly && stream.status !== "live") return false;
-        if (liveOnly && !isLikelyLivePlayableMediaUrl(stream.streaming)) return false;
         if (!stream.discoverable) return false;
         if (!includeMature && stream.matureContent) return false;
         const streamPubkey = stream.pubkey.toLowerCase();

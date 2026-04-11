@@ -75,8 +75,9 @@
     "ops:ssh:key": "bash scripts/setup-ssh-key-auth.sh"
   },
   "devDependencies": {
-    "turbo": "^1.10.0",
+    "glob": "^13.0.6",
     "tsx": "^4.20.5",
+    "turbo": "^1.10.0",
     "typescript": "^5.9.3"
   }
 }

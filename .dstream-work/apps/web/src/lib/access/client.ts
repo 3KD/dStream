@@ -6,8 +6,8 @@ import type {
   AccessEntitlement,
   AccessEntitlementSource
 } from "./types";
-import type { VodCheckoutVerificationMode } from "./vodCheckout";
-import type { VodPurchasePolicy } from "./vodPackagePolicy";
+import type { VideoCheckoutVerificationMode } from "./videoCheckout";
+import type { VideoPurchasePolicy } from "./videoPackagePolicy";
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -40,16 +40,16 @@ interface AccessApiError {
 
 type AccessApiResult<T> = (AccessApiOk & T) | AccessApiError;
 
-export interface VodPlaylistCatalogRow {
+export interface VideoPlaylistCatalogRow {
   id: string;
   fileCount: number;
   latestModifiedAtMs: number;
 }
 
-export type VodCatalogVisibility = "public" | "unlisted" | "private";
-export type VodProcessingState = "ready" | "queued" | "processing" | "failed";
+export type VideoCatalogVisibility = "public" | "unlisted" | "private";
+export type VideoProcessingState = "ready" | "queued" | "processing" | "failed";
 
-export interface VodCatalogEntry {
+export interface VideoCatalogEntry {
   id: string;
   originStreamId: string;
   hostPubkey: string;
@@ -59,8 +59,8 @@ export interface VodCatalogEntry {
   description?: string;
   playlistId?: string;
   orderIndex?: number;
-  visibility: VodCatalogVisibility;
-  processingState: VodProcessingState;
+  visibility: VideoCatalogVisibility;
+  processingState: VideoProcessingState;
   processingError?: string;
   processingUpdatedAtSec?: number;
   thumbnailUrl?: string;
@@ -70,16 +70,16 @@ export interface VodCatalogEntry {
   updatedAtSec: number;
 }
 
-export interface VodCatalogListRow {
+export interface VideoCatalogListRow {
   relativePath: string;
   fileName: string;
   fileSizeBytes: number;
   fileModifiedAtMs: number;
   fileUrl: string;
-  metadata: VodCatalogEntry | null;
+  metadata: VideoCatalogEntry | null;
 }
 
-export interface VodAnalyticsSummaryRow {
+export interface VideoAnalyticsSummaryRow {
   originStreamId: string;
   hostPubkey: string;
   streamId: string;
@@ -92,14 +92,14 @@ export interface VodAnalyticsSummaryRow {
   totalWatchSec: number;
   uniqueViewerCount: number;
   lastCurrentTimeSec?: number;
-  lastPlaybackMode?: "live" | "vod";
+  lastPlaybackMode?: "live" | "video";
   updatedAtSec: number;
 }
 
-export type VodAccessPackageStatus = "active" | "disabled";
-export type VodAccessPackageVisibility = "public" | "unlisted";
+export type VideoAccessPackageStatus = "active" | "disabled";
+export type VideoAccessPackageVisibility = "public" | "unlisted";
 
-export interface VodAccessPackage {
+export interface VideoAccessPackage {
   id: string;
   hostPubkey: string;
   streamId: string;
@@ -112,14 +112,14 @@ export interface VodAccessPackage {
   paymentAmount: string;
   paymentRailId?: string;
   durationHours: number;
-  status: VodAccessPackageStatus;
-  visibility: VodAccessPackageVisibility;
+  status: VideoAccessPackageStatus;
+  visibility: VideoAccessPackageVisibility;
   metadata: Record<string, unknown>;
   createdAtSec: number;
   updatedAtSec: number;
 }
 
-export interface VodPackagePurchaseStats {
+export interface VideoPackagePurchaseStats {
   packageId: string;
   totalPurchases: number;
   grantedPurchases: number;
@@ -133,7 +133,7 @@ export interface VodPackagePurchaseStats {
   latestGrantedAtSec?: number;
 }
 
-export interface VodPackageViewerUnlock {
+export interface VideoPackageViewerUnlock {
   entitlementId: string;
   packageId?: string;
   resourceId: string;
@@ -145,18 +145,18 @@ export interface VodPackageViewerUnlock {
   updatedAtSec: number;
 }
 
-export async function listVodPlaylistCatalogClient(input: {
+export async function listVideoPlaylistCatalogClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent: NostrEvent;
 }): Promise<{
-  playlists: VodPlaylistCatalogRow[];
+  playlists: VideoPlaylistCatalogRow[];
   fileCount: number;
   originStreamId: string;
   actorPubkey: string | null;
 }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -168,14 +168,14 @@ export async function listVodPlaylistCatalogClient(input: {
   );
 
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    playlists?: VodPlaylistCatalogRow[];
+    playlists?: VideoPlaylistCatalogRow[];
     fileCount?: number;
     originStreamId?: string;
     actorPubkey?: string | null;
   }> | null;
 
   if (!response.ok || !body?.ok || !Array.isArray(body.playlists) || typeof body.originStreamId !== "string") {
-    throw new Error(asErrorMessage(body, "Failed to load VOD catalog."));
+    throw new Error(asErrorMessage(body, "Failed to load Video catalog."));
   }
 
   return {
@@ -186,7 +186,7 @@ export async function listVodPlaylistCatalogClient(input: {
   };
 }
 
-export async function listVodCatalogEntriesClient(input: {
+export async function listVideoCatalogEntriesClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent?: NostrEvent;
@@ -197,14 +197,14 @@ export async function listVodCatalogEntriesClient(input: {
   curatedOnly?: boolean;
   playlistId?: string;
 }): Promise<{
-  rows: VodCatalogListRow[];
+  rows: VideoCatalogListRow[];
   count: number;
   originStreamId: string;
   actorPubkey: string | null;
   isAdmin: boolean;
 }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/list`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/list`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -222,7 +222,7 @@ export async function listVodCatalogEntriesClient(input: {
   );
 
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    rows?: VodCatalogListRow[];
+    rows?: VideoCatalogListRow[];
     count?: number;
     originStreamId?: string;
     actorPubkey?: string | null;
@@ -230,7 +230,7 @@ export async function listVodCatalogEntriesClient(input: {
   }> | null;
 
   if (!response.ok || !body?.ok || !Array.isArray(body.rows) || typeof body.originStreamId !== "string") {
-    throw new Error(asErrorMessage(body, "Failed to load VOD catalog entries."));
+    throw new Error(asErrorMessage(body, "Failed to load Video catalog entries."));
   }
 
   return {
@@ -242,7 +242,7 @@ export async function listVodCatalogEntriesClient(input: {
   };
 }
 
-export async function upsertVodCatalogEntryClient(input: {
+export async function upsertVideoCatalogEntryClient(input: {
   hostPubkey: string;
   streamId: string;
   relativePath: string;
@@ -251,16 +251,16 @@ export async function upsertVodCatalogEntryClient(input: {
   description?: string;
   playlistId?: string;
   orderIndex?: number;
-  visibility?: VodCatalogVisibility;
-  processingState?: VodProcessingState;
+  visibility?: VideoCatalogVisibility;
+  processingState?: VideoProcessingState;
   processingError?: string;
   thumbnailUrl?: string;
   tags?: string[];
   published?: boolean;
   publishedAtSec?: number;
-}): Promise<{ entry: VodCatalogEntry; actorPubkey: string | null; originStreamId: string }> {
+}): Promise<{ entry: VideoCatalogEntry; actorPubkey: string | null; originStreamId: string }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/upsert`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/upsert`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -283,13 +283,13 @@ export async function upsertVodCatalogEntryClient(input: {
     }
   );
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    entry?: VodCatalogEntry;
+    entry?: VideoCatalogEntry;
     actorPubkey?: string | null;
     originStreamId?: string;
   }> | null;
 
   if (!response.ok || !body?.ok || !body.entry || typeof body.originStreamId !== "string") {
-    throw new Error(asErrorMessage(body, "Failed to save VOD catalog entry."));
+    throw new Error(asErrorMessage(body, "Failed to save Video catalog entry."));
   }
   return {
     entry: body.entry,
@@ -298,14 +298,14 @@ export async function upsertVodCatalogEntryClient(input: {
   };
 }
 
-export async function deleteVodCatalogEntryClient(input: {
+export async function deleteVideoCatalogEntryClient(input: {
   hostPubkey: string;
   streamId: string;
   relativePath: string;
   operatorProofEvent: NostrEvent;
 }): Promise<{ relativePath: string; actorPubkey: string | null; originStreamId: string }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/delete`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/delete`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -323,7 +323,7 @@ export async function deleteVodCatalogEntryClient(input: {
   }> | null;
 
   if (!response.ok || !body?.ok || typeof body.relativePath !== "string" || typeof body.originStreamId !== "string") {
-    throw new Error(asErrorMessage(body, "Failed to delete VOD catalog entry."));
+    throw new Error(asErrorMessage(body, "Failed to delete Video catalog entry."));
   }
   return {
     relativePath: body.relativePath,
@@ -332,12 +332,12 @@ export async function deleteVodCatalogEntryClient(input: {
   };
 }
 
-export async function ingestVodCatalogEntriesClient(input: {
+export async function ingestVideoCatalogEntriesClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent: NostrEvent;
-  visibility?: VodCatalogVisibility;
-  processingState?: VodProcessingState;
+  visibility?: VideoCatalogVisibility;
+  processingState?: VideoProcessingState;
   published?: boolean;
   onlyMissing?: boolean;
 }): Promise<{
@@ -351,7 +351,7 @@ export async function ingestVodCatalogEntriesClient(input: {
   totalFiles: number;
 }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/ingest`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/ingest`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -383,7 +383,7 @@ export async function ingestVodCatalogEntriesClient(input: {
     typeof body.streamId !== "string" ||
     typeof body.originStreamId !== "string"
   ) {
-    throw new Error(asErrorMessage(body, "Failed to ingest VOD catalog entries."));
+    throw new Error(asErrorMessage(body, "Failed to ingest Video catalog entries."));
   }
 
   return {
@@ -398,7 +398,7 @@ export async function ingestVodCatalogEntriesClient(input: {
   };
 }
 
-export async function processVodCatalogEntriesClient(input: {
+export async function processVideoCatalogEntriesClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent: NostrEvent;
@@ -416,7 +416,7 @@ export async function processVodCatalogEntriesClient(input: {
   errors: Array<{ relativePath: string; error: string }>;
 }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/process`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/process`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -447,7 +447,7 @@ export async function processVodCatalogEntriesClient(input: {
     typeof body.streamId !== "string" ||
     typeof body.originStreamId !== "string"
   ) {
-    throw new Error(asErrorMessage(body, "Failed to process VOD entries."));
+    throw new Error(asErrorMessage(body, "Failed to process Video entries."));
   }
 
   return {
@@ -464,7 +464,7 @@ export async function processVodCatalogEntriesClient(input: {
   };
 }
 
-export async function processVodCatalogHostEntriesClient(input: {
+export async function processVideoCatalogHostEntriesClient(input: {
   hostPubkey: string;
   operatorProofEvent: NostrEvent;
   limit?: number;
@@ -489,7 +489,7 @@ export async function processVodCatalogHostEntriesClient(input: {
   }>;
   errors: Array<{ relativePath: string; error: string }>;
 }> {
-  const response = await fetch(`/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/entries/process`, {
+  const response = await fetch(`/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/entries/process`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -520,7 +520,7 @@ export async function processVodCatalogHostEntriesClient(input: {
     errors?: Array<{ relativePath: string; error: string }>;
   }> | null;
   if (!response.ok || !body?.ok || typeof body.hostPubkey !== "string") {
-    throw new Error(asErrorMessage(body, "Failed to process host VOD queue."));
+    throw new Error(asErrorMessage(body, "Failed to process host Video queue."));
   }
   return {
     hostPubkey: body.hostPubkey,
@@ -536,7 +536,7 @@ export async function processVodCatalogHostEntriesClient(input: {
   };
 }
 
-export async function listVodAnalyticsSummaryClient(input: {
+export async function listVideoAnalyticsSummaryClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent: NostrEvent;
@@ -548,11 +548,11 @@ export async function listVodAnalyticsSummaryClient(input: {
   streamId: string;
   originStreamId: string;
   actorPubkey: string | null;
-  rows: VodAnalyticsSummaryRow[];
+  rows: VideoAnalyticsSummaryRow[];
   count: number;
 }> {
   const response = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/analytics/list`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/analytics/list`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -570,7 +570,7 @@ export async function listVodAnalyticsSummaryClient(input: {
     streamId?: string;
     originStreamId?: string;
     actorPubkey?: string | null;
-    rows?: VodAnalyticsSummaryRow[];
+    rows?: VideoAnalyticsSummaryRow[];
     count?: number;
   }> | null;
   if (
@@ -581,7 +581,7 @@ export async function listVodAnalyticsSummaryClient(input: {
     typeof body.originStreamId !== "string" ||
     !Array.isArray(body.rows)
   ) {
-    throw new Error(asErrorMessage(body, "Failed to load VOD analytics summary."));
+    throw new Error(asErrorMessage(body, "Failed to load Video analytics summary."));
   }
   return {
     hostPubkey: body.hostPubkey,
@@ -593,18 +593,18 @@ export async function listVodAnalyticsSummaryClient(input: {
   };
 }
 
-export async function recordVodAnalyticsHeartbeatClient(input: {
+export async function recordVideoAnalyticsHeartbeatClient(input: {
   originStreamId: string;
   relativePath: string;
   viewerId?: string | null;
   viewerProofEvent?: NostrEvent;
   elapsedSec?: number;
   currentTimeSec?: number;
-  playbackMode?: "live" | "vod";
+  playbackMode?: "live" | "video";
 }): Promise<{
-  row: VodAnalyticsSummaryRow;
+  row: VideoAnalyticsSummaryRow;
 }> {
-  const response = await fetch("/api/vod/analytics/heartbeat", {
+  const response = await fetch("/api/video/analytics/heartbeat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -618,14 +618,14 @@ export async function recordVodAnalyticsHeartbeatClient(input: {
     }),
     cache: "no-store"
   });
-  const body = (await parseJsonResponse(response)) as AccessApiResult<{ row?: VodAnalyticsSummaryRow }> | null;
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{ row?: VideoAnalyticsSummaryRow }> | null;
   if (!response.ok || !body?.ok || !body.row) {
-    throw new Error(asErrorMessage(body, "Failed to record VOD analytics heartbeat."));
+    throw new Error(asErrorMessage(body, "Failed to record Video analytics heartbeat."));
   }
   return { row: body.row };
 }
 
-export async function uploadVodCatalogFileClient(input: {
+export async function uploadVideoCatalogFileClient(input: {
   hostPubkey: string;
   streamId: string;
   operatorProofEvent: NostrEvent;
@@ -633,8 +633,8 @@ export async function uploadVodCatalogFileClient(input: {
   playlistId?: string;
   title?: string;
   description?: string;
-  visibility?: VodCatalogVisibility;
-  processingState?: VodProcessingState;
+  visibility?: VideoCatalogVisibility;
+  processingState?: VideoProcessingState;
   published?: boolean;
   thumbnailUrl?: string;
   tags?: string[];
@@ -647,10 +647,10 @@ export async function uploadVodCatalogFileClient(input: {
   fileName: string;
   fileSizeBytes: number;
   actorPubkey: string | null;
-  entry: VodCatalogEntry;
+  entry: VideoCatalogEntry;
 }> {
   const sessionStartResponse = await fetch(
-    `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/upload-session/start`,
+    `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(input.streamId)}/entries/upload-session/start`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -686,7 +686,7 @@ export async function uploadVodCatalogFileClient(input: {
     typeof sessionStartBody.uploadToken !== "string" ||
     typeof sessionStartBody.originStreamId !== "string"
   ) {
-    throw new Error(asErrorMessage(sessionStartBody, "Failed to start VOD upload session."));
+    throw new Error(asErrorMessage(sessionStartBody, "Failed to start Video upload session."));
   }
 
   const uploadId = sessionStartBody.uploadId;
@@ -699,7 +699,7 @@ export async function uploadVodCatalogFileClient(input: {
       const chunkBlob = input.file.slice(uploadedBytes, uploadedBytes + chunkSizeBytes);
       const chunkBuffer = await chunkBlob.arrayBuffer();
       const chunkResponse = await fetch(
-        `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
+        `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
           input.streamId
         )}/entries/upload-session/${encodeURIComponent(uploadId)}/chunk?offset=${uploadedBytes}`,
         {
@@ -729,14 +729,14 @@ export async function uploadVodCatalogFileClient(input: {
           input.onProgress?.(uploadedBytes, input.file.size);
           continue;
         }
-        throw new Error(asErrorMessage(chunkBody, "Failed to upload VOD chunk."));
+        throw new Error(asErrorMessage(chunkBody, "Failed to upload Video chunk."));
       }
       uploadedBytes = chunkBody.receivedBytes;
       input.onProgress?.(uploadedBytes, input.file.size);
     }
 
     const completeResponse = await fetch(
-      `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
+      `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
         input.streamId
       )}/entries/upload-session/${encodeURIComponent(uploadId)}/complete`,
       {
@@ -753,7 +753,7 @@ export async function uploadVodCatalogFileClient(input: {
       relativePath?: string;
       fileName?: string;
       fileSizeBytes?: number;
-      entry?: VodCatalogEntry;
+      entry?: VideoCatalogEntry;
     }> | null;
     if (
       !completeResponse.ok ||
@@ -766,7 +766,7 @@ export async function uploadVodCatalogFileClient(input: {
       typeof completeBody.fileSizeBytes !== "number" ||
       !completeBody.entry
     ) {
-      throw new Error(asErrorMessage(completeBody, "Failed to complete VOD upload session."));
+      throw new Error(asErrorMessage(completeBody, "Failed to complete Video upload session."));
     }
     input.onProgress?.(input.file.size, input.file.size);
     return {
@@ -782,7 +782,7 @@ export async function uploadVodCatalogFileClient(input: {
   } catch (error) {
     try {
       await fetch(
-        `/api/vod/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
+        `/api/video/catalog/${encodeURIComponent(input.hostPubkey)}/${encodeURIComponent(
           input.streamId
         )}/entries/upload-session/${encodeURIComponent(uploadId)}/abort`,
         {
@@ -870,7 +870,7 @@ export async function buildAccessPurchaseProof(
   });
 }
 
-export async function listVodAccessPackagesClient(input: {
+export async function listVideoAccessPackagesClient(input: {
   hostPubkey: string;
   streamId?: string;
   includeDisabled?: boolean;
@@ -879,8 +879,8 @@ export async function listVodAccessPackagesClient(input: {
   purchaseStatsLimit?: number;
   limit?: number;
   operatorProofEvent?: NostrEvent;
-}): Promise<{ packages: VodAccessPackage[]; count: number; actorPubkey: string | null; purchaseStatsByPackageId: Record<string, VodPackagePurchaseStats> }> {
-  const response = await fetch("/api/access/vod-packages/list", {
+}): Promise<{ packages: VideoAccessPackage[]; count: number; actorPubkey: string | null; purchaseStatsByPackageId: Record<string, VideoPackagePurchaseStats> }> {
+  const response = await fetch("/api/access/video-packages/list", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -896,13 +896,13 @@ export async function listVodAccessPackagesClient(input: {
     cache: "no-store"
   });
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    packages?: VodAccessPackage[];
+    packages?: VideoAccessPackage[];
     count?: number;
     actorPubkey?: string | null;
-    purchaseStatsByPackageId?: Record<string, VodPackagePurchaseStats>;
+    purchaseStatsByPackageId?: Record<string, VideoPackagePurchaseStats>;
   }> | null;
   if (!response.ok || !body?.ok || !Array.isArray(body.packages)) {
-    throw new Error(asErrorMessage(body, "Failed to load VOD packages."));
+    throw new Error(asErrorMessage(body, "Failed to load Video packages."));
   }
   return {
     packages: body.packages,
@@ -915,7 +915,7 @@ export async function listVodAccessPackagesClient(input: {
   };
 }
 
-export async function listVodPackageViewerStatusClient(input: {
+export async function listVideoPackageViewerStatusClient(input: {
   hostPubkey: string;
   viewerProofEvent: NostrEvent;
   streamId?: string;
@@ -925,11 +925,11 @@ export async function listVodPackageViewerStatusClient(input: {
   hostPubkey: string;
   streamId: string | null;
   viewerPubkey: string;
-  unlocks: VodPackageViewerUnlock[];
-  byPackageId: Record<string, VodPackageViewerUnlock>;
+  unlocks: VideoPackageViewerUnlock[];
+  byPackageId: Record<string, VideoPackageViewerUnlock>;
   count: number;
 }> {
-  const response = await fetch("/api/access/vod-packages/viewer-status", {
+  const response = await fetch("/api/access/video-packages/viewer-status", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -946,8 +946,8 @@ export async function listVodPackageViewerStatusClient(input: {
     hostPubkey?: string;
     streamId?: string | null;
     viewerPubkey?: string;
-    unlocks?: VodPackageViewerUnlock[];
-    byPackageId?: Record<string, Omit<VodPackageViewerUnlock, "packageId">>;
+    unlocks?: VideoPackageViewerUnlock[];
+    byPackageId?: Record<string, Omit<VideoPackageViewerUnlock, "packageId">>;
     count?: number;
   }> | null;
 
@@ -960,14 +960,14 @@ export async function listVodPackageViewerStatusClient(input: {
     !body.byPackageId ||
     typeof body.byPackageId !== "object"
   ) {
-    throw new Error(asErrorMessage(body, "Failed to load viewer VOD package status."));
+    throw new Error(asErrorMessage(body, "Failed to load viewer Video package status."));
   }
 
-  const byPackageId: Record<string, VodPackageViewerUnlock> = {};
+  const byPackageId: Record<string, VideoPackageViewerUnlock> = {};
   for (const [packageId, value] of Object.entries(body.byPackageId)) {
     if (!value || typeof value !== "object") continue;
     byPackageId[packageId] = {
-      ...(value as Omit<VodPackageViewerUnlock, "packageId">),
+      ...(value as Omit<VideoPackageViewerUnlock, "packageId">),
       packageId
     };
   }
@@ -982,7 +982,7 @@ export async function listVodPackageViewerStatusClient(input: {
   };
 }
 
-export async function upsertVodAccessPackageClient(input: {
+export async function upsertVideoAccessPackageClient(input: {
   hostPubkey: string;
   streamId: string;
   title: string;
@@ -994,12 +994,12 @@ export async function upsertVodAccessPackageClient(input: {
   relativePath?: string;
   description?: string;
   paymentRailId?: string;
-  status?: VodAccessPackageStatus;
-  visibility?: VodAccessPackageVisibility;
+  status?: VideoAccessPackageStatus;
+  visibility?: VideoAccessPackageVisibility;
   metadata?: Record<string, unknown>;
   operatorProofEvent: NostrEvent;
-}): Promise<{ package: VodAccessPackage; actorPubkey: string | null }> {
-  const response = await fetch("/api/access/vod-packages/upsert", {
+}): Promise<{ package: VideoAccessPackage; actorPubkey: string | null }> {
+  const response = await fetch("/api/access/video-packages/upsert", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -1022,11 +1022,11 @@ export async function upsertVodAccessPackageClient(input: {
     cache: "no-store"
   });
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    package?: VodAccessPackage;
+    package?: VideoAccessPackage;
     actorPubkey?: string | null;
   }> | null;
   if (!response.ok || !body?.ok || !body.package) {
-    throw new Error(asErrorMessage(body, "Failed to save VOD package."));
+    throw new Error(asErrorMessage(body, "Failed to save Video package."));
   }
   return {
     package: body.package,
@@ -1034,12 +1034,12 @@ export async function upsertVodAccessPackageClient(input: {
   };
 }
 
-export async function disableVodAccessPackageClient(input: {
+export async function disableVideoAccessPackageClient(input: {
   hostPubkey: string;
   packageId: string;
   operatorProofEvent: NostrEvent;
-}): Promise<{ package: VodAccessPackage; actorPubkey: string | null }> {
-  const response = await fetch("/api/access/vod-packages/delete", {
+}): Promise<{ package: VideoAccessPackage; actorPubkey: string | null }> {
+  const response = await fetch("/api/access/video-packages/delete", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -1050,11 +1050,11 @@ export async function disableVodAccessPackageClient(input: {
     cache: "no-store"
   });
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    package?: VodAccessPackage;
+    package?: VideoAccessPackage;
     actorPubkey?: string | null;
   }> | null;
   if (!response.ok || !body?.ok || !body.package) {
-    throw new Error(asErrorMessage(body, "Failed to disable VOD package."));
+    throw new Error(asErrorMessage(body, "Failed to disable Video package."));
   }
   return {
     package: body.package,
@@ -1062,7 +1062,7 @@ export async function disableVodAccessPackageClient(input: {
   };
 }
 
-export async function purchaseVodAccessPackageClient(input: {
+export async function purchaseVideoAccessPackageClient(input: {
   packageId: string;
   buyerProofEvent: NostrEvent;
   sourceRef?: string;
@@ -1072,7 +1072,7 @@ export async function purchaseVodAccessPackageClient(input: {
   verifiedByOperator?: boolean;
   metadata?: Record<string, unknown>;
 }): Promise<{
-  package: VodAccessPackage;
+  package: VideoAccessPackage;
   entitlement: AccessEntitlement;
   purchase: {
     id: string;
@@ -1082,13 +1082,13 @@ export async function purchaseVodAccessPackageClient(input: {
     expiresAtSec?: number;
   };
   checkout?: {
-    purchasePolicy: VodPurchasePolicy;
-    verificationMode: VodCheckoutVerificationMode;
+    purchasePolicy: VideoPurchasePolicy;
+    verificationMode: VideoCheckoutVerificationMode;
   };
   granted: boolean;
   actorPubkey: string | null;
 }> {
-  const response = await fetch("/api/access/vod-packages/purchase", {
+  const response = await fetch("/api/access/video-packages/purchase", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -1104,7 +1104,7 @@ export async function purchaseVodAccessPackageClient(input: {
     cache: "no-store"
   });
   const body = (await parseJsonResponse(response)) as AccessApiResult<{
-    package?: VodAccessPackage;
+    package?: VideoAccessPackage;
     entitlement?: AccessEntitlement;
     purchase?: {
       id: string;
@@ -1114,8 +1114,8 @@ export async function purchaseVodAccessPackageClient(input: {
       expiresAtSec?: number;
     };
     checkout?: {
-      purchasePolicy?: VodPurchasePolicy;
-      verificationMode?: VodCheckoutVerificationMode;
+      purchasePolicy?: VideoPurchasePolicy;
+      verificationMode?: VideoCheckoutVerificationMode;
     };
     granted?: boolean;
     actorPubkey?: string | null;

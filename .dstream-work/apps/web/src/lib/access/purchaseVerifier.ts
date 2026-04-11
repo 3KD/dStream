@@ -1,4 +1,4 @@
-import type { VodAccessPackage } from "./packages";
+import type { VideoAccessPackage } from "./packages";
 
 const DEFAULT_VERIFY_TIMEOUT_MS = 12_000;
 
@@ -49,7 +49,7 @@ async function parseVerifierError(response: Response): Promise<string> {
 }
 
 export interface ExternalPurchaseVerificationInput {
-  package: VodAccessPackage;
+  package: VideoAccessPackage;
   buyerPubkey: string;
   buyerProofEvent: unknown;
   sourceRef?: string;

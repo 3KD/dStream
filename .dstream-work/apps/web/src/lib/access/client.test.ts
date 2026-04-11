@@ -6,22 +6,22 @@ import {
   buildAccessProof,
   buildAccessPurchaseProof,
   buildAccessViewerProof,
-  deleteVodCatalogEntryClient,
-  disableVodAccessPackageClient,
+  deleteVideoCatalogEntryClient,
+  disableVideoAccessPackageClient,
   grantAccessEntitlementClient,
   listAccessAuditClient,
   listAccessDenyRulesClient,
   listAccessEntitlementsClient,
-  listVodCatalogEntriesClient,
-  listVodAccessPackagesClient,
-  processVodCatalogHostEntriesClient,
-  listVodPackageViewerStatusClient,
-  listVodPlaylistCatalogClient,
-  purchaseVodAccessPackageClient,
+  listVideoCatalogEntriesClient,
+  listVideoAccessPackagesClient,
+  processVideoCatalogHostEntriesClient,
+  listVideoPackageViewerStatusClient,
+  listVideoPlaylistCatalogClient,
+  purchaseVideoAccessPackageClient,
   revokeAccessEntitlementClient,
-  upsertVodCatalogEntryClient,
+  upsertVideoCatalogEntryClient,
   upsertAccessDenyRuleClient,
-  upsertVodAccessPackageClient
+  upsertVideoAccessPackageClient
 } from "./client";
 
 const now = Math.floor(Date.now() / 1000);
@@ -44,7 +44,7 @@ const samplePackage = {
   id: "pkg-1",
   hostPubkey: sampleHost,
   streamId: "stream-1",
-  resourceId: `stream:${sampleHost}:stream-1:vod:*`,
+  resourceId: `stream:${sampleHost}:stream-1:video:*`,
   title: "Package",
   paymentAsset: "xmr",
   paymentAmount: "0.10",
@@ -60,8 +60,8 @@ const sampleEntitlement = {
   id: "ent-1",
   hostPubkey: sampleHost,
   subjectPubkey: sampleViewer,
-  resourceId: `stream:${sampleHost}:stream-1:vod:*`,
-  actions: ["watch_vod"],
+  resourceId: `stream:${sampleHost}:stream-1:video:*`,
+  actions: ["watch_video"],
   source: "purchase_verified",
   status: "active",
   startsAtSec: now,
@@ -93,8 +93,8 @@ const sampleAudit = {
   metadata: {}
 };
 
-const sampleVodCatalogEntry = {
-  id: "vod-entry-1",
+const sampleVideoCatalogEntry = {
+  id: "video-entry-1",
   originStreamId: `${sampleHost}--stream-1`,
   hostPubkey: sampleHost,
   streamId: "stream-1",
@@ -148,7 +148,7 @@ test("access client: API wrappers parse success responses", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    if (url.startsWith(`/api/vod/catalog/${encodeURIComponent(sampleHost)}/`)) {
+    if (url.startsWith(`/api/video/catalog/${encodeURIComponent(sampleHost)}/`)) {
       if (url.endsWith("/entries/process")) {
         return jsonResponse({
           ok: true,
@@ -183,8 +183,8 @@ test("access client: API wrappers parse success responses", async () => {
               fileName: "episode-1.mp4",
               fileSizeBytes: 1024,
               fileModifiedAtMs: now * 1000,
-              fileUrl: `/api/vod/file/${sampleHost}--stream-1/season-1/episode-1.mp4`,
-              metadata: sampleVodCatalogEntry
+              fileUrl: `/api/video/file/${sampleHost}--stream-1/season-1/episode-1.mp4`,
+              metadata: sampleVideoCatalogEntry
             }
           ],
           count: 1,
@@ -196,7 +196,7 @@ test("access client: API wrappers parse success responses", async () => {
       if (url.includes("/entries/upsert")) {
         return jsonResponse({
           ok: true,
-          entry: sampleVodCatalogEntry,
+          entry: sampleVideoCatalogEntry,
           originStreamId: `${sampleHost}--stream-1`,
           actorPubkey: sampleHost
         });
@@ -217,7 +217,7 @@ test("access client: API wrappers parse success responses", async () => {
         actorPubkey: sampleHost
       });
     }
-    if (url === "/api/access/vod-packages/list") {
+    if (url === "/api/access/video-packages/list") {
       return jsonResponse({
         ok: true,
         packages: [samplePackage],
@@ -240,13 +240,13 @@ test("access client: API wrappers parse success responses", async () => {
         }
       });
     }
-    if (url === "/api/access/vod-packages/upsert") {
+    if (url === "/api/access/video-packages/upsert") {
       return jsonResponse({ ok: true, package: samplePackage, actorPubkey: sampleHost });
     }
-    if (url === "/api/access/vod-packages/delete") {
+    if (url === "/api/access/video-packages/delete") {
       return jsonResponse({ ok: true, package: { ...samplePackage, status: "disabled" }, actorPubkey: sampleHost });
     }
-    if (url === "/api/access/vod-packages/purchase") {
+    if (url === "/api/access/video-packages/purchase") {
       return jsonResponse({
         ok: true,
         package: samplePackage,
@@ -266,7 +266,7 @@ test("access client: API wrappers parse success responses", async () => {
         actorPubkey: sampleViewer
       });
     }
-    if (url === "/api/access/vod-packages/viewer-status") {
+    if (url === "/api/access/video-packages/viewer-status") {
       return jsonResponse({
         ok: true,
         hostPubkey: sampleHost,
@@ -276,7 +276,7 @@ test("access client: API wrappers parse success responses", async () => {
           {
             entitlementId: "ent-1",
             packageId: "pkg-1",
-            resourceId: `stream:${sampleHost}:stream-1:vod:*`,
+            resourceId: `stream:${sampleHost}:stream-1:video:*`,
             status: "active",
             source: "purchase_verified",
             startsAtSec: now,
@@ -287,7 +287,7 @@ test("access client: API wrappers parse success responses", async () => {
         byPackageId: {
           "pkg-1": {
             entitlementId: "ent-1",
-            resourceId: `stream:${sampleHost}:stream-1:vod:*`,
+            resourceId: `stream:${sampleHost}:stream-1:video:*`,
             status: "active",
             source: "purchase_verified",
             startsAtSec: now,
@@ -324,7 +324,7 @@ test("access client: API wrappers parse success responses", async () => {
   }) as typeof fetch;
 
   try {
-    const catalog = await listVodPlaylistCatalogClient({
+    const catalog = await listVideoPlaylistCatalogClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       operatorProofEvent: sampleProofEvent
@@ -332,7 +332,7 @@ test("access client: API wrappers parse success responses", async () => {
     assert.equal(catalog.playlists.length, 1);
     assert.equal(catalog.originStreamId, `${sampleHost}--stream-1`);
 
-    const catalogEntries = await listVodCatalogEntriesClient({
+    const catalogEntries = await listVideoCatalogEntriesClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       operatorProofEvent: sampleProofEvent,
@@ -341,14 +341,14 @@ test("access client: API wrappers parse success responses", async () => {
     assert.equal(catalogEntries.rows.length, 1);
     assert.equal(catalogEntries.rows[0]?.metadata?.title, "Episode 1");
 
-    const hostProcess = await processVodCatalogHostEntriesClient({
+    const hostProcess = await processVideoCatalogHostEntriesClient({
       hostPubkey: sampleHost,
       operatorProofEvent: sampleProofEvent
     });
     assert.equal(hostProcess.processed, 2);
     assert.equal(hostProcess.streamCount, 1);
 
-    const upsertedEntry = await upsertVodCatalogEntryClient({
+    const upsertedEntry = await upsertVideoCatalogEntryClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       relativePath: "season-1/episode-1.mp4",
@@ -356,9 +356,9 @@ test("access client: API wrappers parse success responses", async () => {
       operatorProofEvent: sampleProofEvent,
       published: true
     });
-    assert.equal(upsertedEntry.entry.id, "vod-entry-1");
+    assert.equal(upsertedEntry.entry.id, "video-entry-1");
 
-    const deletedEntry = await deleteVodCatalogEntryClient({
+    const deletedEntry = await deleteVideoCatalogEntryClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       relativePath: "season-1/episode-1.mp4",
@@ -366,11 +366,11 @@ test("access client: API wrappers parse success responses", async () => {
     });
     assert.equal(deletedEntry.relativePath, "season-1/episode-1.mp4");
 
-    const listedPackages = await listVodAccessPackagesClient({ hostPubkey: sampleHost, operatorProofEvent: sampleProofEvent });
+    const listedPackages = await listVideoAccessPackagesClient({ hostPubkey: sampleHost, operatorProofEvent: sampleProofEvent });
     assert.equal(listedPackages.packages.length, 1);
     assert.equal(listedPackages.purchaseStatsByPackageId["pkg-1"]?.totalPurchases, 3);
 
-    const upserted = await upsertVodAccessPackageClient({
+    const upserted = await upsertVideoAccessPackageClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       title: "Package",
@@ -381,14 +381,14 @@ test("access client: API wrappers parse success responses", async () => {
     });
     assert.equal(upserted.package.id, "pkg-1");
 
-    const disabled = await disableVodAccessPackageClient({
+    const disabled = await disableVideoAccessPackageClient({
       hostPubkey: sampleHost,
       packageId: "pkg-1",
       operatorProofEvent: sampleProofEvent
     });
     assert.equal(disabled.package.status, "disabled");
 
-    const purchase = await purchaseVodAccessPackageClient({
+    const purchase = await purchaseVideoAccessPackageClient({
       packageId: "pkg-1",
       buyerProofEvent: sampleProofEvent
     });
@@ -396,7 +396,7 @@ test("access client: API wrappers parse success responses", async () => {
     assert.equal(purchase.checkout?.purchasePolicy, "operator_or_verified");
     assert.equal(purchase.checkout?.verificationMode, "external_verified");
 
-    const viewerStatus = await listVodPackageViewerStatusClient({
+    const viewerStatus = await listVideoPackageViewerStatusClient({
       hostPubkey: sampleHost,
       streamId: "stream-1",
       viewerProofEvent: sampleProofEvent
@@ -456,7 +456,7 @@ test("access client: wrappers surface API errors", async () => {
   globalThis.fetch = (async () => jsonResponse({ ok: false, error: "expected failure" }, 400)) as typeof fetch;
   try {
     await assert.rejects(
-      () => listVodAccessPackagesClient({ hostPubkey: sampleHost, operatorProofEvent: sampleProofEvent }),
+      () => listVideoAccessPackagesClient({ hostPubkey: sampleHost, operatorProofEvent: sampleProofEvent }),
       /expected failure/
     );
   } finally {

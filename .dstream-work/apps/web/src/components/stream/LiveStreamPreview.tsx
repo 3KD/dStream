@@ -141,7 +141,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
         <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-neutral-700">dStream</span>
+        <span className="text-[11px] font-semibold tracking-wider text-neutral-700">dStream</span>
       </div>
     );
   }
