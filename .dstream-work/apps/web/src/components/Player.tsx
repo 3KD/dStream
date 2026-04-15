@@ -173,6 +173,17 @@ export function Player({
   const playbackModeRef = useRef<PlaybackMode>("hls");
   const onReadyRef = useRef(onReady);
   const selectedQualityRef = useRef(-1);
+
+  const fallbackSrcRef = useRef(fallbackSrc);
+  const playbackStateKeyRef = useRef(playbackStateKey);
+
+  useEffect(() => {
+    fallbackSrcRef.current = fallbackSrc;
+  }, [fallbackSrc]);
+
+  useEffect(() => {
+    playbackStateKeyRef.current = playbackStateKey;
+  }, [playbackStateKey]);
   const [status, setStatus] = useState<string>("Loading…");
   const [error, setError] = useState<string | null>(null);
   const [nsfwConsented, setNsfwConsented] = useState<boolean>(!contentWarningReason);
@@ -222,7 +233,7 @@ export function Player({
   }, [onReady]);
 
   useEffect(() => {
-    const persisted = readPersistedPlaybackState(playbackStateKey);
+    const persisted = readPersistedPlaybackState(playbackStateKeyRef.current);
     if (persisted) {
       const persistedMuted = persisted.muted === true;
       const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
@@ -526,7 +537,7 @@ export function Player({
 
     const video = videoRef.current;
     let cancelled = false;
-    const persistedPlayback = readPersistedPlaybackState(playbackStateKey);
+    const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
       persistedPlayback && typeof persistedPlayback.currentTime === "number" && Number.isFinite(persistedPlayback.currentTime)
         ? Math.max(0, persistedPlayback.currentTime)
@@ -961,10 +972,8 @@ export function Player({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    fallbackSrc,
     isMobilePlayback,
     lowLatencyEnabled,
-    playbackStateKey,
     preferNativeHls,
     src,
     whepSrc
