@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Player } from "@/components/Player";
 
@@ -17,21 +17,40 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
   const [activeRequest, setActiveRequest] = useState<{ id: string; props: any } | null>(null);
   const fallbackContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const registerPortal = (id: string, el: HTMLElement) => {
+  const registerPortal = useCallback((id: string, el: HTMLElement) => {
     setPortals((prev) => ({ ...prev, [id]: el }));
-  };
+  }, []);
 
-  const unregisterPortal = (id: string) => {
+  const unregisterPortal = useCallback((id: string) => {
     setPortals((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
-  };
+  }, []);
 
-  const requestPortal = (id: string, props: any) => {
-    setActiveRequest({ id, props });
-  };
+  const requestPortal = useCallback((id: string, props: any) => {
+    setActiveRequest((prev) => {
+      if (prev && prev.id === id) {
+         // Prevent infinite loops by skipping if nothing materially changed.
+         // We do a shallow compare of the props.
+         let same = true;
+         const k1 = Object.keys(prev.props);
+         const k2 = Object.keys(props);
+         if (k1.length !== k2.length) same = false;
+         else {
+           for (const k of k1) {
+             if (prev.props[k] !== props[k]) {
+               same = false;
+               break;
+             }
+           }
+         }
+         if (same) return prev;
+      }
+      return { id, props };
+    });
+  }, []);
 
   // If the active request's portal exists, render it there.
   // Otherwise, render into the fallback persistent container so it NEVER unmounts and wipes the buffer!
@@ -42,8 +61,10 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     targetEl = fallbackContainerRef.current;
   }
 
+  const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal }), [registerPortal, unregisterPortal, requestPortal]);
+
   return (
-    <GlobalPlayerContext.Provider value={{ registerPortal, unregisterPortal, requestPortal }}>
+    <GlobalPlayerContext.Provider value={contextValue}>
       {children}
       <div ref={fallbackContainerRef} style={{ display: "none" }} aria-hidden="true" />
       {targetEl && activeRequest && createPortal(<Player {...activeRequest.props} />, targetEl)}

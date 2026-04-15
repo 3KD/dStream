@@ -1755,41 +1755,7 @@ export default function WatchPage() {
                   <>
                     <GlobalPlayerSlot
                     id="watch-page"
-                    playerProps={{
-                      src: playbackStreamUrl,
-                      fallbackSrc: announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null,
-                      whepSrc: whepSrc,
-                      p2pSwarm: p2pSwarm,
-                      integrity: integritySession,
-                      isLiveStream: announce?.status !== "ended",
-                      showNativeControls: false,
-                      captionTracks: captionTracks,
-                      viewerCount: viewerCount,
-                      p2pPeers: p2pStats?.peersConnected,
-                      autoplayMuted: e2e ? true : social.settings.playbackAutoplayMuted,
-                      layoutMode: mobilePortraitLayout ? "aspect" : "fill",
-                      overlayTitle: announce?.title ?? "Live Stream",
-                      auxMetaSlot: pubkey ? (
-                        <button
-                          type="button"
-                          onClick={() => social.toggleFavoriteStream(pubkey, streamId)}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
-                          title={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite" : "Favorite"}
-                          aria-label={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite stream" : "Favorite stream"}
-                        >
-                          <Star
-                            className={`w-3.5 h-3.5 ${
-                              social.isFavoriteStream(pubkey, streamId) ? "fill-yellow-400 text-yellow-400" : "text-neutral-400"
-                            }`}
-                          />
-                        </button>
-                      ) : null,
-                      onReady: () => {
-                        if (!e2e || e2eSentRef.current.player) return;
-                        e2eSentRef.current.player = true;
-                        postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
-                      }
-                    }}
+                    playerProps={globalPlayerProps}
                   />
                     {p2pStats && <P2PStatsPanel stats={p2pStats} />}
                   </>
