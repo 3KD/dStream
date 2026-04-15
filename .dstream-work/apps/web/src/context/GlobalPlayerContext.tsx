@@ -40,8 +40,8 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
          // Prevent infinite loops by skipping if nothing materially changed.
          // We do a shallow compare of the props.
          let same = true;
-         const k1 = Object.keys(prev.props);
-         const k2 = Object.keys(props);
+         const k1 = Object.keys(prev.props || {});
+         const k2 = Object.keys(props || {});
          if (k1.length !== k2.length) same = false;
          else {
            for (const k of k1) {
@@ -72,7 +72,7 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     <GlobalPlayerContext.Provider value={contextValue}>
       {children}
       <div ref={fallbackContainerRef} style={{ display: "none" }} aria-hidden="true" />
-      {targetEl && activeRequest && createPortal(<Player {...activeRequest.props} />, targetEl)}
+      {targetEl && activeRequest ? createPortal(<Player {...(activeRequest.props || {})} />, targetEl) : null}
     </GlobalPlayerContext.Provider>
   );
 }
