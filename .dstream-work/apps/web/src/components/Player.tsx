@@ -959,13 +959,11 @@ export function Player({
         // ignore
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    effectiveAutoplayMuted,
     fallbackSrc,
-    integrity,
     isMobilePlayback,
     lowLatencyEnabled,
-    p2pSwarm,
     playbackStateKey,
     preferNativeHls,
     src,
