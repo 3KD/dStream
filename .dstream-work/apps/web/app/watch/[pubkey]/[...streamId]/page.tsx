@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Flag, Star, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
@@ -1578,6 +1578,59 @@ export default function WatchPage() {
     if (total <= 0) return null;
     return Math.max(0, Math.min(100, Math.round((outgoing / total) * 100)));
   }, [p2pStats]);
+
+  const globalPlayerProps = useMemo(() => ({
+    src: playbackStreamUrl,
+    fallbackSrc: announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null,
+    whepSrc: whepSrc,
+    p2pSwarm: p2pSwarm,
+    integrity: integritySession,
+    isLiveStream: announce?.status !== "ended",
+    showNativeControls: false,
+    captionTracks: captionTracks,
+    viewerCount: viewerCount,
+    p2pPeers: p2pStats?.peersConnected,
+    autoplayMuted: e2e ? true : social.settings.playbackAutoplayMuted,
+    layoutMode: mobilePortraitLayout ? "aspect" : "fill",
+    overlayTitle: announce?.title ?? "Live Stream",
+    auxMetaSlot: pubkey ? (
+      <button
+        type="button"
+        onClick={() => social.toggleFavoriteStream(pubkey, streamId)}
+        className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200"
+        title={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite" : "Favorite"}
+        aria-label={social.isFavoriteStream(pubkey, streamId) ? "Unfavorite stream" : "Favorite stream"}
+      >
+        <Star
+          className={`w-3.5 h-3.5 ${
+            social.isFavoriteStream(pubkey, streamId) ? "fill-yellow-400 text-yellow-400" : "text-neutral-400"
+          }`}
+        />
+      </button>
+    ) : null,
+    onReady: () => {
+      if (!e2e || e2eSentRef.current.player) return;
+      e2eSentRef.current.player = true;
+      postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
+    }
+  }), [
+    playbackStreamUrl,
+    announce?.status,
+    canUseLocalFallback,
+    fallbackUrl,
+    whepSrc,
+    p2pSwarm,
+    integritySession,
+    captionTracks,
+    viewerCount,
+    p2pStats?.peersConnected,
+    e2e,
+    social,
+    mobilePortraitLayout,
+    announce?.title,
+    pubkey,
+    streamId
+  ]);
 
   const showVideoUnlockGate = videoPaidRequiresUnlock && !videoUnlocked;
   const videoAccessExpiryLabel = useMemo(() => {
