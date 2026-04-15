@@ -684,6 +684,18 @@ export function GlobalQuickPlayDock() {
     }
   }, [requestSystemPip]);
 
+  const globalPlayerProps = useMemo(() => ({
+    src: hlsSrc,
+    whepSrc,
+    autoplayMuted: false,
+    backgroundPlayEnabledOverride: backgroundPlayEnabled,
+    isLiveStream: true,
+    showTimelineControls: false,
+    showAuxControls: false,
+    showNativeControls: false,
+    playbackStateKey
+  }), [backgroundPlayEnabled, hlsSrc, playbackStateKey, whepSrc]);
+
   if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc) return null;
 
   return (
@@ -699,17 +711,7 @@ export function GlobalQuickPlayDock() {
       <div ref={playerHostRef} className="h-full relative pointer-events-none select-none">
         <GlobalPlayerSlot
           id="quickplay-dock"
-          playerProps={{
-            src: hlsSrc,
-            whepSrc,
-            autoplayMuted: false,
-            backgroundPlayEnabledOverride: backgroundPlayEnabled,
-            isLiveStream: true,
-            showTimelineControls: false,
-            showAuxControls: false,
-            showNativeControls: false,
-            playbackStateKey
-          }}
+          playerProps={globalPlayerProps}
         />
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
       </div>
