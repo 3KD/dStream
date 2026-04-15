@@ -373,6 +373,7 @@ export interface BuildStreamAnnounceInput {
   streamChatFollowerOnly?: boolean;
   discoverable?: boolean;
   matureContent?: boolean;
+  contentWarningReason?: string;
   viewerAllowPubkeys?: string[];
   videoArchiveEnabled?: boolean;
   videoVisibility?: StreamVideoVisibility;
@@ -429,6 +430,10 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   }
   if (typeof input.matureContent === "boolean") {
     tags.push(["mature", input.matureContent ? "1" : "0"]);
+  }
+  if (input.contentWarningReason) {
+    tags.push(["content-warning", input.contentWarningReason.trim()]);
+    if (!input.matureContent) tags.push(["mature", "1"]); // Backwards compatibility
   }
 
   const viewerAllowPubkeys = normalizeVipPubkeys(input.viewerAllowPubkeys ?? []);
@@ -603,6 +608,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     streamChatFollowerOnly,
     discoverable,
     matureContent,
+    contentWarningReason: getFirstTagValue(event.tags, "content-warning"),
     viewerAllowPubkeys,
     videoArchiveEnabled,
     videoVisibility,

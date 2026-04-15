@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EyeOff, Plus, Search, Trash2, Users } from "lucide-react";
+import { Shield, HelpCircle, Network, SearchX } from "lucide-react";
 import { buildGuildEvent, type Guild, type GuildFeaturedStreamRef } from "@dstream/protocol";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useGuilds } from "@/hooks/useGuilds";
@@ -335,6 +336,19 @@ export default function GuildsPage() {
           </Link>
         </header>
 
+        <section className="rounded-3xl border border-blue-900/30 bg-gradient-to-br from-blue-950/40 to-neutral-900/40 p-6 md:p-8 relative overflow-hidden shadow-2xl">
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
+          <div className="relative z-10 max-w-2xl space-y-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Network className="w-5 h-5 text-blue-400" />
+              What is a Guild?
+            </h2>
+            <p className="text-sm text-neutral-300 leading-relaxed">
+              Guilds are decentralized communities running on the dStream Nostr network. By joining or creating a Guild, node runners, creators, and viewers can pool resources. Guilds allow communities to elect chat moderators, curate featured streaming feeds, and securely share P2P infrastructure routing rules.
+            </p>
+          </div>
+        </section>
+
         {identity && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
@@ -365,7 +379,10 @@ export default function GuildsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">Guild ID (d-tag)</label>
+                    <label className="text-xs text-neutral-400 flex items-center gap-1.5">
+                       Guild ID (d-tag)
+                       <span title="A unique lowercase string identifying your guild on the Nostr network (like a slug). No spaces."><HelpCircle className="w-3.5 h-3.5 text-neutral-500 cursor-help hover:text-neutral-300" /></span>
+                    </label>
                     <input
                       value={guildId}
                       onChange={(e) => setGuildId(e.target.value)}
@@ -407,7 +424,10 @@ export default function GuildsPage() {
                 </div>
 
                 <div className="rounded-2xl border border-neutral-800 bg-neutral-950/30 p-4 space-y-3">
-                  <div className="text-sm font-semibold text-neutral-200">Featured streams (optional)</div>
+                  <div className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
+                     Featured streams (optional)
+                     <span title="Paste a creator's public key and stream ID here. This automatically curates their broadcast onto your Guild's homepage when they go live."><HelpCircle className="w-4 h-4 text-neutral-500 cursor-help hover:text-neutral-300" /></span>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       value={featurePubkey}
@@ -540,7 +560,23 @@ export default function GuildsPage() {
               ))}
             </div>
           ) : visibleGuilds.length === 0 ? (
-            <div className="text-sm text-neutral-500 py-10 text-center">No guilds found.</div>
+            <div className="py-16 flex flex-col items-center justify-center text-center space-y-4 rounded-2xl border border-neutral-800/50 bg-neutral-900/20">
+              <div className="w-16 h-16 rounded-full bg-neutral-900 flex items-center justify-center shadow-inner">
+                <SearchX className="w-8 h-8 text-neutral-600" />
+              </div>
+              <div className="space-y-1">
+                 <h3 className="text-lg font-semibold text-neutral-200">No guilds found</h3>
+                 <p className="text-sm text-neutral-400 max-w-sm px-4">There are currently no active guilds matching your search criteria on your connected relays.</p>
+              </div>
+              <div className="pt-2">
+                 <button 
+                   onClick={() => setCreateOpen(true)}
+                   className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium rounded-xl transition"
+                 >
+                   Create your own Guild
+                 </button>
+              </div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {visibleGuilds.map((g) => {

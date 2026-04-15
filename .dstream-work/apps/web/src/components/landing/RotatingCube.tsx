@@ -9,24 +9,24 @@ import {
 
 export const WORDS = [
   "Decentralized",
-  "P2P",
   "Independent",
-  "Unstoppable",
+  "P2P",
+  "Zero Censorship",
   "Ownerless",
   "Private",
-  "Permissionless",
   "Global",
+  "Influencer",
+  "Gamer",
+  "Music",
   "Journalism",
   "Activism",
-  "Music",
-  "Gamer",
-  "Influencer"
+  "Unstoppable"
 ];
 
 const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: string }> = {
   Decentralized: { img: "/logo_trimmed.png", color: "text-purple-400" },
   Unstoppable: { icon: ShieldCheck, color: "text-green-400" },
-  Permissionless: { icon: Unlock, color: "text-yellow-400" },
+  "Zero Censorship": { icon: Unlock, color: "text-yellow-400" },
   Ownerless: { icon: Users, color: "text-blue-400" },
   Private: { icon: EyeOff, color: "text-red-400" },
   P2P: { icon: Network, color: "text-cyan-400" },
@@ -42,7 +42,7 @@ const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: strin
 export const WORD_COLORS_HEX: Record<string, string> = {
   Decentralized: "#ffffff",
   Unstoppable: "#4ade80",
-  Permissionless: "#facc15",
+  "Zero Censorship": "#facc15",
   Ownerless: "#60a5fa",
   Private: "#f87171",
   P2P: "#22d3ee",
@@ -226,7 +226,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
                 ) : (
                   Icon && <Icon className={`w-12 h-12 md:w-20 md:h-20 flex-shrink-0 ${cfg?.color ?? ""}`} aria-hidden="true" />
                 )}
-                <span className={brand ? "bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent" : "text-white"}>
+                <span className={brand ? "bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 bg-clip-text text-transparent" : "text-white"}>
                   {word}
                 </span>
               </span>

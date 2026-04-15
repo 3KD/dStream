@@ -88,6 +88,7 @@ export interface StreamAnnounce {
   streamChatFollowerOnly?: boolean;
   discoverable: boolean;
   matureContent: boolean;
+  contentWarningReason?: string;
   viewerAllowPubkeys: string[];
   videoArchiveEnabled?: boolean;
   videoVisibility: StreamVideoVisibility;

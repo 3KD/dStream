@@ -248,14 +248,22 @@ export default function BrowseClient() {
                         key={`live:${streamCanonicalId(stream)}`}
                         className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                       >
-                        <div className="aspect-video bg-neutral-800 flex items-center justify-center relative">
-                          <LiveStreamPreview
+                        <div className="aspect-video bg-neutral-800 flex items-center justify-center relative overflow-hidden">
+                          <div className={`w-full h-full ${stream.contentWarningReason ? 'blur-xl grayscale' : ''}`}>
+                            <LiveStreamPreview
                             streamPubkey={stream.pubkey}
                             streamId={stream.streamId}
                             title={stream.title || "Live stream preview"}
                             fallbackImage={stream.image}
                             enabled={index < 16}
                           />
+                          </div>
+                          {stream.contentWarningReason && (
+                            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-neutral-950/60 transition-colors pointer-events-none p-4 text-center">
+                              <span className="bg-red-900/80 border border-red-500 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-xl mb-2">18+ NSFW</span>
+                              <span className="text-[10px] text-neutral-400 font-medium leading-tight line-clamp-2">{stream.contentWarningReason}</span>
+                            </div>
+                          )}
                           <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
                             Live
                           </div>

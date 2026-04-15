@@ -55,13 +55,13 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
     <header className="relative isolate border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md z-[80] px-3 py-2 sm:px-4 sm:py-2.5 lg:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 group min-w-0 shrink-0">
+          <Link href="/" className="flex items-center group min-w-0 shrink-0">
             <img
               src="/logo_trimmed.png"
               alt="dStream Logo"
-              className="h-7 sm:h-8 md:h-9 w-auto object-contain relative z-10 transition-transform group-hover:scale-105 shrink-0"
+              className="h-8 sm:h-10 md:h-11 w-auto object-contain relative z-10 transition-transform group-hover:scale-105 shrink-0 -mr-[0.1em]"
             />
-            <span className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight leading-none bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent relative z-0 whitespace-nowrap">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-none bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 bg-clip-text text-transparent relative z-0 whitespace-nowrap">
               Stream
             </span>
           </Link>

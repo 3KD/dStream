@@ -64,7 +64,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
     firstSeenRef.current.clear();
 
     const filter: Filter = {
-      kinds: [30312],
+      kinds: [30312, 1311],
       "#a": [makeATag(streamPubkey, streamId)],
       since: Math.floor(Date.now() / 1000) - windowSec * 4,
       limit: 500
@@ -72,15 +72,28 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
-        const parsed = parseStreamPresenceEvent(event, { streamPubkey, streamId });
-        if (!parsed) return;
+        let pubkey: string;
+        let createdAt: number;
 
-        const pubkey = parsed.pubkey.trim().toLowerCase();
+        if (event.kind === 30312) {
+          const parsed = parseStreamPresenceEvent(event, { streamPubkey, streamId });
+          if (!parsed) return;
+          pubkey = parsed.pubkey.trim().toLowerCase();
+          createdAt = parsed.createdAt;
+        } else if (event.kind === 1311) {
+          // If it's a live chat message matched by our relay filter's #a tag, we count this person as an active viewer.
+          pubkey = (event.pubkey ?? "").trim().toLowerCase();
+          createdAt = event.created_at ?? 0;
+          if (!pubkey || !createdAt) return;
+        } else {
+          return;
+        }
+
         const prevEventCreatedAt = lastEventCreatedAtRef.current.get(pubkey) ?? 0;
-        if (parsed.createdAt <= prevEventCreatedAt) return;
+        if (createdAt <= prevEventCreatedAt) return;
 
         const now = Math.floor(Date.now() / 1000);
-        lastEventCreatedAtRef.current.set(pubkey, parsed.createdAt);
+        lastEventCreatedAtRef.current.set(pubkey, createdAt);
         if (!firstSeenRef.current.has(pubkey)) firstSeenRef.current.set(pubkey, now);
         lastSeenRef.current.set(pubkey, now);
         recompute();

@@ -31,6 +31,18 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/hls/:path*",
+        destination: `${process.env.DSTREAM_HLS_PROXY_ORIGIN || 'http://mediamtx:8880'}/:path*`
+      },
+      {
+        source: "/webrtc/:path*",
+        destination: `${process.env.DSTREAM_WHIP_PROXY_ORIGIN || 'http://mediamtx:8889'}/:path*`
+      }
+    ];
+  },
 };
 
 export default nextConfig;

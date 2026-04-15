@@ -10,9 +10,9 @@ const cases = [
     chipClass: "bg-blue-900/30 text-blue-300",
     watermarkClass: "text-blue-500",
     title: "Independent Journalists",
-    subtitle: "Censorship-resistant continuity",
+    subtitle: "Censorship-Resistant Reality",
     detail:
-      "Publish under your own Nostr identity and keep channel continuity even when ingest providers, relay sets, or edge stacks are swapped."
+      "Broadcast on the Nostr network where your identity and content cannot be deplatformed, silenced, or restricted by corporate policies."
   },
   {
     icon: Mic,
@@ -21,9 +21,9 @@ const cases = [
     chipClass: "bg-purple-900/30 text-purple-300",
     watermarkClass: "text-purple-500",
     title: "Performers and Creators",
-    subtitle: "Direct payout ownership",
+    subtitle: "100% Payout Ownership",
     detail:
-      "Run verified Monero tip/stake flows and expose additional payout rails with wallet integration preferences per asset."
+      "Keep everything you earn. Monetization is completely decentralized with direct crypto payments—no middlemen holding your funds or taking a cut."
   },
   {
     icon: Radio,
@@ -32,9 +32,9 @@ const cases = [
     chipClass: "bg-emerald-900/30 text-emerald-300",
     watermarkClass: "text-emerald-500",
     title: "Live Community Hosts",
-    subtitle: "Portable stream routing",
+    subtitle: "Viewer-Powered Fidelity",
     detail:
-      "Operate streams as canonical `(pubkey, streamId)` routes with WHEP-first playback and deterministic HLS fallback."
+      "As your audience grows, your stream quality gets stronger! dStream uses P2P networks so viewers help scale and boost stream fidelity for everyone."
   },
   {
     icon: Coins,
@@ -96,9 +96,9 @@ export default function UseCasesPage() {
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <header className="space-y-3 text-center">
           <p className="text-xs uppercase tracking-wider text-neutral-500">Use Cases</p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Who this build is for</h1>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Who dStream Benefits and How!</h1>
           <p className="text-neutral-300 max-w-3xl mx-auto">
-            dStream is built for operators and creators who need transport flexibility, portable identity, and direct payout control.
+            dStream is built for streamers and viewers who want a censorship-resistant network, scalable P2P video fidelity, and completely decentralized monetization without middlemen taking a cut.
           </p>
         </header>
 

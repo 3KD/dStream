@@ -8,6 +8,7 @@ import type { IntegritySession } from "@/lib/integrity/session";
 import { WhepClient } from "@/lib/whep";
 import { pickPlaybackMode } from "@/lib/whep-fallback";
 import { inferMediaUrlKind } from "@/lib/mediaUrl";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Users } from "lucide-react";
 
 interface PlayerProps {
   src: string;
@@ -26,12 +27,15 @@ interface PlayerProps {
   overlayTitle?: string | null;
   backgroundPlayEnabledOverride?: boolean;
   auxMetaSlot?: ReactNode;
+  contentWarningReason?: string | null;
   captionTracks?: Array<{
     src: string;
     lang: string;
     label: string;
     isDefault?: boolean;
   }>;
+  viewerCount?: number;
+  p2pPeers?: number;
 }
 
 interface QualityOption {
@@ -158,7 +162,10 @@ export function Player({
   overlayTitle,
   backgroundPlayEnabledOverride,
   auxMetaSlot,
-  captionTracks
+  captionTracks,
+  contentWarningReason,
+  viewerCount,
+  p2pPeers
 }: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -168,6 +175,7 @@ export function Player({
   const selectedQualityRef = useRef(-1);
   const [status, setStatus] = useState<string>("Loading…");
   const [error, setError] = useState<string | null>(null);
+  const [nsfwConsented, setNsfwConsented] = useState<boolean>(!contentWarningReason);
   const [needsClick, setNeedsClick] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
@@ -197,7 +205,7 @@ export function Player({
   const [timelineStart, setTimelineStart] = useState(0);
   const [timelineEnd, setTimelineEnd] = useState(0);
   const [timelinePosition, setTimelinePosition] = useState(0);
-  const LIVE_EDGE_PIN_TOLERANCE_SEC = 1.5;
+  const LIVE_EDGE_PIN_TOLERANCE_SEC = 8.0;
   const captionTrackList = useMemo(() => {
     return (captionTracks ?? [])
       .map((track) => ({
@@ -681,6 +689,7 @@ export function Player({
     };
 
     const startHls = (hlsSource: string): boolean => {
+      let mediaRecoveryAttempts = 0;
       setPlaybackMode("hls");
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
@@ -730,6 +739,7 @@ export function Player({
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
       const hls = new Hls({
+        startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
         manifestLoadingMaxRetry: 30,
         manifestLoadingRetryDelay: 500,
@@ -743,6 +753,7 @@ export function Player({
         maxBufferLength: lowLatencyEnabled ? 30 : 90,
         backBufferLength: lowLatencyEnabled ? 30 : 90,
         liveSyncDurationCount: lowLatencyEnabled ? 3 : 5,
+        liveMaxLatencyDurationCount: lowLatencyEnabled ? 5 : 8,
         fLoader: P2PFragmentLoader,
         lowLatencyMode: lowLatencyEnabled,
         dstreamP2PSwarm: p2pSwarm ?? null,
@@ -814,8 +825,19 @@ export function Player({
           case Hls.ErrorTypes.MEDIA_ERROR:
             setError(null);
             setStatus("Recovering…");
+            mediaRecoveryAttempts++;
             try {
-              hls.recoverMediaError();
+              if (mediaRecoveryAttempts <= 1) {
+                  hls.recoverMediaError();
+              } else if (mediaRecoveryAttempts === 2) {
+                  hls.swapAudioCodec();
+                  hls.recoverMediaError();
+              } else {
+                  hls.destroy();
+                  setTimeout(() => {
+                      startBestEffort(hlsSource);
+                  }, 1000);
+              }
             } catch {
               // ignore
             }
@@ -1006,13 +1028,12 @@ export function Player({
   const showTimeline = showTimelineControls && hasSeekWindow;
   const clampedTimelinePosition = Math.min(Math.max(timelinePosition, timelineStart), timelineEnd || timelineStart);
   const liveLagSeconds = Math.max(0, timelineEnd - clampedTimelinePosition);
-  const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 1.5;
-  const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 1.5;
+  const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 8.0;
+  const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 8.0;
   const showTapForSound = !error && !needsClick && (volume === 0 || videoRef.current?.muted === true);
   const timelineDuration = Math.max(0, timelineEnd - timelineStart);
   const visibleTimelinePosition = Math.max(0, clampedTimelinePosition - timelineStart);
   const overlayTitleLabel = (overlayTitle ?? "").trim();
-  const statusLabel = error ? "Error" : playbackMode === "whep" ? `${status} • Low latency` : status;
   const effectiveNativeControls = showNativeControls && !showAuxControls;
   const visibleNote = useMemo(() => {
     if (!note) return null;
@@ -1157,12 +1178,32 @@ export function Player({
           layoutMode === "fill" ? "min-h-[16rem] flex-1" : "aspect-video"
         }`}
       >
+        {!nsfwConsented && contentWarningReason && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-3xl text-center px-4">
+            <span className="bg-red-900 border border-red-500 text-red-100 text-sm px-3 py-1 uppercase rounded-lg font-bold mb-3 shadow-[0_0_20px_rgba(220,38,38,0.4)]">18+ Explicit Content</span>
+            <p className="text-sm text-neutral-300 max-w-[80%] mb-5 !leading-relaxed">
+              This broadcast contains mature material restricted by the broadcaster:<br />
+              <strong className="text-white">"{contentWarningReason}"</strong>
+            </p>
+            <button
+              onClick={() => {
+                setNsfwConsented(true);
+                if (videoRef.current) {
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition"
+            >
+              I Agree, Reveal Content
+            </button>
+          </div>
+        )}
         <video
           ref={videoRef}
-          className="w-full h-full cursor-pointer"
+          className={`w-full h-full cursor-pointer ${!nsfwConsented ? 'opacity-0' : 'opacity-100'}`}
           playsInline
-          controls={effectiveNativeControls}
-          autoPlay
+          controls={effectiveNativeControls && nsfwConsented}
+          autoPlay={nsfwConsented}
           muted={volume === 0}
           onClick={handleVideoSurfaceInteraction}
         >
@@ -1190,181 +1231,215 @@ export function Player({
           </button>
         )}
 
-        {showAuxControls && !error && !needsClick && (
+                {showAuxControls && !error && !needsClick && (viewerCount !== undefined || p2pPeers !== undefined) && (
           <div
-            className={`pointer-events-none absolute inset-x-3 top-3 bottom-3 z-20 flex items-end transition-opacity duration-150 ${
+            className={`absolute inset-x-0 top-0 z-20 flex flex-row items-start justify-end bg-gradient-to-b from-black/80 via-black/30 to-transparent pt-4 pb-12 px-4 pointer-events-none transition-opacity duration-200 ${
               isMobilePlayback
                 ? mobileControlsVisible
                   ? "opacity-100"
                   : "opacity-0"
-                : isHovered
-                  ? "opacity-100"
-                  : "opacity-0"
+                : "opacity-0 group-hover/player:opacity-100"
             }`}
           >
-            <div className={`${(isMobilePlayback ? mobileControlsVisible : isHovered) ? "pointer-events-auto" : "pointer-events-none"} max-h-full w-full overflow-y-auto rounded-xl border border-neutral-700/80 bg-black/75 backdrop-blur px-3 py-2 text-xs text-neutral-200`}>
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-neutral-900/60 backdrop-blur border border-white/10 rounded-xl overflow-hidden text-[11px] font-mono font-medium tracking-wide">
+              {viewerCount !== undefined && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-white/10 text-neutral-300">
+                  <Users className="w-3.5 h-3.5" />
+                  {viewerCount} Live
+                </div>
+              )}
+              {p2pPeers !== undefined && (
+                <div className="flex items-center px-3 py-1.5 text-neutral-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2 animate-pulse" />
+                  {p2pPeers} P2P
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showAuxControls && !error && !needsClick && (
+          <div
+            className={`absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-12 pb-3 px-4 transition-opacity duration-200 ${
+              isMobilePlayback
+                ? mobileControlsVisible
+                  ? "opacity-100 pointer-events-auto"
+                  : "opacity-0 pointer-events-none"
+                : "opacity-0 group-hover/player:opacity-100 pointer-events-auto"
+            }`}
+          >
+            {hasSeekWindow && (
+              <div className="w-full flex items-center mb-1 relative group/scrubber h-5 cursor-pointer" onClick={(e) => {
+                const video = videoRef.current;
+                if (!video) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const nextTime = timelineStart + ratio * timelineDuration;
+                video.currentTime = nextTime;
+                setTimelinePosition(nextTime);
+              }}>
+                <div className="absolute inset-y-0 tracking-area flex items-center w-full">
+                  <input
+                    type="range"
+                    min={timelineStart}
+                    max={timelineEnd}
+                    step={0.01}
+                    value={isAtLiveEdge ? timelineEnd : clampedTimelinePosition}
+                    onChange={(e) => {
+                      const video = videoRef.current;
+                      if (!video) return;
+                      const next = Number(e.target.value);
+                      if (!Number.isFinite(next)) return;
+                      try {
+                        video.currentTime = next;
+                        setTimelinePosition(next);
+                      } catch {}
+                    }}
+                    className="absolute z-10 w-full h-full opacity-0 cursor-pointer touch-none"
+                    aria-label="Seek"
+                  />
+                  <div className="w-full h-1 bg-white/30 rounded-full overflow-hidden relative transition-all duration-200 group-hover/scrubber:h-1.5">
+                    <div 
+                      className="absolute top-0 bottom-0 left-0 bg-blue-500 rounded-full" 
+                      style={{ width: `${isAtLiveEdge ? 100 : (visibleTimelinePosition / timelineDuration) * 100}%` }}
+                    />
+                  </div>
+                  {/* Playhead thumb */}
+                  <div 
+                    className="absolute w-3 h-3 bg-blue-500 rounded-full transform -translate-x-1/2 scale-0 group-hover/scrubber:scale-100 transition-transform duration-100 pointer-events-none"
+                    style={{ left: `${isAtLiveEdge ? 100 : (visibleTimelinePosition / timelineDuration) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between w-full mt-1 text-xs text-neutral-200">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={togglePlayPause}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 min-w-[4.25rem]"
+                  className="w-8 h-8 flex items-center justify-center hover:bg-neutral-800 rounded-xl transition"
+                  aria-label={isPlaying ? "Pause" : "Play"}
                 >
-                  {isPlaying ? "Pause" : "Play"}
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4 fill-white text-white" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-white text-white" />
+                  )}
                 </button>
 
-                {hasSeekWindow && (
-                  <label className={`inline-flex items-center gap-2 min-w-[6rem] sm:min-w-[13rem] flex-[1_0_100%] sm:flex-1 ${isLiveStream ? "order-last ml-auto sm:order-none" : ""}`}>
-                    <input
-                      type="range"
-                      min={timelineStart}
-                      max={timelineEnd}
-                      step={0.01}
-                      value={isAtLiveEdge ? timelineEnd : clampedTimelinePosition}
-                      onChange={(e) => {
-                        const video = videoRef.current;
-                        if (!video) return;
-                        const next = Number(e.target.value);
-                        if (!Number.isFinite(next)) return;
-                        try {
-                          video.currentTime = next;
-                          setTimelinePosition(next);
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      className="accent-blue-500 min-w-[8rem] flex-1"
-                      aria-label="Seek"
-                    />
-                    <span className="font-mono text-neutral-300 text-[11px] tabular-nums whitespace-nowrap">
-                      {formatPlaybackTime(visibleTimelinePosition)} / {formatPlaybackTime(timelineDuration)}
-                    </span>
-                  </label>
-                )}
-
-                {overlayTitleLabel && (
-                  <span className="inline-flex max-w-[15rem] items-center truncate rounded-md border border-neutral-700/80 bg-black/70 px-2 py-1 text-[11px] text-neutral-200">
-                    {overlayTitleLabel}
-                  </span>
-                )}
-
-                <span
-                  data-testid="player-status"
-                  className="inline-flex items-center rounded-md border border-neutral-700/80 bg-black/70 px-2 py-1 font-mono text-[11px] text-neutral-200"
-                >
-                  {statusLabel}
-                </span>
-
-                {showTapForSound && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      unmuteFromGesture();
-                      const video = videoRef.current;
-                      if (!video) return;
-                      void video.play().catch(() => {
-                        // ignore
-                      });
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700"
-                  >
-                    Tap for sound
-                  </button>
-                )}
-
-                <label className="inline-flex items-center gap-2">
-                  <span className="text-neutral-400">Volume</span>
+                <div className="group/vol relative flex items-center h-8">
                   <button
                     type="button"
                     onClick={toggleMute}
-                    className="px-2 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-[11px]"
+                    className="w-8 h-8 flex items-center justify-center hover:bg-neutral-800 rounded-xl transition"
+                    aria-label={volume === 0 ? "Unmute" : "Mute"}
                   >
-                    {volume === 0 ? "Unmute" : "Mute"}
+                    {volume === 0 ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
                   </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-blue-500"
-                    aria-label="Volume"
-                  />
-                  <span className="font-mono text-neutral-300 w-8 text-right">{Math.round(volume * 100)}%</span>
-                </label>
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full pb-2 opacity-0 pointer-events-none group-hover/vol:opacity-100 group-hover/vol:pointer-events-auto transition-all duration-[140ms] delay-[140ms] group-hover/vol:delay-0 z-30 touch-none flex flex-col items-center justify-center">
+                    <div className="bg-black/90 border border-neutral-700 rounded-xl py-3 px-2 flex flex-col items-center justify-center shadow-xl">
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={volume}
+                        onChange={(e) => setVolume(Number(e.target.value))}
+                        className="accent-blue-500 rounded-full cursor-pointer touch-none"
+                        aria-label="Volume"
+                        style={{ 
+                          writingMode: 'vertical-lr', 
+                          direction: 'rtl', 
+                          height: '80px', 
+                          WebkitAppearance: 'slider-vertical' as any,
+                          appearance: 'slider-vertical' as any
+                        }}
+                      />
+                      <span className="font-mono text-[10px] text-neutral-400 mt-2">{Math.round(volume * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
 
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={lowLatencyEnabled}
-                    onChange={(e) => setLowLatencyEnabled(e.target.checked)}
-                    className="accent-blue-500"
-                    disabled={playbackMode !== "hls"}
-                  />
-                  <span>Low-latency mode</span>
-                </label>
+                <div className="font-mono text-[11px] text-neutral-200 tabular-nums">
+                  {formatPlaybackTime(visibleTimelinePosition)}
+                  {hasSeekWindow && <span className="opacity-60 text-neutral-400"> / {formatPlaybackTime(timelineDuration)}</span>}
+                </div>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => setBackgroundPlayEnabled((current) => !current)}
-                  className={`px-2.5 py-1 rounded-lg border ${
-                    effectiveBackgroundPlayEnabled
-                      ? "bg-blue-600/20 border-blue-500/50 text-blue-100"
-                      : "bg-neutral-900 hover:bg-neutral-800 border-neutral-700 text-neutral-200"
-                  }`}
-                  title="Keep audio playing when the app is backgrounded (browser support varies)."
-                >
-                  Background play {effectiveBackgroundPlayEnabled ? "On" : "Off"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void togglePip()}
-                  disabled={!canTogglePip}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 disabled:opacity-50"
-                >
-                  {isPip ? "Exit PiP" : "PiP"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void toggleFullscreen()}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700"
-                >
-                  {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                </button>
-
+              <div className="flex items-center gap-3">
                 {isLiveStream && showTimeline && (
                   <button
                     type="button"
                     onClick={jumpToLive}
                     disabled={!canJumpToLive}
-                    className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 disabled:opacity-50"
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] uppercase font-bold tracking-wider transition ${
+                      canJumpToLive ? "text-neutral-500 hover:text-white cursor-pointer" : "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+                    }`}
                   >
-                    Back to Live
+                    <div className={`w-2 h-2 rounded-full ${canJumpToLive ? "bg-neutral-600" : "bg-white"}`} />
+                    Live
                   </button>
                 )}
 
-                <label className="inline-flex items-center gap-2">
-                  <span className="text-neutral-400">Quality</span>
-                  <select
-                    value={String(selectedQuality)}
-                    onChange={(e) => setSelectedQuality(Number(e.target.value))}
-                    className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-xs"
-                    disabled={playbackMode !== "hls"}
-                    title={qualityIndicator}
-                  >
-                    <option value="-1">Auto</option>
-                    {qualityOptions.map((q) => (
-                      <option key={q.value} value={q.value}>
-                        {q.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <button
+                  type="button"
+                  onClick={() => setLowLatencyEnabled((cur) => !cur)}
+                  disabled={playbackMode !== "hls"}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold tracking-wider transition ${
+                    lowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
+                  } disabled:opacity-50`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${lowLatencyEnabled ? "bg-white" : "bg-neutral-600"}`} />
+                  Low-Latency
+                </button>
 
-                {captionTrackList.length > 0 && <span className="font-mono text-neutral-400">Captions: {captionTrackList.length}</span>}
-                {auxMetaSlot ? <span className="ml-1 pl-2 border-l border-neutral-700">{auxMetaSlot}</span> : null}
+                <button
+                  type="button"
+                  onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                  className={`flex px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
+                    effectiveBackgroundPlayEnabled
+                      ? "bg-white/10 border-white/20 text-white"
+                      : "hover:bg-neutral-800 border-transparent text-neutral-400 hover:text-neutral-200"
+                  }`}
+                  title="Keep audio playing when the app is backgrounded"
+                >
+                  BG Audio {effectiveBackgroundPlayEnabled ? "On" : "Off"}
+                </button>
+
+                <select
+                  value={String(selectedQuality)}
+                  onChange={(e) => setSelectedQuality(Number(e.target.value))}
+                  className="bg-transparent hover:bg-neutral-800 border border-transparent hover:border-neutral-700 rounded-lg px-2 py-1 text-[11px] font-semibold text-neutral-300 cursor-pointer focus:outline-none transition-colors"
+                  disabled={playbackMode !== "hls"}
+                  title="Quality"
+                >
+                  <option className="bg-neutral-900" value="-1">Auto {qualityIndicator !== "Auto" && selectedQuality < 0 ? `(${qualityIndicator})` : ""}</option>
+                  {qualityOptions.map((q) => (
+                    <option className="bg-neutral-900" key={q.value} value={q.value}>
+                      {q.label}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => void togglePip()}
+                  disabled={!canTogglePip}
+                  className="px-2 py-1 rounded-lg hover:bg-neutral-800 transition disabled:opacity-50 text-[11px] font-semibold text-neutral-300"
+                  title="Picture in Picture"
+                >
+                  PiP
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void toggleFullscreen()}
+                  className="p-1.5 -mr-1 rounded-lg hover:bg-neutral-800 transition text-neutral-300 hover:text-white"
+                  title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                >
+                  {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                </button>
               </div>
             </div>
           </div>
@@ -1372,18 +1447,18 @@ export function Player({
 
         {showTapForSound && unmuteHintPhase !== "hidden" && (
           <div
-            className={`pointer-events-none absolute right-4 bottom-4 z-10 inline-flex items-center gap-2 rounded-full border border-neutral-500/40 bg-neutral-800/45 px-3 py-1.5 text-xs text-neutral-100 shadow-sm backdrop-blur-md transition-opacity duration-500 ${
+            className={`pointer-events-none absolute inset-0 m-auto w-fit h-fit z-10 inline-flex flex-col items-center justify-center gap-3 rounded-2xl border border-neutral-500/40 bg-neutral-800/70 p-6 text-sm font-semibold text-neutral-100 shadow-2xl backdrop-blur-md transition-opacity duration-500 ${
               unmuteHintPhase === "fading" ? "opacity-0" : "opacity-100"
             }`}
           >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700/40 text-neutral-100/90">
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-neutral-700/60 text-white shadow-inner">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 ml-0.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M11 5 6 9H3v6h3l5 4V5Z" />
                 <path d="m17 9 4 6" />
                 <path d="m21 9-4 6" />
               </svg>
             </span>
-            <span>click to unmute</span>
+            <span className="tracking-wide">Tap to play sound</span>
           </div>
         )}
 

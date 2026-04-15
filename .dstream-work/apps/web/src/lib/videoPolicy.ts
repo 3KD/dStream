@@ -40,19 +40,13 @@ export function resolveVideoPolicy(stream: StreamAnnounce): StreamVideoPolicy {
 }
 
 export function isReplayEligibleStream(stream: StreamAnnounce): boolean {
-  const streaming = (stream.streaming ?? "").trim();
   if (stream.status !== "ended") return false;
-  if (stream.videoArchiveEnabled !== true) return false;
   if (stream.videoVisibility === "private") return false;
-  if (!isLikelyPublicPlayableMediaUrl(streaming)) return false;
-  if (isLikelyLivePlaybackUrl(streaming)) return false;
+  
+  const policy = resolveVideoPolicy(stream);
+  if (policy.mode === "off") return false;
 
-  const mode = resolveVideoPolicy(stream).mode;
-  const explicitVideoPolicy = !!stream.video?.mode && stream.video.mode !== "off";
-  const hasVideoUrlSignal = isLikelyVideoPlaybackUrl(streaming);
-  if (!explicitVideoPolicy && !hasVideoUrlSignal) return false;
-  if (!hasVideoUrlSignal && streaming.toLowerCase().endsWith(".m3u8")) return false;
-  return mode === "public" || mode === "paid";
+  return true;
 }
 
 export function videoModeLabel(policy: StreamVideoPolicy): string {

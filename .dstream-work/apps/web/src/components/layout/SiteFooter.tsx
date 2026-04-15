@@ -90,6 +90,8 @@ export function SiteFooter() {
             <div className="space-y-1.5 mt-2 rounded-lg border border-neutral-800/60 bg-neutral-900/30 p-2">
               {supportXmrAddress && <SupportAddressCopyChip label="XMR" address={supportXmrAddress} ariaLabel="Copy Monero support address" />}
               {supportBtcAddress && <SupportAddressCopyChip label="BTC" address={supportBtcAddress} ariaLabel="Copy Bitcoin support address" />}
+              {supportEthAddress && <SupportAddressCopyChip label="ETH" address={supportEthAddress} ariaLabel="Copy Ethereum support address" />}
+              {supportTrxAddress && <SupportAddressCopyChip label="TRX" address={supportTrxAddress} ariaLabel="Copy Tron support address" />}
               <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-800">Support addresses</div>
             </div>
             <div className="text-[11px] text-neutral-500 pt-1">Wallet setup: Settings → Wallet Integrations</div>
@@ -104,7 +106,7 @@ export function SiteFooter() {
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider border border-purple-500/30 mb-2">
                   <Terminal className="w-3 h-3" /> Node Runner
                 </div>
-                <h3 className="text-lg font-bold text-white leading-tight">Decentralize Your Stream</h3>
+                <h3 className="text-lg font-bold text-white leading-tight">&gt;_ Run your own decentralized dStream node!</h3>
                 <p className="text-xs text-neutral-300 leading-relaxed">
                   dStream is unstoppable when users spin up their own localized Nodes. Download the pre-compiled architecture directly to your environment.
                 </p>

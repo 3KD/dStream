@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Flag, Star, X } from "lucide-react";
 import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
-import { Player } from "@/components/Player";
+import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
@@ -14,6 +14,7 @@ import { useStreamIntegrity } from "@/hooks/useStreamIntegrity";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
 import { usePublishPresence } from "@/hooks/usePublishPresence";
 import { useStreamZaps } from "@/hooks/useStreamZaps";
+import { useNostrProfile } from "@/hooks/useNostrProfiles";
 import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
@@ -110,6 +111,46 @@ function detectWatchLayoutMode(): WatchLayoutMode {
   return isLandscape ? "landscape" : "portrait";
 }
 
+
+function P2PStatsPanel({ stats }: { stats: P2PSwarmStats | null }) {
+  if (!stats) return null;
+  const toMB = (b: number) => (b / (1024 * 1024)).toFixed(2) + " MB";
+  return (
+    <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-4 overflow-hidden relative">
+      <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+        <Network className="w-24 h-24" />
+      </div>
+      <div className="mb-4 flex items-center justify-between relative z-10">
+         <h3 className="text-sm font-bold text-neutral-200 uppercase tracking-widest flex items-center gap-2">
+            <Network className="w-4 h-4 text-emerald-400" />
+            P2P Swarm Telemetry
+         </h3>
+         <div className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+            Active
+         </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
+        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
+          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Share2 className="w-3 h-3" /> Connect peers</div>
+          <div className="font-mono text-white text-lg">{stats.peersConnected} <span className="text-neutral-600 text-sm">/ {stats.peersDesired}</span></div>
+        </div>
+        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
+          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Download className="w-3 h-3 text-emerald-500" /> Bandwidth Saved</div>
+          <div className="font-mono text-emerald-400 text-lg">{toMB(stats.bytesFromPeers)}</div>
+        </div>
+        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
+          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Upload className="w-3 h-3 text-blue-500" /> Uploaded to Swarm</div>
+          <div className="font-mono text-blue-400 text-lg">{toMB(stats.bytesToPeers)}</div>
+        </div>
+        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
+          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Database className="w-3 h-3 text-purple-500" /> Segment Cache</div>
+          <div className="font-mono text-purple-400 text-lg">{toMB(stats.cacheBytes)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WatchPage() {
   const routeParams = useParams<Record<string, string | string[]>>();
   const pubkeyParamRaw = routeParams?.pubkey;
@@ -147,6 +188,7 @@ export default function WatchPage() {
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
 
   const { announce, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
+  const hostProfile = useNostrProfile(pubkey);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
   const { count: zapCount, totalSats: zapTotalSats, isConnected: zapsConnected } = useStreamZaps({
@@ -368,7 +410,9 @@ export default function WatchPage() {
     return () => clearInterval(interval);
   }, [p2pAllowed, p2pEnabled, p2pSwarm]);
 
-  const fallbackUrl = originStreamId ? `/api/hls/${originStreamId}/index.m3u8` : `/api/hls/${streamId}/index.m3u8`;
+  const isEnded = announce?.status === "ended";
+  const streamPath = isEnded ? "/api/video/file" : "/api/hls";
+  const fallbackUrl = originStreamId ? `${streamPath}/${originStreamId}/index.m3u8` : `${streamPath}/${streamId}/index.m3u8`;
   const renditionHints = useMemo(() => {
     return (announce?.renditions ?? [])
       .map((rendition) => ({
@@ -451,6 +495,10 @@ export default function WatchPage() {
     if (!pubkey || !streamId) return;
     const nextUrl = playbackStreamUrl.trim();
     if (!nextUrl || !isLikelyPlayableMediaUrl(nextUrl)) return;
+    
+    // Prevent the broadcaster's own screen from queueing into the global mini-player
+    if (identity?.pubkey === pubkey) return;
+
     setQuickPlayStream({
       streamPubkey: pubkey,
       streamId,
@@ -458,7 +506,7 @@ export default function WatchPage() {
       hlsUrl: nextUrl,
       whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
     });
-  }, [announce?.title, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, identity?.pubkey, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -580,8 +628,24 @@ export default function WatchPage() {
       }
     }
 
+    if (hostProfile?.profile) {
+      const lud16 = hostProfile.profile.lud16?.trim();
+      const lud06 = hostProfile.profile.lud06?.trim();
+      if (lud16) {
+        const key = `btc:lightning:${lud16.toLowerCase()}`;
+        if (!dedup.has(key)) {
+          dedup.set(key, { asset: "btc", network: "lightning", address: lud16, label: "Lightning (NIP-57)" });
+        }
+      } else if (lud06) {
+        const key = `btc:lightning:${lud06.toLowerCase()}`;
+        if (!dedup.has(key)) {
+          dedup.set(key, { asset: "btc", network: "lightning", address: lud06, label: "Lightning (NIP-57)" });
+        }
+      }
+    }
+
     return Array.from(dedup.values()).sort((a, b) => comparePaymentAssetOrder(a.asset, b.asset));
-  }, [announce?.payments, announce?.xmr]);
+  }, [announce?.payments, announce?.xmr, hostProfile?.profile]);
 
   const nonMoneroPaymentMethods = useMemo(
     () => paymentMethods.filter((method) => method.asset !== "xmr"),
@@ -1563,25 +1627,7 @@ export default function WatchPage() {
           </div>
         )}
 
-        {showP2PPanel && desktopWatchLayout && (
-          <div className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="text-sm text-neutral-200">
-              <span className="text-neutral-400">P2P</span>{" "}
-              <span className="font-mono">
-                {p2pStats?.peersConnected ?? 0} peers / {Math.round((p2pStats?.cacheBytes ?? 0) / 1024)} KiB cache
-              </span>
-              <span className="ml-2 text-xs text-neutral-500 font-mono">
-                hit-rate {p2pHitRatePct === null ? "n/a" : `${p2pHitRatePct}%`} · contribution{" "}
-                {p2pContributionPct === null ? "n/a" : `${p2pContributionPct}%`}
-              </span>
-            </div>
-            <div className="text-xs text-neutral-400 font-mono">
-              in: {Math.round((p2pStats?.bytesFromPeers ?? 0) / 1024)} KiB · out:{" "}
-              {Math.round((p2pStats?.bytesToPeers ?? 0) / 1024)} KiB · hits: {p2pStats?.hitsFromPeers ?? 0}/
-              {p2pStats?.requestsToPeers ?? 0}
-            </div>
-          </div>
-        )}
+
 
         <div
           data-testid="watch-layout-grid"
@@ -1706,20 +1752,24 @@ export default function WatchPage() {
                 }`}
               >
                 {streamUrl ? (
-                  <Player
-                    src={playbackStreamUrl}
-                    fallbackSrc={announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null}
-                    whepSrc={whepSrc}
-                    p2pSwarm={p2pSwarm}
-                    integrity={integritySession}
-                    isLiveStream={announce?.status !== "ended"}
-                    showNativeControls={false}
-                    captionTracks={captionTracks}
-                    autoplayMuted={e2e ? true : social.settings.playbackAutoplayMuted}
-                    layoutMode={mobilePortraitLayout ? "aspect" : "fill"}
-                    overlayTitle={announce?.title ?? "Live Stream"}
-                    auxMetaSlot={
-                      pubkey ? (
+                  <>
+                    <GlobalPlayerSlot
+                    id="watch-page"
+                    playerProps={{
+                      src: playbackStreamUrl,
+                      fallbackSrc: announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null,
+                      whepSrc: whepSrc,
+                      p2pSwarm: p2pSwarm,
+                      integrity: integritySession,
+                      isLiveStream: announce?.status !== "ended",
+                      showNativeControls: false,
+                      captionTracks: captionTracks,
+                      viewerCount: viewerCount,
+                      p2pPeers: p2pStats?.peersConnected,
+                      autoplayMuted: e2e ? true : social.settings.playbackAutoplayMuted,
+                      layoutMode: mobilePortraitLayout ? "aspect" : "fill",
+                      overlayTitle: announce?.title ?? "Live Stream",
+                      auxMetaSlot: pubkey ? (
                         <button
                           type="button"
                           onClick={() => social.toggleFavoriteStream(pubkey, streamId)}
@@ -1733,14 +1783,16 @@ export default function WatchPage() {
                             }`}
                           />
                         </button>
-                      ) : null
-                    }
-                    onReady={() => {
-                      if (!e2e || e2eSentRef.current.player) return;
-                      e2eSentRef.current.player = true;
-                      postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
+                      ) : null,
+                      onReady: () => {
+                        if (!e2e || e2eSentRef.current.player) return;
+                        e2eSentRef.current.player = true;
+                        postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
+                      }
                     }}
                   />
+                    {p2pStats && <P2PStatsPanel stats={p2pStats} />}
+                  </>
                 ) : (
                   <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 flex items-center justify-center px-6 text-center text-sm text-neutral-400">
                     {announceLoading ? "Resolving stream source…" : "Unable to resolve a playable stream source."}
@@ -1750,11 +1802,8 @@ export default function WatchPage() {
             )}
 
             {mobilePortraitLayout && (
-              <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex flex-col flex-1">
-                <div 
-                  className="flex-1 flex flex-col min-h-[20rem]" 
-                  style={{ height: `calc(100dvh - clamp(14.75rem, calc(32vh + 0.75rem), 22.75rem) - max(0px, 4rem - ${scrollY}px))` }}
-                >
+              <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex flex-col w-full h-[calc(100svh-clamp(15rem,35vh,24rem))] min-h-[30rem]">
+                <div className="flex-1 flex flex-col h-full">
                   {chatBox}
                 </div>
               </div>

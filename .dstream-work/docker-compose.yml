@@ -68,6 +68,8 @@ services:
   xmr-wallet-init:
     build:
       context: ./infra/xmr-wallet
+    environment:
+      DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
     entrypoint: ["sh", "-c"]
     command: 
       - |
@@ -138,7 +140,7 @@ services:
       hls-init:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:1940:1935" # RTMP ingest (optional)
+      - "1940:1935" # RTMP ingest (optional)
       - "127.0.0.1:8888:8880" # HLS/HTTP output
       - "127.0.0.1:8889:8889" # WebRTC/WHIP
       - "127.0.0.1:9990:9990" # API

@@ -8,6 +8,19 @@ export interface NostrProfile {
   banner?: string;
   website?: string;
   nip05?: string;
+  lud16?: string;
+  lud06?: string;
+  btc?: string;
+  eth?: string;
+  trx?: string;
+  xmr?: string;
+  sol?: string;
+  ada?: string;
+  doge?: string;
+  ltc?: string;
+  ton?: string;
+  xrp?: string;
+  dot?: string;
 }
 
 export interface NostrProfileRecord {
@@ -54,7 +67,20 @@ export function parseProfileContent(contentRaw: string): NostrProfile {
     picture: normalizeUrl(content.picture),
     banner: normalizeUrl(content.banner),
     website: normalizeUrl(content.website),
-    nip05: normalizeNip05(content.nip05)
+    nip05: normalizeNip05(content.nip05),
+    lud16: normalizeNip05(content.lud16),
+    lud06: normalizeText(content.lud06, 256),
+    btc: normalizeText(content.btc, 128),
+    eth: normalizeText(content.eth, 128),
+    trx: normalizeText(content.trx, 128),
+    xmr: normalizeText(content.xmr, 128),
+    sol: normalizeText(content.sol, 128),
+    ada: normalizeText(content.ada, 128),
+    doge: normalizeText(content.doge, 128),
+    ltc: normalizeText(content.ltc, 128),
+    ton: normalizeText(content.ton, 128),
+    xrp: normalizeText(content.xrp, 128),
+    dot: normalizeText(content.dot, 128)
   };
 }
 
@@ -79,6 +105,37 @@ export function serializeProfileContent(profile: NostrProfile): string {
     const nip05 = normalizeNip05(profile.nip05);
     if (nip05) normalized.nip05 = nip05;
   }
+  if (profile.lud16) {
+    const lud16 = normalizeNip05(profile.lud16);
+    if (lud16) normalized.lud16 = lud16;
+  }
+  if (profile.lud06) {
+    const lud06 = normalizeText(profile.lud06, 256);
+    if (lud06) normalized.lud06 = lud06;
+  }
+  if (profile.btc) {
+    const btc = normalizeText(profile.btc, 128);
+    if (btc) normalized.btc = btc;
+  }
+  if (profile.eth) {
+    const eth = normalizeText(profile.eth, 128);
+    if (eth) normalized.eth = eth;
+  }
+  if (profile.trx) {
+    const trx = normalizeText(profile.trx, 128);
+    if (trx) normalized.trx = trx;
+  }
+  if (profile.xmr) {
+    const xmr = normalizeText(profile.xmr, 128);
+    if (xmr) normalized.xmr = xmr;
+  }
+  if (profile.sol) { const sol = normalizeText(profile.sol, 128); if (sol) normalized.sol = sol; }
+  if (profile.ada) { const ada = normalizeText(profile.ada, 128); if (ada) normalized.ada = ada; }
+  if (profile.doge) { const doge = normalizeText(profile.doge, 128); if (doge) normalized.doge = doge; }
+  if (profile.ltc) { const ltc = normalizeText(profile.ltc, 128); if (ltc) normalized.ltc = ltc; }
+  if (profile.ton) { const ton = normalizeText(profile.ton, 128); if (ton) normalized.ton = ton; }
+  if (profile.xrp) { const xrp = normalizeText(profile.xrp, 128); if (xrp) normalized.xrp = xrp; }
+  if (profile.dot) { const dot = normalizeText(profile.dot, 128); if (dot) normalized.dot = dot; }
   return JSON.stringify(normalized);
 }
 

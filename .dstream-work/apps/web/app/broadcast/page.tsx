@@ -254,6 +254,7 @@ export default function BroadcastPage() {
   const [captureResolution, setCaptureResolution] = useState<CaptureResolutionPreset>("source");
   const [bitratePreset, setBitratePreset] = useState<"custom" | "low" | "medium" | "high">("low");
   const [includeAudio, setIncludeAudio] = useState(true);
+  const [includeSystemAudio, setIncludeSystemAudio] = useState(false);
   const [videoMaxBitrateKbps, setVideoMaxBitrateKbps] = useState(String(DEFAULT_BROADCAST_MAX_BITRATE_KBPS));
   const [videoMaxFps, setVideoMaxFps] = useState("");
   const [autoReconnectEnabled, setAutoReconnectEnabled] = useState(true);
@@ -265,6 +266,7 @@ export default function BroadcastPage() {
   const [chatClearRequestState, setChatClearRequestState] = useState<"idle" | "pending" | "ok" | "error">("idle");
   const [discoverable, setDiscoverable] = useState(true);
   const [matureContent, setMatureContent] = useState(false);
+  const [contentWarningReason, setContentWarningReason] = useState("");
 
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [status, setStatus] = useState<"idle" | "preview" | "connecting" | "live" | "error">("idle");
@@ -363,6 +365,23 @@ export default function BroadcastPage() {
       // ignore
     }
   }, [includeAudio]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("dstream_broadcast_include_system_audio_v1");
+      if (raw === "1") setIncludeSystemAudio(true);
+      else if (raw === "0") setIncludeSystemAudio(false);
+    } catch {
+      // ignore
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("dstream_broadcast_include_system_audio_v1", includeSystemAudio ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [includeSystemAudio]);
 
   useEffect(() => {
     if (chatClearRequestState !== "ok" && chatClearRequestState !== "error") return;
@@ -511,6 +530,7 @@ export default function BroadcastPage() {
       if (typeof parsed.discoverable === "boolean") setDiscoverable(parsed.discoverable);
       else setDiscoverable(true);
       if (typeof parsed.matureContent === "boolean") setMatureContent(parsed.matureContent);
+      if (typeof parsed.contentWarningReason === "string") setContentWarningReason(parsed.contentWarningReason);
       else setMatureContent(false);
     } catch {
       setStreamId(requestedStreamId ?? safeDefaultStreamId(identity?.pubkey ?? null));
@@ -681,22 +701,12 @@ export default function BroadcastPage() {
   }, [identity, streamId]);
 
   useEffect(() => {
+    // Prevent the broadcaster's own screen from triggering the global QuickPlay widget,
+    // but ensure any lingering global streams are cleared to avoid overlapping audio.
     if (!identity || !originStreamId) return;
     const ownerPubkey = identity.pubkey.toLowerCase();
-    if (status === "live") {
-      setQuickPlayStream({
-        streamPubkey: ownerPubkey,
-        streamId,
-        title: title.trim() || "Untitled Stream",
-        hlsUrl: `/api/hls/${encodeURIComponent(originStreamId)}/index.m3u8`,
-        whepUrl: `/api/whep/${encodeURIComponent(originStreamId)}/whep`
-      });
-      return;
-    }
-    if (status === "idle" || status === "error") {
-      if (quickPlayStream?.streamPubkey === ownerPubkey && quickPlayStream.streamId === streamId) {
-        clearQuickPlayStream();
-      }
+    if (quickPlayStream?.streamPubkey === ownerPubkey && quickPlayStream.streamId === streamId) {
+      clearQuickPlayStream();
     }
   }, [
     clearQuickPlayStream,
@@ -704,10 +714,7 @@ export default function BroadcastPage() {
     originStreamId,
     quickPlayStream?.streamId,
     quickPlayStream?.streamPubkey,
-    setQuickPlayStream,
-    status,
-    streamId,
-    title
+    streamId
   ]);
 
   const autoLadderRenditionPreview = useMemo(() => {
@@ -1131,7 +1138,10 @@ export default function BroadcastPage() {
         const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
         if (!getDisplayMedia) throw new Error("Screen share is not supported in this browser.");
 
-        stream = await getDisplayMedia.call(navigator.mediaDevices, { video: true, audio: false } as any);
+        stream = await getDisplayMedia.call(navigator.mediaDevices, { 
+          video: true, 
+          audio: includeSystemAudio ? { systemAudio: 'include' } as any : false 
+        } as any);
         await applyResolutionConstraints(stream.getVideoTracks()[0]);
         if (videoMaxFpsParsed) {
           const screenTrack = stream.getVideoTracks()[0];
@@ -1146,13 +1156,41 @@ export default function BroadcastPage() {
           }
         }
 
+        let micAudioTrack: MediaStreamTrack | null = null;
         if (includeAudio) {
           if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone capture is not supported in this browser.");
           const mic = await navigator.mediaDevices.getUserMedia({
             video: false,
             audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true
           });
-          mic.getAudioTracks().forEach((t) => stream.addTrack(t));
+          micAudioTrack = mic.getAudioTracks()[0] ?? null;
+        }
+
+        const systemAudioTrack = stream.getAudioTracks()[0] ?? null;
+        
+        if (micAudioTrack && systemAudioTrack) {
+          try {
+            const audioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+            const audioContext = new audioCtxClass();
+            const dest = audioContext.createMediaStreamDestination();
+            
+            const micNode = audioContext.createMediaStreamSource(new MediaStream([micAudioTrack]));
+            micNode.connect(dest);
+            
+            const sysNode = audioContext.createMediaStreamSource(new MediaStream([systemAudioTrack]));
+            sysNode.connect(dest);
+            
+            const mixedTrack = dest.stream.getAudioTracks()[0];
+            if (mixedTrack) {
+              stream.removeTrack(systemAudioTrack);
+              stream.addTrack(mixedTrack);
+            }
+          } catch (e) {
+             console.warn("Failed to compose audio context", e);
+             stream.addTrack(micAudioTrack); // Fallback to raw tracks
+          }
+        } else if (micAudioTrack) {
+          stream.addTrack(micAudioTrack);
         }
       } else if (mode === "camera") {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access is not supported in this browser.");
@@ -1172,7 +1210,10 @@ export default function BroadcastPage() {
         if (!getDisplayMedia) throw new Error("Screen share is not supported in this browser.");
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access is not supported in this browser.");
 
-        const screenStream = await getDisplayMedia.call(navigator.mediaDevices, { video: true, audio: false } as any);
+        const screenStream = await getDisplayMedia.call(navigator.mediaDevices, { 
+          video: true, 
+          audio: includeSystemAudio ? { systemAudio: 'include' } as any : false 
+        } as any);
         await applyResolutionConstraints(screenStream.getVideoTracks()[0]);
 
         const cameraVideoConstraints: MediaTrackConstraints = { width: { ideal: 640 }, height: { ideal: 360 } };
@@ -1223,7 +1264,31 @@ export default function BroadcastPage() {
 
         const composed = canvas.captureStream(videoMaxFpsParsed ?? 30);
         const micTrack = cameraStream.getAudioTracks()[0] ?? null;
-        if (micTrack) composed.addTrack(micTrack);
+        const systemAudioTrack = screenStream.getAudioTracks()[0] ?? null;
+        
+        if (micTrack && systemAudioTrack) {
+          try {
+            const audioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+            const audioContext = new audioCtxClass();
+            const dest = audioContext.createMediaStreamDestination();
+            
+            const micNode = audioContext.createMediaStreamSource(new MediaStream([micTrack]));
+            micNode.connect(dest);
+            
+            const sysNode = audioContext.createMediaStreamSource(new MediaStream([systemAudioTrack]));
+            sysNode.connect(dest);
+            
+            const mixedTrack = dest.stream.getAudioTracks()[0];
+            if (mixedTrack) composed.addTrack(mixedTrack);
+          } catch (e) {
+             console.warn("Failed to compose audio context", e);
+             composed.addTrack(micTrack);
+          }
+        } else if (micTrack) {
+          composed.addTrack(micTrack);
+        } else if (systemAudioTrack) {
+          composed.addTrack(systemAudioTrack);
+        }
 
         previewResourceCleanupRef.current = () => {
           if (rafId) cancelAnimationFrame(rafId);
@@ -1328,6 +1393,7 @@ export default function BroadcastPage() {
       streamChatFollowerOnly: chatFollowerOnly,
       discoverable,
       matureContent,
+      contentWarningReason,
       viewerAllowPubkeys,
       videoArchiveEnabled,
       videoVisibility,
@@ -1635,7 +1701,8 @@ export default function BroadcastPage() {
     } catch {
       // ignore
     }
-    setStatus("preview");
+    stopPreview();
+    setStatus("idle");
     clearStoredSession();
     if (identity) {
       try {
@@ -1880,6 +1947,16 @@ export default function BroadcastPage() {
                         disabled={status === "connecting" || status === "live"}
                       />
                       Include microphone
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-neutral-300 select-none cursor-pointer whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={includeSystemAudio}
+                        onChange={(e) => setIncludeSystemAudio(e.target.checked)}
+                        className="accent-blue-500"
+                        disabled={status === "connecting" || status === "live"}
+                      />
+                      Include system audio
                     </label>
                   </div>
                 </div>
@@ -2600,7 +2677,7 @@ export default function BroadcastPage() {
                     </label>
                   </div>
 
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3">
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-4 py-3 space-y-3">
                     <label className="flex items-start gap-3 text-sm text-neutral-300 select-none cursor-pointer">
                       <input
                         type="checkbox"
@@ -2610,12 +2687,27 @@ export default function BroadcastPage() {
                         disabled={status === "connecting"}
                       />
                       <span className="space-y-1">
-                        <span className="font-medium text-neutral-200">Mark stream as mature content</span>
+                        <span className="font-medium text-neutral-200 flex items-center gap-2">
+                          Explicit Content Warning <span className="bg-red-950/40 border border-red-900/50 text-red-500 text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase track-wider">NIP-36</span>
+                        </span>
                         <span className="block text-xs text-neutral-500">
-                          Adds a mature-content label in stream metadata. Viewers can filter these streams in discovery.
+                          Enforces a formal 18+ content warning block over your stream. Viewers must explicitly accept the warning to watch.
                         </span>
                       </span>
                     </label>
+                    {matureContent && (
+                      <div className="pl-6 pt-1">
+                        <input
+                          type="text"
+                          value={contentWarningReason}
+                          onChange={(e) => setContentWarningReason(e.target.value)}
+                          placeholder="e.g. Graphic Violence, Nudity (Optional)"
+                          maxLength={50}
+                          className="w-full bg-black/50 border border-neutral-800 rounded-lg px-3 py-1.5 text-sm text-neutral-300 focus:outline-none focus:border-red-900/50 transition-colors"
+                          disabled={status === "connecting"}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">

@@ -3,6 +3,8 @@ const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://relay.damus.io",
   "wss://nos.lol",
   "wss://relay.primal.net",
+  "wss://nostr.wine",
+  "wss://relay.nostr.band",
   "wss://relay.snort.social",
   "wss://nostr.mom",
   "wss://offchain.pub",
@@ -62,7 +64,14 @@ export function parseRelayList(raw: string | null | undefined): string[] {
 function getRelayOverrideFromStorage(): string[] {
   if (typeof window === "undefined") return [];
   try {
-    return parseRelayList(window.localStorage.getItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY));
+    const rawIds = window.localStorage.getItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY);
+    if (!rawIds) return [];
+    const relayList = parseRelayList(rawIds);
+    const cleansed = relayList.filter((r) => !r.includes("localhost") && !r.includes("127.0.0.1"));
+    if (cleansed.length !== relayList.length) {
+      window.localStorage.setItem(NOSTR_RELAY_OVERRIDE_STORAGE_KEY, JSON.stringify(cleansed));
+    }
+    return cleansed;
   } catch {
     return [];
   }

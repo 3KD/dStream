@@ -1,5 +1,7 @@
 "use client";
 
+import { Users } from "lucide-react";
+
 import { useEffect, useRef } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useStreamChat } from "@/hooks/useStreamChat";
@@ -15,7 +17,7 @@ import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
-import { TipDialog } from "@/components/monero/TipDialog";
+import { UnifiedTipDialog as TipDialog } from "./UnifiedTipDialog";
 import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
 
 interface ChatReportTarget {
@@ -80,6 +82,7 @@ export function ChatBox({
   });
 
   const selfProfile = useNostrProfile(identity?.pubkey ?? null);
+  const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(new Set());
   const isOwner = !!(identity && identity.pubkey === streamPubkey);
   const viewerPubkey = identity?.pubkey?.toLowerCase() ?? null;
   const isViewerModerator = !!(viewerPubkey && moderation.moderators.has(viewerPubkey));
@@ -111,12 +114,13 @@ export function ChatBox({
       messages.filter(
         (message) =>
           message.createdAt > effectiveChatClearedAt &&
+          !hiddenMessageIds.has(message.id as string) &&
           !social.isMuted(message.pubkey) &&
           !social.isBlocked(message.pubkey) &&
           !moderation.remoteMuted.has(message.pubkey) &&
           !moderation.remoteBlocked.has(message.pubkey)
       ),
-    [effectiveChatClearedAt, messages, moderation.remoteBlocked, moderation.remoteMuted, social]
+    [effectiveChatClearedAt, hiddenMessageIds, messages, moderation.remoteBlocked, moderation.remoteMuted, social]
   );
 
   const hiddenCount = messages.length - visibleMessages.length;
@@ -280,13 +284,18 @@ export function ChatBox({
           },
           reporterProofEvent: proof
         });
-        setReportTarget(null);
-        setReportNotice("Report submitted. Operators can review it in Moderation.");
-        setTimeout(() => {
-          setReportNotice((current) => (current === "Report submitted. Operators can review it in Moderation." ? null : current));
-        }, 3500);
+        
+        if (reportTarget.type === "message" && reportTarget.targetMessageId) {
+            setHiddenMessageIds(prev => {
+                const next = new Set(prev);
+                next.add(reportTarget.targetMessageId as string);
+                return next;
+            });
+        }
+        
       } catch (error: any) {
         setReportError(error?.message ?? "Failed to submit report.");
+        throw error;
       } finally {
         setReportBusy(false);
       }
@@ -423,7 +432,10 @@ export function ChatBox({
           <span className="font-medium text-sm">Chat</span>
           {isConnected && <span className="w-2 h-2 bg-green-500 rounded-full" title="Connected" />}
           {normalizedViewerCount > 0 ? (
-            <span className="text-[11px] font-mono text-neutral-400">≈ {normalizedViewerCount}</span>
+            <span className="flex items-center gap-1.5 text-[11px] font-mono text-neutral-400">
+              <Users className="w-3.5 h-3.5" />
+              {normalizedViewerCount}
+            </span>
           ) : null}
           {!isConnected && moderation.isLoading && <span className="text-[10px] text-neutral-500">syncing moderation…</span>}
         </div>
@@ -432,9 +444,9 @@ export function ChatBox({
             type="button"
             onClick={() => setTipDialogOpen(true)}
             className="flex items-center justify-center gap-1.5 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 hover:text-orange-400 text-neutral-300 rounded-lg text-xs font-bold transition-all"
-            title="Drop a Tip (XMR Zap)"
+            title="Support Creator (Lightning/XMR)"
           >
-            <span className="text-orange-500 text-sm leading-none pt-0.5">M</span> Drop Tip
+            <span className="text-yellow-500 text-sm leading-none pt-0.5">⚡</span> Support / Tip
           </button>
           <span className="text-xs text-neutral-500 hidden sm:inline-block">
             {visibleMessages.length} msgs{hiddenCount > 0 ? ` (+${hiddenCount} hidden)` : ""}

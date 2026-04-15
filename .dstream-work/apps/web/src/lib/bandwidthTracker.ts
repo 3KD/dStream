@@ -1,4 +1,4 @@
-export const BANDWIDTH_LIMIT_BYTES = 10 * 1024 * 1024; // 10 MB
+export const BANDWIDTH_LIMIT_BYTES = 500 * 1024 * 1024; // 500 MB
 
 interface GlobalWithTracker {
   ipBandwidthCache?: Map<string, number>;

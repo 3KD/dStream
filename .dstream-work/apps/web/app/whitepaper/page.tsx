@@ -24,9 +24,7 @@ export default function WhitepaperPage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-bold">Abstract</h2>
             <p className="text-neutral-300 leading-relaxed">
-              dStream is a decentralized live-streaming protocol in which identity and coordination are relay-native (Nostr), media
-              transport is replaceable (WHIP/WHEP/HLS), and payment rails remain user-owned (wallet-driven). The protocol separates
-              coordination from transport so creators keep portable identity and audience continuity across infrastructure changes.
+              dStream is a decentralized live-streaming protocol built on the Nostr network, ensuring creators can broadcast without fear of censorship or deplatforming. It leverages peer-to-peer (P2P) scaling, allowing viewers to contribute bandwidth to boost overall stream fidelity and performance. Free from corporate gatekeepers, dStream guarantees completely decentralized monetization—there is no middlemanning, and creators retain absolute ownership over their payouts, wallets, and community communications.
             </p>
           </section>
 

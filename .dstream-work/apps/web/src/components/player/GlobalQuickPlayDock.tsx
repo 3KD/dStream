@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X } from "lucide-react";
-import { Player } from "@/components/Player";
+import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause } from "lucide-react";
+import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
@@ -143,6 +143,12 @@ export function GlobalQuickPlayDock() {
   const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"idle" | "drag" | "resize">("idle");
   const [touchDevice, setTouchDevice] = useState(false);
+
+  // Timeline tracking
+  const [timelinePosition, setTimelinePosition] = useState(0);
+  const [timelineDuration, setTimelineDuration] = useState(0);
+  const [isAtLiveEdge, setIsAtLiveEdge] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const resizeRef = useRef<{
@@ -307,8 +313,8 @@ export function GlobalQuickPlayDock() {
       videoRef.current = found;
 
       try {
-        found.volume = clampVolume(volume);
-        found.muted = muted || clampVolume(volume) === 0;
+        setVolume(found.muted ? 0 : found.volume);
+        setMuted(found.muted || found.volume === 0);
       } catch {
         // ignore
       }
@@ -329,10 +335,46 @@ export function GlobalQuickPlayDock() {
         setPipActive(webkitMode === "picture-in-picture");
       };
 
+      const onTimeUpdate = () => {
+        try {
+          const ct = found.currentTime;
+          let newPos = ct;
+          let dur = 0;
+          let isLiveEdge = false;
+          
+          if (found.seekable.length > 0) {
+            const end = found.seekable.end(found.seekable.length - 1);
+            if (!Number.isNaN(end) && Number.isFinite(end)) {
+               dur = end;
+               const liveLag = Math.max(0, end - ct);
+               if (liveLag <= 12.0) {
+                   isLiveEdge = true;
+                   newPos = dur;
+               }
+            }
+          }
+          
+          if (found.duration && Number.isFinite(found.duration) && found.duration > dur) {
+            dur = found.duration;
+          }
+          
+          setIsAtLiveEdge(isLiveEdge);
+          setTimelinePosition(newPos);
+          setTimelineDuration(dur);
+        } catch { }
+      };
+
+      const onPlayState = () => setIsPlaying(!found.paused);
+      setIsPlaying(!found.paused);
+
       found.addEventListener("volumechange", onVolumeChange);
       found.addEventListener("enterpictureinpicture", onEnterPip as any);
       found.addEventListener("leavepictureinpicture", onLeavePip as any);
       found.addEventListener("webkitpresentationmodechanged", onWebkitPip as any);
+      found.addEventListener("timeupdate", onTimeUpdate);
+      found.addEventListener("progress", onTimeUpdate);
+      found.addEventListener("play", onPlayState);
+      found.addEventListener("pause", onPlayState);
 
       if (
         (document as Document & { pictureInPictureElement?: Element }).pictureInPictureElement === found ||
@@ -595,6 +637,26 @@ export function GlobalQuickPlayDock() {
     if (volume === 0) setVolume(0.7);
   }, [volume]);
 
+  const handleSeek = useCallback((next: number) => {
+    if (videoRef.current) {
+       videoRef.current.currentTime = next;
+    }
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    if (videoRef.current) {
+      if (videoRef.current.paused) videoRef.current.play();
+      else videoRef.current.pause();
+    }
+  }, []);
+
+  const jumpToLive = useCallback(() => {
+    if (videoRef.current && videoRef.current.seekable.length > 0) {
+      const end = videoRef.current.seekable.end(videoRef.current.seekable.length - 1);
+      videoRef.current.currentTime = end;
+    }
+  }, []);
+
   const handleTogglePip = useCallback(async () => {
     const video = videoRef.current as PipCapableVideo | null;
     if (!video) return;
@@ -635,16 +697,19 @@ export function GlobalQuickPlayDock() {
       aria-label="Floating mini player"
     >
       <div ref={playerHostRef} className="h-full relative pointer-events-none select-none">
-        <Player
-          src={hlsSrc}
-          whepSrc={whepSrc}
-          autoplayMuted={false}
-          backgroundPlayEnabledOverride={backgroundPlayEnabled}
-          isLiveStream
-          showTimelineControls={false}
-          showAuxControls={false}
-          showNativeControls={false}
-          playbackStateKey={playbackStateKey}
+        <GlobalPlayerSlot
+          id="quickplay-dock"
+          playerProps={{
+            src: hlsSrc,
+            whepSrc,
+            autoplayMuted: false,
+            backgroundPlayEnabledOverride: backgroundPlayEnabled,
+            isLiveStream: true,
+            showTimelineControls: false,
+            showAuxControls: false,
+            showNativeControls: false,
+            playbackStateKey
+          }}
         />
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
       </div>
@@ -724,7 +789,7 @@ export function GlobalQuickPlayDock() {
                 event.stopPropagation();
                 clearQuickPlayStream();
               }}
-              className="p-2 hover:bg-red-500/20 rounded-xl text-white/60 hover:text-red-500 transition-all active:scale-95"
+              className="p-2 hover:bg-blue-500/20 rounded-xl text-white/60 hover:text-red-500 transition-all active:scale-95"
               title="Close mini player"
               aria-label="Close mini player"
             >
@@ -733,13 +798,55 @@ export function GlobalQuickPlayDock() {
           </div>
         </div>
 
-        <div className="mt-auto p-2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
-          <div className="flex items-end gap-2 pointer-events-auto">
-            <div className="flex flex-col gap-1">
+        <div className="mt-auto p-2 pt-8 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+          <div className="flex items-end gap-3 pointer-events-auto w-full">
+            
+            <button 
+                onClick={togglePlay} 
+                className="pb-1 px-1 text-white hover:text-white/80 active:scale-95 transition-all outline-none"
+                aria-label={isPlaying ? "Pause" : "Play"}
+            >
+                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+            </button>
+            <div className="flex-1 flex flex-col justify-end gap-1.5 pb-1">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={jumpToLive}
+                  disabled={isAtLiveEdge}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] uppercase font-bold tracking-widest transition ${
+                    !isAtLiveEdge ? "text-neutral-500 hover:text-white cursor-pointer" : "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+                  }`}
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full ${!isAtLiveEdge ? "bg-neutral-600" : "bg-white"}`} />
+                  Live
+                </button>
+                <div className="text-[10px] font-mono text-white/50">{Math.floor(timelinePosition / 60)}:{(Math.floor(timelinePosition) % 60).toString().padStart(2, '0')}</div>
+              </div>
+              
+              <div className="relative w-full h-1.5 bg-white/10 rounded-full group/timeline">
+                <input
+                  type="range"
+                  min={0}
+                  max={timelineDuration || 1}
+                  step={0.1}
+                  value={timelinePosition}
+                  onChange={(e) => handleSeek(Number(e.target.value))}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none peer"
+                  aria-label="Seek timeline"
+                />
+                <div 
+                  className="absolute left-0 top-0 bottom-0 bg-blue-500 rounded-full transition-all duration-100 ease-out z-0 group-hover/timeline:bg-blue-400" 
+                  style={{ width: `${isAtLiveEdge ? 100 : Math.min(100, (timelinePosition / (timelineDuration || 1)) * 100)}%` }} 
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1 items-center relative">
               <button
                 type="button"
                 onClick={() => setBackgroundPlayEnabled((current) => !current)}
-                className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition ${
+                className={`rounded-lg border px-1 py-1 text-[10px] font-semibold transition z-10 ${
                   backgroundPlayEnabled
                     ? "border-blue-400/60 bg-blue-500/20 text-blue-100"
                     : "border-white/20 bg-black/40 text-white/75 hover:text-white"
@@ -747,28 +854,43 @@ export function GlobalQuickPlayDock() {
                 title="Keep audio playing when app/browser is backgrounded"
                 aria-label={`Background play ${backgroundPlayEnabled ? "on" : "off"}`}
               >
-                BG {backgroundPlayEnabled ? "On" : "Off"}
+                BG
               </button>
-              <button
-                type="button"
-                onClick={handleToggleMute}
-                className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-white/90 hover:text-white"
-                title={muted || volume === 0 ? "Unmute" : "Mute"}
-                aria-label={muted || volume === 0 ? "Unmute" : "Mute"}
-              >
-                {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-              </button>
+
+              <div className="group/vol relative flex flex-col items-center">
+                <div className="absolute bottom-full pb-1 opacity-0 pointer-events-none group-hover/vol:opacity-100 group-hover/vol:pointer-events-auto transition-all duration-[140ms] delay-[140ms] group-hover/vol:delay-0 z-30 touch-none flex flex-col items-center justify-center">
+                  <div className="bg-black/90 border border-neutral-700 rounded-xl py-3 px-2 flex flex-col items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={muted ? 0 : volume}
+                      onChange={(event) => handleVolumeInput(Number(event.target.value))}
+                      className="accent-white rounded-full cursor-pointer touch-none"
+                      aria-label="Volume"
+                      style={{ 
+                        writingMode: 'vertical-lr', 
+                        direction: 'rtl', 
+                        height: '60px', 
+                        WebkitAppearance: 'slider-vertical' as any,
+                        appearance: 'slider-vertical' as any
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-white/90 hover:text-white relative z-20"
+                  title={muted || volume === 0 ? "Unmute" : "Mute"}
+                  aria-label={muted || volume === 0 ? "Unmute" : "Mute"}
+                >
+                  {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={muted ? 0 : volume}
-              onChange={(event) => handleVolumeInput(Number(event.target.value))}
-              className="flex-1 accent-blue-500"
-              aria-label="Mini player volume"
-            />
           </div>
         </div>
 
@@ -781,9 +903,7 @@ export function GlobalQuickPlayDock() {
               className="absolute top-0 left-0 w-7 h-7 pointer-events-auto cursor-nwse-resize flex items-start justify-start p-0.5"
               title="Resize mini player"
               aria-label="Resize mini player from top-left"
-            >
-              <span className="w-4 h-4 rounded-br-xl bg-white/20 border-l border-t border-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.3)]" />
-            </button>
+            />
             <button
               type="button"
               data-no-drag="true"
@@ -791,9 +911,7 @@ export function GlobalQuickPlayDock() {
               className="absolute top-0 right-0 w-7 h-7 pointer-events-auto cursor-nesw-resize flex items-start justify-end p-0.5"
               title="Resize mini player"
               aria-label="Resize mini player from top-right"
-            >
-              <span className="w-4 h-4 rounded-bl-xl bg-white/20 border-r border-t border-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.3)]" />
-            </button>
+            />
             <button
               type="button"
               data-no-drag="true"
@@ -801,9 +919,7 @@ export function GlobalQuickPlayDock() {
               className="absolute bottom-0 right-0 w-7 h-7 pointer-events-auto cursor-nwse-resize flex items-end justify-end p-0.5"
               title="Resize mini player"
               aria-label="Resize mini player from bottom-right"
-            >
-              <span className="w-4 h-4 rounded-tl-xl bg-white/20 border-r border-b border-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.3)]" />
-            </button>
+            />
             <button
               type="button"
               data-no-drag="true"
@@ -811,9 +927,7 @@ export function GlobalQuickPlayDock() {
               className="absolute bottom-0 left-0 w-7 h-7 pointer-events-auto cursor-nesw-resize flex items-end justify-start p-0.5"
               title="Resize mini player"
               aria-label="Resize mini player from bottom-left"
-            >
-              <span className="w-4 h-4 rounded-tr-xl bg-white/20 border-l border-b border-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.3)]" />
-            </button>
+            />
           </>
         ) : null}
       </div>

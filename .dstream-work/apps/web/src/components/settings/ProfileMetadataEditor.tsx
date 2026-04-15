@@ -24,7 +24,20 @@ function toDraft(profile: NostrProfile | null | undefined): Required<NostrProfil
     picture: profile?.picture ?? "",
     banner: profile?.banner ?? "",
     website: profile?.website ?? "",
-    nip05: profile?.nip05 ?? ""
+    nip05: profile?.nip05 ?? "",
+    lud16: profile?.lud16 ?? "",
+    lud06: profile?.lud06 ?? "",
+    btc: profile?.btc ?? "",
+    eth: profile?.eth ?? "",
+    trx: profile?.trx ?? "",
+    xmr: profile?.xmr ?? "",
+    sol: profile?.sol ?? "",
+    ada: profile?.ada ?? "",
+    doge: profile?.doge ?? "",
+    ltc: profile?.ltc ?? "",
+    ton: profile?.ton ?? "",
+    xrp: profile?.xrp ?? "",
+    dot: profile?.dot ?? ""
   };
 }
 
@@ -259,6 +272,60 @@ export function ProfileMetadataEditor() {
             onChange={(event) => updateField("nip05", event.target.value)}
             className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
             placeholder="alice@example.com"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="space-y-1">
+          <div className="text-xs text-neutral-500">Lightning Address (LUD-16)</div>
+          <input
+            value={draft.lud16}
+            onChange={(event) => updateField("lud16", event.target.value)}
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            placeholder="satoshi@getalby.com"
+          />
+        </label>
+        <label className="space-y-1">
+          <div className="text-xs text-neutral-500">Bitcoin Address (BTC)</div>
+          <input
+            value={draft.btc}
+            onChange={(event) => updateField("btc", event.target.value)}
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            placeholder="bc1q..."
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="space-y-1">
+          <div className="text-xs text-neutral-500">Ethereum Address (ETH)</div>
+          <input
+            value={draft.eth}
+            onChange={(event) => updateField("eth", event.target.value)}
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            placeholder="0x..."
+          />
+        </label>
+        <label className="space-y-1">
+          <div className="text-xs text-neutral-500">TRON Address (TRX)</div>
+          <input
+            value={draft.trx}
+            onChange={(event) => updateField("trx", event.target.value)}
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            placeholder="T..."
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="space-y-1">
+          <div className="text-xs text-neutral-500">Monero Address (XMR)</div>
+          <input
+            value={draft.xmr}
+            onChange={(event) => updateField("xmr", event.target.value)}
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            placeholder="4..."
           />
         </label>
       </div>
