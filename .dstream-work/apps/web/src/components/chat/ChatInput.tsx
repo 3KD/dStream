@@ -63,6 +63,7 @@ export function ChatInput({
     setMessage((prev) => prev + emojiObj.emoji);
   };
 
+  return (
     <form onSubmit={handleSubmit} className="shrink-0 pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-700 bg-neutral-900 relative">
       {showEmoji && (
         <div ref={pickerRef} className="absolute bottom-[calc(100%+0.5rem)] right-3 z-50 shadow-2xl">
