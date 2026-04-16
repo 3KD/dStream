@@ -137,7 +137,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
       // Notify parent when the spin starts — color shifts across the rotation + settle
       setFaces(prev => {
         const frontIdx = FACE_SEQ[rotRef.current % 4];
-        onWordChange?.(prev[frontIdx]);
+        setTimeout(() => onWordChange?.(prev[frontIdx]), 0);
         return prev;
       });
       schedule(doPause, ROTATE_MS);
