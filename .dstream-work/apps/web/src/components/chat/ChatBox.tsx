@@ -1,6 +1,6 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { Users, ArrowDownToLine } from "lucide-react";
 
 import { useEffect, useRef } from "react";
 import { useCallback, useMemo, useState } from "react";
@@ -128,10 +128,12 @@ export function ChatBox({
   const visiblePubkeys = useMemo(() => visibleMessages.map((message) => message.pubkey), [visibleMessages]);
   const profilesByPubkey = useNostrProfiles(visiblePubkeys);
 
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
+
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollRef.current || !isAutoScroll) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [visibleMessages.length]);
+  }, [visibleMessages.length, isAutoScroll]);
 
   useEffect(() => {
     try {
@@ -305,6 +307,13 @@ export function ChatBox({
 
   const handleSendInput = useCallback(
     async (input: string) => {
+      setIsAutoScroll(true);
+      if (scrollRef.current) {
+        setTimeout(() => {
+          if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }, 0);
+      }
+
       if (chatPolicyBlockReason) {
         showNotice(chatPolicyBlockReason);
         return false;
@@ -471,7 +480,15 @@ export function ChatBox({
       {reportNotice && <div className="px-3 py-2 text-xs text-emerald-200 border-b border-neutral-800 bg-emerald-950/20">{reportNotice}</div>}
 
       <div className="relative flex-1 min-h-0">
-        <div ref={scrollRef} className="absolute inset-0 overflow-y-auto min-h-0">
+        <div 
+          ref={scrollRef} 
+          className="absolute inset-0 overflow-y-auto min-h-0 p-1"
+          onScroll={(e) => {
+            const target = e.currentTarget;
+            const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
+            setIsAutoScroll(isAtBottom);
+          }}
+        >
           {visibleMessages.length === 0 ? (
             <div className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
           ) : (
@@ -535,6 +552,21 @@ export function ChatBox({
             </div>
           )}
         </div>
+        {!isAutoScroll && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 w-full px-4 flex justify-center pointer-events-none">
+            <button 
+              type="button"
+              onClick={() => {
+                setIsAutoScroll(true);
+                if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              }}
+              className="bg-neutral-800/95 text-neutral-300 text-[11px] font-bold px-3 py-1.5 rounded border border-neutral-700 shadow-xl flex items-center justify-center gap-1.5 hover:bg-neutral-700 hover:text-white transition pointer-events-auto"
+            >
+              <ArrowDownToLine className="w-3.5 h-3.5 text-emerald-400" />
+              Chat paused due to scroll
+            </button>
+          </div>
+        )}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-neutral-900 to-transparent" />
       </div>
 
