@@ -113,40 +113,54 @@ function detectWatchLayoutMode(): WatchLayoutMode {
 
 
 function P2PStatsPanel({ stats }: { stats: P2PSwarmStats | null }) {
+  const [open, setOpen] = useState(false);
   if (!stats) return null;
   const toMB = (b: number) => (b / (1024 * 1024)).toFixed(2) + " MB";
+
   return (
-    <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-4 overflow-hidden relative">
-      <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-        <Network className="w-24 h-24" />
-      </div>
-      <div className="mb-4 flex items-center justify-between relative z-10">
-         <h3 className="text-sm font-bold text-neutral-200 uppercase tracking-widest flex items-center gap-2">
-            <Network className="w-4 h-4 text-emerald-400" />
-            P2P Swarm Telemetry
-         </h3>
-         <div className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
-            Active
-         </div>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
-          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Share2 className="w-3 h-3" /> Connect peers</div>
-          <div className="font-mono text-white text-lg">{stats.peersConnected} <span className="text-neutral-600 text-sm">/ {stats.peersDesired}</span></div>
+    <div className="relative z-50">
+      <button 
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/60 bg-emerald-900/20 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/40 uppercase tracking-wider transition-colors"
+      >
+        <Network className="w-3 h-3" />
+        P2P Telemetry
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-2 w-[calc(100vw-2rem)] sm:w-[480px] bg-neutral-900 border border-neutral-700 rounded-xl p-4 shadow-2xl z-50">
+          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+            <Network className="w-24 h-24" />
+          </div>
+          <div className="mb-4 flex items-center justify-between relative z-10">
+             <h3 className="text-sm font-bold text-neutral-200 uppercase tracking-widest flex items-center gap-2">
+                P2P Swarm Telemetry
+             </h3>
+             <button onClick={() => setOpen(false)} className="text-neutral-500 hover:text-white p-1">
+               <X className="w-4 h-4" />
+             </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 relative z-10">
+            <div className="bg-neutral-950/50 rounded-lg p-2.5 border border-neutral-800/50">
+              <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Share2 className="w-3 h-3" /> Connect peers</div>
+              <div className="font-mono text-white text-base">{stats.peersConnected} <span className="text-neutral-600 text-xs">/ {stats.peersDesired}</span></div>
+            </div>
+            <div className="bg-neutral-950/50 rounded-lg p-2.5 border border-neutral-800/50">
+              <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Download className="w-3 h-3 text-emerald-500" /> Bandwidth Saved</div>
+              <div className="font-mono text-emerald-400 text-base">{toMB(stats.bytesFromPeers)}</div>
+            </div>
+            <div className="bg-neutral-950/50 rounded-lg p-2.5 border border-neutral-800/50">
+              <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Upload className="w-3 h-3 text-blue-500" /> Uploaded to Swarm</div>
+              <div className="font-mono text-blue-400 text-base">{toMB(stats.bytesToPeers)}</div>
+            </div>
+            <div className="bg-neutral-950/50 rounded-lg p-2.5 border border-neutral-800/50">
+              <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Database className="w-3 h-3 text-purple-500" /> Segment Cache</div>
+              <div className="font-mono text-purple-400 text-base">{toMB(stats.cacheBytes)}</div>
+            </div>
+          </div>
         </div>
-        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
-          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Download className="w-3 h-3 text-emerald-500" /> Bandwidth Saved</div>
-          <div className="font-mono text-emerald-400 text-lg">{toMB(stats.bytesFromPeers)}</div>
-        </div>
-        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
-          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Upload className="w-3 h-3 text-blue-500" /> Uploaded to Swarm</div>
-          <div className="font-mono text-blue-400 text-lg">{toMB(stats.bytesToPeers)}</div>
-        </div>
-        <div className="bg-neutral-950/50 rounded-lg p-3 border border-neutral-800/50">
-          <div className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5"><Database className="w-3 h-3 text-purple-500" /> Segment Cache</div>
-          <div className="font-mono text-purple-400 text-lg">{toMB(stats.cacheBytes)}</div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1810,7 +1824,6 @@ export default function WatchPage() {
                     id="watch-page"
                     playerProps={globalPlayerProps}
                   />
-                    {p2pStats && <P2PStatsPanel stats={p2pStats} />}
                   </>
                 ) : (
                   <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 flex items-center justify-center px-6 text-center text-sm text-neutral-400">
@@ -1880,6 +1893,7 @@ export default function WatchPage() {
                   )}
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <div className="text-emerald-300">Playing live stream path.</div>
+                    {p2pStats && <P2PStatsPanel stats={p2pStats} />}
                     {tipModalMethods.length > 0 && (
                       <button
                         type="button"
