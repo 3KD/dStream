@@ -182,6 +182,13 @@ export function Player({
   }, [fallbackSrc]);
 
   useEffect(() => {
+    if (hlsRef.current) {
+      (hlsRef.current.config as any).dstreamP2PSwarm = p2pSwarm ?? null;
+      (hlsRef.current.config as any).dstreamIntegritySession = integrity ?? null;
+    }
+  }, [p2pSwarm, integrity]);
+
+  useEffect(() => {
     playbackStateKeyRef.current = playbackStateKey;
   }, [playbackStateKey]);
   const [status, setStatus] = useState<string>("Loading…");
