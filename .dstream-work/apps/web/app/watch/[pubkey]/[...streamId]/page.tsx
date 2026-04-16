@@ -2485,8 +2485,8 @@ export default function WatchPage() {
               data-testid="watch-chat-panel"
               className={
                 desktopWatchLayout
-                  ? "sticky top-6 self-start h-[calc(100dvh-4rem)] min-h-[22rem] min-w-0"
-                  : "sticky top-4 self-start h-[calc(100dvh-3rem)] min-h-[19rem] min-w-0"
+                  ? "sticky top-6 self-start h-[calc(100dvh-7.5rem)] min-h-[22rem] min-w-0"
+                  : "sticky top-4 self-start h-[calc(100dvh-6rem)] min-h-[19rem] min-w-0"
               }
             >
               {chatBox}

@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
+import { Smile } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
 
 export function ChatInput({
   onSend,
@@ -17,6 +21,22 @@ export function ChatInput({
 }) {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowEmoji(false);
+      }
+    }
+    if (showEmoji) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmoji]);
 
   useEffect(() => {
     if (draftVersion === undefined) return;
@@ -30,14 +50,29 @@ export function ChatInput({
     setIsSending(true);
     try {
       const ok = await onSend(text);
-      if (ok) setMessage("");
+      if (ok) {
+        setMessage("");
+        setShowEmoji(false);
+      }
     } finally {
       setIsSending(false);
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="shrink-0 pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-700 bg-neutral-900">
+  const onEmojiClick = (emojiObj: { emoji: string }) => {
+    setMessage((prev) => prev + emojiObj.emoji);
+  };
+
+    <form onSubmit={handleSubmit} className="shrink-0 pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-700 bg-neutral-900 relative">
+      {showEmoji && (
+        <div ref={pickerRef} className="absolute bottom-[calc(100%+0.5rem)] right-3 z-50 shadow-2xl">
+          <EmojiPicker 
+            onEmojiClick={onEmojiClick} 
+            theme={"dark" as any} 
+            autoFocusSearch={false}
+          />
+        </div>
+      )}
       <div className="flex gap-2">
         <input
           type="text"
@@ -47,6 +82,15 @@ export function ChatInput({
           disabled={disabled || isSending}
           className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
         />
+        <button
+          type="button"
+          disabled={disabled || isSending}
+          onClick={() => setShowEmoji((prev) => !prev)}
+          className="px-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-400 hover:text-white transition-colors disabled:opacity-50 flex items-center justify-center p-0.5"
+          title="Add Emoji"
+        >
+          <Smile className="w-5 h-5 pointer-events-none" />
+        </button>
         <button
           type="submit"
           disabled={!message.trim() || disabled || isSending}
