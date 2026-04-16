@@ -39,6 +39,10 @@ export function parseStreamChatEvent(
   const aTags = getAllTagValues(event.tags ?? [], "a");
   if (!aTags.includes(expectedATag)) return null;
 
+  const emojis = event.tags
+    .filter((t) => t[0] === "emoji" && t.length >= 3)
+    .map((t) => ({ shortcode: t[1] as string, url: t[2] as string, hash: t[3] as string | undefined }));
+
   return {
     id: event.id,
     pubkey: event.pubkey,
@@ -46,6 +50,7 @@ export function parseStreamChatEvent(
     streamId: scope.streamId,
     content: event.content ?? "",
     createdAt: event.created_at,
+    emojis: emojis.length > 0 ? emojis : undefined,
     raw: event
   };
 }

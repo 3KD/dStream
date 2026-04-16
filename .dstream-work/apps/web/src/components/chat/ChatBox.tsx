@@ -13,6 +13,7 @@ import { STREAM_CHAT_CLEAR_REASON } from "@/lib/chatModeration";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import { useNostrProfile, useNostrProfiles } from "@/hooks/useNostrProfiles";
+import { useEmotes } from "@/hooks/useEmotes";
 import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
@@ -55,6 +56,7 @@ export function ChatBox({
   const { identity, signEvent } = useIdentity();
   const social = useSocial();
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
+  const globalEmotesMap = useEmotes(streamPubkey);
   const scrollRef = useRef<HTMLDivElement>(null);
   const nip05Policy = useMemo(() => getNip05Policy(), []);
   const [moderationError, setModerationError] = useState<string | null>(null);
@@ -511,6 +513,7 @@ export function ChatBox({
                   <ChatMessage
                     key={m.id ?? `${m.pubkey}:${m.createdAt}:${m.content}`}
                     msg={m}
+                    emotesDict={globalEmotesMap}
                     isBroadcaster={m.pubkey === streamPubkey}
                     canModerate={canModerate}
                     canManageRoles={canManageRoles}

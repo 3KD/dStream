@@ -23,7 +23,9 @@ export const NOSTR_KINDS = {
   STREAM_MOD_ROLE: 30318,
   GUILD_MEMBERSHIP: 30319,
   GUILD_ROLE: 30320,
-  APP_DISCOVERY_MOD: 30321
+  APP_DISCOVERY_MOD: 30321,
+  CUSTOM_EMOJI: 10030,
+  REPORT: 1984
 } as const;
 
 export type StreamStatus = "live" | "ended";
@@ -161,6 +163,7 @@ export interface StreamChatMessage {
   streamId: string;
   content: string;
   createdAt: number;
+  emojis?: { shortcode: string; url: string; hash?: string }[];
   raw: NostrEvent;
 }
 

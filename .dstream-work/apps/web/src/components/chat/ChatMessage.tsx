@@ -7,9 +7,37 @@ import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { BadgeCheck, CheckCircle2, EllipsisVertical, Flag, Gem, RadioTower, ShieldCheck } from "lucide-react";
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
+import type { ReactNode } from "react";
+
+function renderContentWithEmotes(content: string, emotesDict?: Record<string, string>): ReactNode[] {
+  if (!emotesDict || Object.keys(emotesDict).length === 0) {
+    return [content];
+  }
+
+  const parts = content.split(/(:[a-zA-Z0-9_-]+:)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith(":") && part.endsWith(":")) {
+      const code = part.slice(1, -1);
+      const url = emotesDict[code];
+      if (url) {
+        return (
+          <img 
+            key={i} 
+            src={url} 
+            alt={part} 
+            title={part} 
+            className="inline-block h-6 w-auto align-middle px-[1px] pointer-events-none" 
+          />
+        );
+      }
+    }
+    return part;
+  });
+}
 
 export function ChatMessage({
   msg,
+  emotesDict,
   isBroadcaster,
   canModerate = false,
   canManageRoles = false,
@@ -34,6 +62,7 @@ export function ChatMessage({
   onWhisperToUser
 }: {
   msg: StreamChatMessage;
+  emotesDict?: Record<string, string>;
   isBroadcaster: boolean;
   canModerate?: boolean;
   canManageRoles?: boolean;
@@ -157,7 +186,9 @@ export function ChatMessage({
           <span className="text-[10px] text-neutral-500">{time}</span>
         </div>
         {isWhisper && whisperLabel && <div className="text-[11px] text-purple-200/80 mb-0.5">{whisperLabel}</div>}
-        <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>{msg.content}</p>
+        <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>
+          {renderContentWithEmotes(msg.content, emotesDict)}
+        </p>
       </div>
 
       {showActions && (
