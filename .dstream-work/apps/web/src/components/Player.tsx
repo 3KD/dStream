@@ -181,11 +181,10 @@ export function Player({
     fallbackSrcRef.current = fallbackSrc;
   }, [fallbackSrc]);
 
+  const dstreamRefs = useRef({ p2pSwarm, integrity });
+
   useEffect(() => {
-    if (hlsRef.current) {
-      (hlsRef.current.config as any).dstreamP2PSwarm = p2pSwarm ?? null;
-      (hlsRef.current.config as any).dstreamIntegritySession = integrity ?? null;
-    }
+    dstreamRefs.current = { p2pSwarm, integrity };
   }, [p2pSwarm, integrity]);
 
   useEffect(() => {
@@ -774,8 +773,7 @@ export function Player({
         liveMaxLatencyDurationCount: lowLatencyEnabled ? 5 : 8,
         fLoader: P2PFragmentLoader,
         lowLatencyMode: lowLatencyEnabled,
-        dstreamP2PSwarm: p2pSwarm ?? null,
-        dstreamIntegritySession: integrity ?? null,
+        dstreamRefs: dstreamRefs,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
       hlsRef.current = hls;

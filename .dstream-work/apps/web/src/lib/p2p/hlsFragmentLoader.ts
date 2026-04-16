@@ -75,11 +75,11 @@ export class P2PFragmentLoader implements Loader<FragmentLoaderContext> {
   stats: LoaderStats = makeStats(0);
 
   get swarm(): P2PSwarm | null {
-    return (this.config as any)?.dstreamP2PSwarm ?? null;
+    return (this.config as any)?.dstreamRefs?.current?.p2pSwarm ?? null;
   }
 
   get integrity(): IntegritySession | null {
-    return (this.config as any)?.dstreamIntegritySession ?? null;
+    return (this.config as any)?.dstreamRefs?.current?.integrity ?? null;
   }
 
   get httpRewrite(): { from: string; to: string } | null {
