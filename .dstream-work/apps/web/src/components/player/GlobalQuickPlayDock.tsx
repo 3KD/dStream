@@ -130,6 +130,7 @@ export function GlobalQuickPlayDock() {
   const pathname = usePathname();
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
   const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
+  const { clearRequest } = useGlobalPlayer();
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [position, setPosition] = useState({
@@ -695,6 +696,12 @@ export function GlobalQuickPlayDock() {
     showNativeControls: false,
     playbackStateKey
   }), [backgroundPlayEnabled, hlsSrc, playbackStateKey, whepSrc]);
+
+  useEffect(() => {
+    if (!quickPlayStream) {
+       clearRequest("quickplay-dock");
+    }
+  }, [quickPlayStream, clearRequest]);
 
   if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc) return null;
 

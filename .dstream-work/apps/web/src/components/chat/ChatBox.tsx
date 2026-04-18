@@ -58,6 +58,7 @@ export function ChatBox({
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
   const globalEmotesMap = useEmotes(streamPubkey);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const innerScrollRef = useRef<HTMLDivElement>(null);
   const nip05Policy = useMemo(() => getNip05Policy(), []);
   const [moderationError, setModerationError] = useState<string | null>(null);
   const [commandNotice, setCommandNotice] = useState<string | null>(null);
@@ -133,9 +134,15 @@ export function ChatBox({
   const [isAutoScroll, setIsAutoScroll] = useState(true);
 
   useEffect(() => {
-    if (!scrollRef.current || !isAutoScroll) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [visibleMessages.length, isAutoScroll]);
+    if (!scrollRef.current || !innerScrollRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (isAutoScroll && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+    observer.observe(innerScrollRef.current);
+    return () => observer.disconnect();
+  }, [isAutoScroll]);
 
   useEffect(() => {
     try {
@@ -492,9 +499,9 @@ export function ChatBox({
           }}
         >
           {visibleMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
+            <div ref={innerScrollRef} className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
           ) : (
-            <div className="py-2">
+            <div ref={innerScrollRef} className="py-2">
               {visibleMessages.map((m) => {
                 const isWhisper = m.visibility === "whisper";
                 const recipients = (m.whisperRecipients ?? []).filter(Boolean);

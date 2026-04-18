@@ -1,4 +1,4 @@
-const DEFAULT_NOSTR_RELAYS_DEV = ["ws://localhost:8081"];
+const DEFAULT_NOSTR_RELAYS_DEV: string[] = [];
 const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://relay.damus.io",
   "wss://nos.lol",

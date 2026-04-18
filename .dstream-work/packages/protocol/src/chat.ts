@@ -19,7 +19,7 @@ export function buildStreamChatEvent(input: BuildChatInput): Omit<NostrEvent, "i
     pubkey: input.pubkey,
     created_at: input.createdAt,
     content: input.content,
-    tags: [["a", makeATag(input.streamPubkey, input.streamId), "root", "reply"]]
+    tags: [["a", makeATag(input.streamPubkey, input.streamId), "", "root"]]
   };
 }
 

@@ -163,6 +163,8 @@ See `docs/MOBILE_STORE_DEPLOY.md` for App Store / Play Store release automation.
 - Host policy tags:
   - `["host_mode", "p2p_economy" | "host_only"]`
   - `["rebroadcast_threshold", "<positive-int>"]` (active-set size `T` for FCFS rebroadcast queue)
+- Custom Emotes (NIP-30):
+  - `["emoji", "<shortcode>", "<url>", "<hash>", "<tier>"]` published as Kind 10030 (Tier can be `free` or `subscriber`)
 
 Playback behavior in `/watch/:npub/:streamId`:
 

@@ -109,13 +109,22 @@ export default function HomePage() {
         )}
 
         <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <h2 className="text-xl font-bold flex items-center gap-2 shrink-0">
               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               Live Now ({visibleStreams.length})
             </h2>
 
-            <div className="flex items-center gap-2">
+            <div className="flex-1 w-full md:max-w-md md:px-4">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by title, topic, or pubkey…"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-full px-4 py-1.5 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-colors"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
               <Link
                 href="/browse"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
@@ -134,15 +143,6 @@ export default function HomePage() {
                 <span className="hidden sm:inline">Shuffle</span>
               </button>
             </div>
-          </div>
-
-          <div className="mb-6">
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by title, topic, or pubkey…"
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none"
-            />
           </div>
 
           {isLoading ? (

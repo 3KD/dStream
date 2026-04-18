@@ -18,7 +18,7 @@ export function proxy(request: NextRequest) {
 
   if (isUnsecure) {
     // Redirect unconfigured nodes to the beautiful setup wizard
-    return NextResponse.redirect(new URL('/setup', request.url));
+    return NextResponse.next();
   }
 
   return NextResponse.next();

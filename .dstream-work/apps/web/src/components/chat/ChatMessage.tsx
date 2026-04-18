@@ -9,7 +9,7 @@ import { BadgeCheck, CheckCircle2, EllipsisVertical, Flag, Gem, RadioTower, Shie
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
 import type { ReactNode } from "react";
 
-function renderContentWithEmotes(content: string, emotesDict?: Record<string, string>): ReactNode[] {
+function renderContentWithEmotes(content: string, emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>, isApproved?: boolean): ReactNode[] {
   if (!emotesDict || Object.keys(emotesDict).length === 0) {
     return [content];
   }
@@ -18,12 +18,15 @@ function renderContentWithEmotes(content: string, emotesDict?: Record<string, st
   return parts.map((part, i) => {
     if (part.startsWith(":") && part.endsWith(":")) {
       const code = part.slice(1, -1);
-      const url = emotesDict[code];
-      if (url) {
+      const emote = emotesDict[code];
+      if (emote) {
+        if (emote.tier === "subscriber" && !isApproved) {
+          return part;
+        }
         return (
           <img 
             key={i} 
-            src={url} 
+            src={emote.url} 
             alt={part} 
             title={part} 
             className="inline-block h-6 w-auto align-middle px-[1px] pointer-events-none" 
@@ -62,7 +65,7 @@ export function ChatMessage({
   onWhisperToUser
 }: {
   msg: StreamChatMessage;
-  emotesDict?: Record<string, string>;
+  emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>;
   isBroadcaster: boolean;
   canModerate?: boolean;
   canManageRoles?: boolean;
@@ -86,7 +89,9 @@ export function ChatMessage({
   onReplyToUser?: () => void;
   onWhisperToUser?: () => void;
 }) {
-  const time = new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const time = mounted ? new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--";
   const social = useSocial();
   const alias = social.getAlias(msg.pubkey);
   const trusted = social.isTrusted(msg.pubkey);
@@ -187,7 +192,7 @@ export function ChatMessage({
         </div>
         {isWhisper && whisperLabel && <div className="text-[11px] text-purple-200/80 mb-0.5">{whisperLabel}</div>}
         <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>
-          {renderContentWithEmotes(msg.content, emotesDict)}
+          {renderContentWithEmotes(msg.content, emotesDict, isBroadcaster || isModerator || isSubscriber)}
         </p>
       </div>
 

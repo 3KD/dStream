@@ -1,0 +1,238 @@
+3:import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+4-import Hls from "hls.js";
+5-import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
+6-import type { P2PSwarm } from "@/lib/p2p/swarm";
+7-import type { IntegritySession } from "@/lib/integrity/session";
+8-import { WhepClient } from "@/lib/whep";
+9-import { pickPlaybackMode } from "@/lib/whep-fallback";
+10-import { inferMediaUrlKind } from "@/lib/mediaUrl";
+11-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Users } from "lucide-react";
+12-
+13-interface PlayerProps {
+--
+180:  useEffect(() => {
+181-    fallbackSrcRef.current = fallbackSrc;
+182-  }, [fallbackSrc]);
+183-
+184:  useEffect(() => {
+185-    playbackStateKeyRef.current = playbackStateKey;
+186-  }, [playbackStateKey]);
+187-  const [status, setStatus] = useState<string>("Loading…");
+188-  const [error, setError] = useState<string | null>(null);
+189-  const [nsfwConsented, setNsfwConsented] = useState<boolean>(!contentWarningReason);
+190-  const [needsClick, setNeedsClick] = useState(false);
+191-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
+192-  const [note, setNote] = useState<string | null>(null);
+193-  const [isMobilePlayback, setIsMobilePlayback] = useState(false);
+194-  const [isHovered, setIsHovered] = useState(false);
+--
+197:  useEffect(() => {
+198-    setIsMobilePlayback(isLikelyMobilePlaybackDevice());
+199-    setPreferNativeHls(isLikelySafariBrowser());
+200-  }, []);
+201-
+202-  const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
+203-  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
+204-  const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
+205-  const [selectedQuality, setSelectedQuality] = useState(-1);
+206-  const [qualityIndicator, setQualityIndicator] = useState("Auto");
+207-  const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
+--
+231:  useEffect(() => {
+232-    onReadyRef.current = onReady;
+233-  }, [onReady]);
+234-
+235:  useEffect(() => {
+236-    const persisted = readPersistedPlaybackState(playbackStateKeyRef.current);
+237-    if (persisted) {
+238-      const persistedMuted = persisted.muted === true;
+239-      const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
+240-      setVolume(persistedMuted ? 0 : persistedVolume);
+241-      return;
+242-    }
+243-    setVolume(effectiveAutoplayMuted ? 0 : 1);
+244-  }, [effectiveAutoplayMuted, playbackStateKey]);
+245-
+246:  useEffect(() => {
+247-    setBackgroundPlayEnabled(readBackgroundPlayPreference());
+248-  }, []);
+249-
+250:  useEffect(() => {
+251-    writeBackgroundPlayPreference(backgroundPlayEnabled);
+252-  }, [backgroundPlayEnabled]);
+253-
+254-  const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
+255-
+256:  useEffect(() => {
+257-    selectedQualityRef.current = selectedQuality;
+258-  }, [selectedQuality]);
+259-
+260:  useEffect(() => {
+261-    playbackModeRef.current = playbackMode;
+262-  }, [playbackMode]);
+263-
+264:  useEffect(() => {
+265-    const hls = hlsRef.current;
+266-    if (!hls) return;
+267-    try {
+268-      hls.currentLevel = selectedQuality;
+269-      hls.nextLevel = selectedQuality;
+270-      if (selectedQuality < 0) setQualityIndicator("Auto");
+271-      else {
+272-        const level = hls.levels[selectedQuality];
+273-        setQualityIndicator(level ? formatQualityLabel(level) : "Manual");
+274-      }
+--
+280:  useEffect(() => {
+281-    const video = videoRef.current;
+282-    if (!video) return;
+283-    try {
+284-      video.volume = Math.min(1, Math.max(0, volume));
+285-      video.muted = volume === 0;
+286-    } catch {
+287-      // ignore
+288-    }
+289-  }, [volume]);
+290-
+291:  useEffect(() => {
+292-    if (volume > 0) {
+293-      lastAudibleVolumeRef.current = volume;
+294-    }
+295-  }, [volume]);
+296-
+297:  useEffect(() => {
+298-    if (!isMobilePlayback) return;
+299-    if (mobileControlsHideTimerRef.current) {
+300-      clearTimeout(mobileControlsHideTimerRef.current);
+301-      mobileControlsHideTimerRef.current = null;
+302-    }
+303-    if (error || needsClick) {
+304-      setMobileControlsVisible(false);
+305-      return;
+306-    }
+307-    if (mobileControlsVisible && isPlaying) {
+--
+338:  useEffect(() => {
+339-    const video = videoRef.current;
+340-    if (!video || typeof navigator === "undefined") return;
+341-    const mediaSession = (navigator as { mediaSession?: MediaSession }).mediaSession;
+342-    if (!mediaSession) return;
+343-
+344-    try {
+345-      if (typeof window !== "undefined" && "MediaMetadata" in window) {
+346-        mediaSession.metadata = new window.MediaMetadata({
+347-          title: isLiveStream ? "dStream Live" : "dStream Replay",
+348-          artist: "dStream"
+--
+373:  useEffect(() => {
+374-    if (typeof navigator === "undefined") return;
+375-    const mediaSession = (navigator as { mediaSession?: MediaSession }).mediaSession;
+376-    if (!mediaSession) return;
+377-    try {
+378-      mediaSession.playbackState = error ? "none" : isPlaying ? "playing" : "paused";
+379-    } catch {
+380-      // ignore
+381-    }
+382-  }, [error, isPlaying]);
+383-
+384:  useEffect(() => {
+385-    if (typeof document === "undefined" || !effectiveBackgroundPlayEnabled) return;
+386-    const video = videoRef.current;
+387-    if (!video) return;
+388-    const keepPlaybackAlive = () => {
+389-      if (document.visibilityState !== "hidden") return;
+390-      if (video.ended) return;
+391-      if (!video.paused) return;
+392-      void video.play().catch(() => {
+393-        // ignore browser policy failures
+394-      });
+--
+411:  useEffect(() => {
+412-    if (error || needsClick || volume !== 0) {
+413-      setUnmuteHintPhase("hidden");
+414-      return;
+415-    }
+416-    setUnmuteHintPhase("visible");
+417-    const fadeTimer = setTimeout(() => setUnmuteHintPhase("fading"), 1300);
+418-    const hideTimer = setTimeout(() => setUnmuteHintPhase("hidden"), 1900);
+419-    return () => {
+420-      clearTimeout(fadeTimer);
+421-      clearTimeout(hideTimer);
+--
+425:  useEffect(() => {
+426-    const video = videoRef.current;
+427-    if (!video) return;
+428-    const syncPlaying = () => setIsPlaying(!video.paused && !video.ended);
+429-    syncPlaying();
+430-    video.addEventListener("play", syncPlaying);
+431-    video.addEventListener("pause", syncPlaying);
+432-    video.addEventListener("ended", syncPlaying);
+433-    return () => {
+434-      video.removeEventListener("play", syncPlaying);
+435-      video.removeEventListener("pause", syncPlaying);
+--
+440:  useEffect(() => {
+441-    const video = videoRef.current;
+442-    if (!video) return;
+443-    const onVolumeChange = () => {
+444-      try {
+445-        const nextVolume = video.muted ? 0 : Math.min(1, Math.max(0, video.volume));
+446-        setVolume((prev) => (Math.abs(prev - nextVolume) < 0.001 ? prev : nextVolume));
+447-      } catch {
+448-        // ignore
+449-      }
+450-    };
+--
+457:  useEffect(() => {
+458-    const video = videoRef.current;
+459-    if (!video || !playbackStateKey) return;
+460-
+461-    let lastWriteAt = 0;
+462-    const persist = () => {
+463-      const currentTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+464-      const volumeLevel = Number.isFinite(video.volume) ? clampUnit(video.volume) : 0;
+465-      writePersistedPlaybackState(playbackStateKey, {
+466-        volume: volumeLevel,
+467-        muted: video.muted || volumeLevel === 0,
+--
+490:  useEffect(() => {
+491-    const onFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
+492-    document.addEventListener("fullscreenchange", onFullscreen);
+493-    return () => document.removeEventListener("fullscreenchange", onFullscreen);
+494-  }, []);
+495-
+496:  useEffect(() => {
+497-    const video = videoRef.current;
+498-    if (!video) return;
+499-    const onEnter = () => setIsPip(true);
+500-    const onLeave = () => setIsPip(false);
+501-    video.addEventListener("enterpictureinpicture", onEnter as any);
+502-    video.addEventListener("leavepictureinpicture", onLeave as any);
+503-    return () => {
+504-      video.removeEventListener("enterpictureinpicture", onEnter as any);
+505-      video.removeEventListener("leavepictureinpicture", onLeave as any);
+506-    };
+--
+509:  useEffect(() => {
+510-    setError(null);
+511-    setStatus("Loading…");
+512-    setNeedsClick(false);
+513-    setPlaybackMode("hls");
+514-    setNote(null);
+515-    setQualityOptions([]);
+516-    setQualityIndicator("Auto");
+517-    setTimelineStart(0);
+518-    setTimelineEnd(0);
+519-    setTimelinePosition(0);
+--
+984:  useEffect(() => {
+985-    const video = videoRef.current;
+986-    if (!video) return;
+987-
+988-    const syncTimeline = () => {
+989-      try {
+990-        let start = 0;
+991-        let end = 0;
+992-        const seekable = video.seekable;
+993-        if (seekable && seekable.length > 0) {
+994-          start = seekable.start(0);

@@ -10,9 +10,10 @@ export interface EmoteDefinition {
   shortcode: string;
   url: string;
   hash?: string;
+  tier?: "free" | "subscriber";
 }
 
-export type BlobPointerMap = Record<string, string>;
+export type BlobPointerMap = Record<string, { url: string; tier: "free" | "subscriber" }>;
 
 // Shared cache to prevent re-verifying across remounts
 const BLOB_URL_CACHE: Record<string, string> = {};
@@ -71,7 +72,8 @@ export function useEmotes(pubkey: string | null) {
         const definitions: EmoteDefinition[] = emojiTags.map((t: string[]) => ({
           shortcode: t[1],
           url: t[2],
-          hash: t[3]
+          hash: t[3],
+          tier: t[4] === "subscriber" ? "subscriber" : "free"
         }));
 
         const newMap: BlobPointerMap = {};
@@ -79,7 +81,7 @@ export function useEmotes(pubkey: string | null) {
         // Concurrently verify and cache all emotes in this pack
         await Promise.all(definitions.map(async (def) => {
           const localUrl = await verifyAndCacheEmote(def);
-          if (localUrl) newMap[def.shortcode] = localUrl;
+          if (localUrl) newMap[def.shortcode] = { url: localUrl, tier: def.tier || "free" };
         }));
 
         if (mounted) {

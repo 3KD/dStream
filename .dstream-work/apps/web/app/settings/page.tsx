@@ -13,6 +13,7 @@ import { hexToBytes, shortenText } from "@/lib/encoding";
 import { parseStreamFavoriteKey } from "@/lib/social/store";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { ProfileMetadataEditor } from "@/components/settings/ProfileMetadataEditor";
+import { EmoteManager } from "@/components/settings/EmoteManager";
 import {
   getWalletIntegrationsForAsset,
   PAYMENT_ASSET_META,
@@ -667,6 +668,7 @@ export default function SettingsPage() {
               </div>
 
               <ProfileMetadataEditor />
+              <EmoteManager />
 
               <div className="space-y-2">
                 <div className="text-xs text-neutral-500">Import local key (nsec… or 64-hex)</div>

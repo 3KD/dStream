@@ -8,6 +8,7 @@ interface GlobalPlayerContextValue {
   registerPortal: (id: string, el: HTMLElement) => void;
   unregisterPortal: (id: string) => void;
   requestPortal: (id: string, props: any) => void;
+  clearRequest: (id: string) => void;
 }
 
 const GlobalPlayerContext = createContext<GlobalPlayerContextValue | null>(null);
@@ -57,6 +58,13 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const clearRequest = useCallback((id: string) => {
+    setActiveRequest((prev) => {
+      if (prev?.id === id) return null;
+      return prev;
+    });
+  }, []);
+
   // If the active request's portal exists, render it there.
   // Otherwise, render into the fallback persistent container so it NEVER unmounts and wipes the buffer!
   let targetEl = null;
@@ -66,7 +74,7 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     targetEl = fallbackContainerRef.current;
   }
 
-  const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal }), [registerPortal, unregisterPortal, requestPortal]);
+  const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal, clearRequest }), [registerPortal, unregisterPortal, requestPortal, clearRequest]);
 
   return (
     <GlobalPlayerContext.Provider value={contextValue}>
