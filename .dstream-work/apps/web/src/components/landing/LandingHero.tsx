@@ -34,7 +34,7 @@ export function LandingHero({
       </div>
 
       <p className="text-xl text-neutral-400 max-w-2xl mx-auto">
-        <span className="text-blue-500">dStream</span> – Broadcast built for the modern de-fi economy.
+        <span className="text-blue-500">dStream</span> – New Age De-Fi Broadcast.
       </p>
 
       <div className="flex gap-4 justify-center pt-6">

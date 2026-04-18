@@ -974,6 +974,16 @@ export function Player({
       } catch {
         // ignore
       }
+      try {
+        const v = videoRef.current;
+        if (v) {
+          v.pause();
+          v.removeAttribute("src");
+          v.load();
+        }
+      } catch {
+        // ignore
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

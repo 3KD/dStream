@@ -144,6 +144,12 @@ export function ChatBox({
     return () => observer.disconnect();
   }, [isAutoScroll]);
 
+  // Execute synchronously on React re-render queueing to cover gaps where DOM resize doesn't trigger gracefully
+  useEffect(() => {
+    if (!scrollRef.current || !isAutoScroll) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [visibleMessages.length, isAutoScroll]);
+
   useEffect(() => {
     try {
       onMessageCountChange?.(visibleMessages.length);
