@@ -597,6 +597,7 @@ export function ChatBox({
           placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
           draftMessage={composerDraft}
           draftVersion={composerDraftVersion}
+          emotesDict={globalEmotesMap}
         />
       )}
 

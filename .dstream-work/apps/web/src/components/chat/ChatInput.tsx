@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, type FormEvent } from "react";
+import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
 import { Smile } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -11,18 +11,30 @@ export function ChatInput({
   disabled,
   placeholder,
   draftMessage,
-  draftVersion
+  draftVersion,
+  emotesDict
 }: {
   onSend: (message: string) => Promise<boolean>;
   disabled?: boolean;
   placeholder?: string;
   draftMessage?: string;
   draftVersion?: number;
+  emotesDict?: Record<string, { url: string }>;
 }) {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+
+  const customEmojis = useMemo(() => {
+    if (!emotesDict) return undefined;
+    const items = Object.entries(emotesDict).map(([shortcode, data]) => ({
+      id: shortcode,
+      names: [shortcode],
+      imgUrl: data.url
+    }));
+    return items.length > 0 ? items : undefined;
+  }, [emotesDict]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -59,8 +71,12 @@ export function ChatInput({
     }
   };
 
-  const onEmojiClick = (emojiObj: { emoji: string }) => {
-    setMessage((prev) => prev + emojiObj.emoji);
+  const onEmojiClick = (emojiObj: any) => {
+    if (emojiObj.isCustom && emojiObj.names?.[0]) {
+      setMessage((prev) => prev + `:${emojiObj.names[0]}: `);
+    } else if (emojiObj.emoji) {
+      setMessage((prev) => prev + emojiObj.emoji);
+    }
   };
 
   return (
@@ -71,6 +87,7 @@ export function ChatInput({
             onEmojiClick={onEmojiClick} 
             theme={"dark" as any} 
             autoFocusSearch={false}
+            customEmojis={customEmojis}
           />
         </div>
       )}
