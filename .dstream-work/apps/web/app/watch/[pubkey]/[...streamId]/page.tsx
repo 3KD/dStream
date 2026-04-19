@@ -41,10 +41,6 @@ import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-
 function base64EncodeUtf8(input: string): string {
   try {
     return btoa(unescape(encodeURIComponent(input)));
@@ -1693,11 +1689,11 @@ export default function WatchPage() {
   return (
     <>
       <style>{`
-        #global-site-footer { display: none !important; }
+        
       `}</style>
       <div className="w-full flex-1 flex flex-col bg-neutral-950 text-white">
         <SimpleHeader />
-      <main className="w-full min-h-0 px-4 pt-6 pb-0 md:px-5 lg:px-6 lg:pb-0">
+      <main className="w-full min-h-0 px-4 pt-6 pb-6 md:px-5 lg:px-6 lg:pb-6">
         {!pubkey && (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
             Invalid pubkey in route. Expected a 64-hex pubkey or an <span className="font-mono">npub…</span>.
