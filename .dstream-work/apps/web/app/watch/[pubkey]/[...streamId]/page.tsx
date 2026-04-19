@@ -205,6 +205,7 @@ export default function WatchPage() {
   const hostProfile = useNostrProfile(pubkey);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
+  const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
   const { count: zapCount, totalSats: zapTotalSats, isConnected: zapsConnected } = useStreamZaps({
     streamPubkey: pubkey ?? "",
     streamId
@@ -1602,7 +1603,7 @@ export default function WatchPage() {
     isLiveStream: announce?.status !== "ended",
     showNativeControls: false,
     captionTracks: captionTracks,
-    viewerCount: viewerCount,
+    viewerCount: effectiveViewerCount,
     p2pPeers: p2pStats?.peersConnected,
     autoplayMuted: e2e ? true : social.settings.playbackAutoplayMuted,
     layoutMode: mobilePortraitLayout ? "aspect" : "fill",
@@ -1636,7 +1637,7 @@ export default function WatchPage() {
     p2pSwarm,
     integritySession,
     captionTracks,
-    viewerCount,
+    effectiveViewerCount,
     p2pStats?.peersConnected,
     e2e,
     social,
@@ -1675,6 +1676,7 @@ export default function WatchPage() {
     <ChatBox
       streamPubkey={pubkey ?? ""}
       streamId={streamId}
+      viewerCount={effectiveViewerCount}
       onMessageCountChange={(count) => {
         if (!e2e || e2eSentRef.current.chat) return;
         if (count <= 0) return;
@@ -1704,7 +1706,7 @@ export default function WatchPage() {
               : mobileLandscapeLayout
                 ? "grid-cols-[minmax(0,1fr)_minmax(14rem,38vw)] items-start"
                 : "grid-cols-1"
-          } mb-6`}
+          }`}
         >
           <div className={desktopWatchLayout || mobileLandscapeLayout ? "min-w-0 flex flex-col gap-6" : "flex flex-col gap-4"}>
             {showVideoUnlockGate ? (
@@ -2485,8 +2487,8 @@ export default function WatchPage() {
               data-testid="watch-chat-panel"
               className={
                 desktopWatchLayout
-                  ? "sticky top-6 self-start h-[calc(100dvh-7.5rem)] min-h-[22rem] min-w-0"
-                  : "sticky top-4 self-start h-[calc(100dvh-6rem)] min-h-[19rem] min-w-0"
+                  ? "sticky top-6 self-start h-[calc(100dvh-6.5rem)] min-h-[22rem] min-w-0"
+                  : "sticky top-4 self-start h-[calc(100dvh-5.5rem)] min-h-[19rem] min-w-0"
               }
             >
               {chatBox}

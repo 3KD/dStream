@@ -43,6 +43,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
     video.muted = true;
     video.autoplay = true;
     video.playsInline = true;
+    (video as any).disablePictureInPicture = true;
     video.preload = "auto";
     video.crossOrigin = "anonymous";
 

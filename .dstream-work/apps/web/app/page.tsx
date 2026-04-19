@@ -115,15 +115,6 @@ export default function HomePage() {
               Live Now ({visibleStreams.length})
             </h2>
 
-            <div className="flex-1 w-full md:max-w-md md:px-4">
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by title, topic, or pubkey…"
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-full px-4 py-1.5 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-colors"
-              />
-            </div>
-
             <div className="flex items-center gap-2 shrink-0">
               <Link
                 href="/browse"

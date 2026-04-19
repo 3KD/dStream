@@ -500,7 +500,8 @@ export function ChatBox({
           className="absolute inset-0 overflow-y-auto min-h-0 p-1"
           onScroll={(e) => {
             const target = e.currentTarget;
-            const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
+            // Increased threshold to 150 to prevent bouncy scroll dropout on mobile
+            const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 150;
             setIsAutoScroll(isAtBottom);
           }}
         >

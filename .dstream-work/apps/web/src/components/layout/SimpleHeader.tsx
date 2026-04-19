@@ -25,7 +25,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const showHeaderSearch = pathname !== "/";
+  const showHeaderSearch = true;
   const navClassName =
     "inline-flex items-center rounded-lg border border-neutral-800/90 bg-neutral-900/40 px-2.5 py-1 text-xs sm:text-sm text-neutral-300 hover:border-neutral-700 hover:text-white transition-colors whitespace-nowrap leading-none";
 

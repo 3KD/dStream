@@ -104,6 +104,7 @@ export interface StreamAnnounce {
   captions: StreamCaptionTrack[];
   renditions: StreamRendition[];
   topics: string[];
+  currentParticipants?: number;
   createdAt: number;
   raw: NostrEvent;
 }
