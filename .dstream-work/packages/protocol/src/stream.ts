@@ -27,9 +27,9 @@ import { isHex64 } from "./validate";
 
 function parsePositiveInt(input: string | undefined): number | undefined {
   if (!input) return undefined;
-  if (!/^\d+$/.test(input)) return undefined;
-  const value = Number(input);
-  if (!Number.isInteger(value) || value <= 0) return undefined;
+  const cleaned = input.trim().replace(/,/g, "");
+  const value = parseInt(cleaned, 10);
+  if (isNaN(value) || value <= 0) return undefined;
   return value;
 }
 
