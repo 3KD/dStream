@@ -1689,7 +1689,7 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="w-full min-h-0 px-4 pt-6 pb-6 md:px-5 lg:px-6">
+      <main className="w-full min-h-0 px-4 pt-6 pb-0 md:px-5 lg:px-6 lg:pb-0">
         {!pubkey && (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
             Invalid pubkey in route. Expected a 64-hex pubkey or an <span className="font-mono">npub…</span>.

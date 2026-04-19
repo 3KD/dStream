@@ -80,13 +80,16 @@ function getRelayOverrideFromStorage(): string[] {
 export function getNostrRelays(): string[] {
   const configuredRelays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
   const override = getRelayOverrideFromStorage();
-  if (override.length > 0) {
-    return uniq([...override, ...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
+  
+  let base = DEFAULT_NOSTR_RELAYS;
+  if (configuredRelays.length > 0) base = [...configuredRelays, ...base];
+  if (override.length > 0) base = [...override, ...base];
+
+  if (process.env.NODE_ENV === "production") {
+    base = base.filter((r) => !r.includes("localhost") && !r.includes("127.0.0.1"));
   }
-  if (configuredRelays.length > 0) {
-    return uniq([...configuredRelays, ...DEFAULT_NOSTR_RELAYS]);
-  }
-  return DEFAULT_NOSTR_RELAYS;
+
+  return uniq(base);
 }
 
 export function getNip05Policy(): Nip05Policy {
