@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+# Ensure NPM is available in non-interactive/headless environments
+if ! command -v npm &> /dev/null; then
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+fi
+
 SSH_TARGET=$1
 if [ -z "$SSH_TARGET" ]; then
   echo "========================================="

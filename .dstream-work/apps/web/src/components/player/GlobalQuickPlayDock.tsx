@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause } from "lucide-react";
-import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
+import { GlobalPlayerSlot, useGlobalPlayer } from "@/context/GlobalPlayerContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
