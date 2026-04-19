@@ -1149,7 +1149,7 @@ export function Player({
     }
   };
 
-  const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>();
+  const handleKeyDownRef = useRef<((e: KeyboardEvent) => void) | undefined>(undefined);
   handleKeyDownRef.current = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
     if (

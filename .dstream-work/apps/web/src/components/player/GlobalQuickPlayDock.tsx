@@ -151,10 +151,10 @@ export function GlobalQuickPlayDock() {
     streamPubkey: quickPlayStream?.streamPubkey ?? "",
     streamId: quickPlayStream?.streamId ?? ""
   });
-  const { announce } = useStreamAnnounce({
-    pubkey: quickPlayStream?.streamPubkey ?? "",
-    streamId: quickPlayStream?.streamId ?? ""
-  });
+  const { announce } = useStreamAnnounce(
+    quickPlayStream?.streamPubkey ?? "",
+    quickPlayStream?.streamId ?? ""
+  );
   const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
 
   // Timeline tracking
