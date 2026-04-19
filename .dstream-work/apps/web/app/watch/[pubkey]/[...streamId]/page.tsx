@@ -1687,8 +1687,12 @@ export default function WatchPage() {
   );
 
   return (
-    <div className="w-full flex-1 flex flex-col bg-neutral-950 text-white">
-      <SimpleHeader />
+    <>
+      <style>{`
+        #global-site-footer { display: none !important; }
+      `}</style>
+      <div className="w-full flex-1 flex flex-col bg-neutral-950 text-white">
+        <SimpleHeader />
       <main className="w-full min-h-0 px-4 pt-6 pb-0 md:px-5 lg:px-6 lg:pb-0">
         {!pubkey && (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
@@ -2632,5 +2636,6 @@ export default function WatchPage() {
         />
       </main>
     </div>
+    </>
   );
 }

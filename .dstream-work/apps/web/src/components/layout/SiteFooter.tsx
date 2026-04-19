@@ -29,7 +29,7 @@ const buildLinks = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-neutral-800/80 bg-neutral-950/95 relative z-10">
+    <footer id="global-site-footer" className="border-t border-neutral-800/80 bg-neutral-950/95 relative z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-12 gap-6 sm:gap-7 xl:gap-8">
           
