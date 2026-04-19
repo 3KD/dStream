@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
-import { Smile } from "lucide-react";
+import { Smile, X } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
@@ -25,6 +25,14 @@ export function ChatInput({
   const [isSending, setIsSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+    }
+  }, [message]);
 
   const customEmojis = useMemo(() => {
     if (!emotesDict) return undefined;
@@ -51,12 +59,25 @@ export function ChatInput({
   }, [showEmoji]);
 
   useEffect(() => {
+    const handleGlobalEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && showEmoji) {
+        setShowEmoji(false);
+      }
+    };
+    if (showEmoji) {
+      window.addEventListener("keydown", handleGlobalEsc);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleGlobalEsc);
+    };
+  }, [showEmoji]);
+
+  useEffect(() => {
     if (draftVersion === undefined) return;
     setMessage(draftMessage ?? "");
   }, [draftMessage, draftVersion]);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const submitMessage = async () => {
     const text = message.trim();
     if (!text || disabled || isSending) return;
     setIsSending(true);
@@ -65,10 +86,18 @@ export function ChatInput({
       if (ok) {
         setMessage("");
         setShowEmoji(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
       }
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    submitMessage();
   };
 
   const onEmojiClick = (emojiObj: any) => {
@@ -82,7 +111,18 @@ export function ChatInput({
   return (
     <form onSubmit={handleSubmit} className="shrink-0 pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-700 bg-neutral-900 relative">
       {showEmoji && (
-        <div ref={pickerRef} className="absolute bottom-[calc(100%+0.5rem)] right-3 z-50 shadow-2xl">
+        <div ref={pickerRef} className="absolute bottom-[calc(100%+0.5rem)] right-3 z-50 shadow-2xl bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden flex flex-col pointer-events-auto">
+          <div className="flex justify-between items-center px-3 py-2 bg-neutral-800 border-b border-neutral-700 shrink-0">
+            <span className="text-xs font-semibold text-neutral-300">Emotes</span>
+            <button 
+              type="button" 
+              onClick={() => setShowEmoji(false)} 
+              className="text-neutral-400 hover:text-white hover:bg-neutral-700 p-0.5 rounded transition-colors"
+              title="Close Emotes (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           <EmojiPicker 
             onEmojiClick={onEmojiClick} 
             theme={"dark" as any} 
@@ -92,13 +132,21 @@ export function ChatInput({
         </div>
       )}
       <div className="flex gap-2">
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitMessage();
+            }
+          }}
           placeholder={placeholder ?? "Send a message…"}
           disabled={disabled || isSending}
-          className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"
+          rows={1}
+          style={{ height: "38px" }}
+          className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50 resize-none min-h-[38px] max-h-[150px] overflow-y-auto w-full leading-tight"
         />
         <button
           type="button"
