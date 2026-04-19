@@ -41,6 +41,10 @@ import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 function base64EncodeUtf8(input: string): string {
   try {
     return btoa(unescape(encodeURIComponent(input)));
