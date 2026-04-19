@@ -622,7 +622,11 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     captions,
     renditions,
     topics: sortTopicTags(getAllTagValues(event.tags, "t")),
-    currentParticipants: parsePositiveInt(getFirstTagValue(event.tags, "current_participants")),
+    currentParticipants: parsePositiveInt(
+      getFirstTagValue(event.tags, "current_participants") ??
+      getFirstTagValue(event.tags, "viewers") ??
+      getFirstTagValue(event.tags, "current_viewers")
+    ),
     createdAt: event.created_at,
     raw: event
   };

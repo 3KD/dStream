@@ -37,7 +37,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
         const parsed = parseStreamAnnounceEvent(event);
         if (!parsed) return;
         if (parsed.pubkey !== pubkey || parsed.streamId !== streamId) return;
-        if (parsed.createdAt <= latestRef.current) return;
+        if (parsed.createdAt < latestRef.current) return;
         latestRef.current = parsed.createdAt;
         setAnnounce(parsed);
       },
