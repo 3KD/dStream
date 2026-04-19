@@ -1687,7 +1687,7 @@ export default function WatchPage() {
   );
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white">
+    <div className="w-full flex-1 flex flex-col bg-neutral-950 text-white">
       <SimpleHeader />
       <main className="w-full min-h-0 px-4 pt-6 pb-0 md:px-5 lg:px-6 lg:pb-0">
         {!pubkey && (

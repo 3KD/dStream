@@ -50,23 +50,28 @@ async function verifyAndCacheEmote(emote: EmoteDefinition): Promise<string | nul
   }
 }
 
-export function useEmotes(pubkey: string | null) {
+export function useEmotes(pubkeyInput: string | (string | null | undefined)[] | null) {
   const [emotes, setEmotes] = useState<BlobPointerMap>({});
   const relays = useMemo(() => getNostrRelays(), []);
 
+  const validPubkeys = useMemo(() => {
+    if (!pubkeyInput) return [];
+    if (typeof pubkeyInput === "string") return [pubkeyInput];
+    return pubkeyInput.filter((p): p is string => !!p);
+  }, [JSON.stringify(pubkeyInput)]);
+
   useEffect(() => {
-    if (!pubkey) return;
+    if (validPubkeys.length === 0) return;
 
     let mounted = true;
     const filter: Filter = {
       kinds: [NOSTR_KINDS.CUSTOM_EMOJI],
-      authors: [pubkey],
-      limit: 1
+      authors: validPubkeys
     };
 
     const sub = subscribeMany(relays, [filter], {
       onevent: async (event: any) => {
-        if (!mounted || event.pubkey !== pubkey) return;
+        if (!mounted || !validPubkeys.includes(event.pubkey)) return;
         
         const emojiTags = event.tags.filter((t: string[]) => t[0] === "emoji" && t.length >= 3);
         const definitions: EmoteDefinition[] = emojiTags.map((t: string[]) => ({
@@ -98,7 +103,7 @@ export function useEmotes(pubkey: string | null) {
         // ignore
       }
     };
-  }, [pubkey, relays]);
+  }, [validPubkeys.join(","), relays]);
 
   return emotes;
 }

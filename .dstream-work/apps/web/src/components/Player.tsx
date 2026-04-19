@@ -1149,34 +1149,36 @@ export function Player({
     }
   };
 
+  const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>();
+  handleKeyDownRef.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
+    const key = e.key.toLowerCase();
+    if (key === "f") {
+      e.preventDefault();
+      void toggleFullscreen();
+    } else if (key === "k" || key === " ") {
+      if (key === " ") e.preventDefault();
+      togglePlayPause();
+    } else if (key === "m") {
+      e.preventDefault();
+      toggleMute();
+    }
+  };
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      const key = e.key.toLowerCase();
-      if (key === "f") {
-        e.preventDefault();
-        void toggleFullscreen();
-      } else if (key === "k" || key === " ") {
-        // Only prevent default on spacebar to avoid scrolling down during active playback commands
-        if (key === " ") e.preventDefault();
-        togglePlayPause();
-      } else if (key === "m") {
-        e.preventDefault();
-        toggleMute();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [volume]);
+    const handler = (e: KeyboardEvent) => handleKeyDownRef.current?.(e);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const handleVideoSurfaceInteraction = () => {
     const video = videoRef.current;

@@ -29,7 +29,7 @@ function parsePositiveInt(input: string | undefined): number | undefined {
   if (!input) return undefined;
   const cleaned = input.trim().replace(/,/g, "");
   const value = parseInt(cleaned, 10);
-  if (isNaN(value) || value <= 0) return undefined;
+  if (isNaN(value) || value < 0) return undefined;
   return value;
 }
 

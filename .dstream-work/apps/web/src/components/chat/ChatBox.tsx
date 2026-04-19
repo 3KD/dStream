@@ -56,7 +56,7 @@ export function ChatBox({
   const { identity, signEvent } = useIdentity();
   const social = useSocial();
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
-  const globalEmotesMap = useEmotes(streamPubkey);
+  const globalEmotesMap = useEmotes([streamPubkey, identity?.pubkey]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerScrollRef = useRef<HTMLDivElement>(null);
   const nip05Policy = useMemo(() => getNip05Policy(), []);
