@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause } from "lucide-react";
+import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause, Users } from "lucide-react";
 import { GlobalPlayerSlot, useGlobalPlayer } from "@/context/GlobalPlayerContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
+import { useStreamPresence } from "@/hooks/useStreamPresence";
+import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
@@ -144,6 +146,16 @@ export function GlobalQuickPlayDock() {
   const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"idle" | "drag" | "resize">("idle");
   const [touchDevice, setTouchDevice] = useState(false);
+
+  const { viewerCount } = useStreamPresence({
+    streamPubkey: quickPlayStream?.streamPubkey ?? "",
+    streamId: quickPlayStream?.streamId ?? ""
+  });
+  const { announce } = useStreamAnnounce({
+    pubkey: quickPlayStream?.streamPubkey ?? "",
+    streamId: quickPlayStream?.streamId ?? ""
+  });
+  const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
 
   // Timeline tracking
   const [timelinePosition, setTimelinePosition] = useState(0);
@@ -742,16 +754,32 @@ export function GlobalQuickPlayDock() {
                 aria-label="Open full stream page"
               >
                 <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
-                <p className="truncate text-xs font-medium leading-none text-white/70">
-                  {quickPlayStream.title || "Live stream"}
-                </p>
+                <div className="flex items-center gap-2 max-w-full">
+                  <p className="truncate text-xs font-medium leading-none text-white/70">
+                    {quickPlayStream.title || "Live stream"}
+                  </p>
+                  {effectiveViewerCount > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center gap-1 text-[9px] font-bold text-red-400 bg-red-400/10 px-1 py-0.5 rounded leading-none pt-0.5">
+                      <Users className="w-2.5 h-2.5" />
+                      {effectiveViewerCount}
+                    </span>
+                  )}
+                </div>
               </Link>
             ) : (
               <div className="min-w-0 flex-1 px-1 py-0.5">
                 <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
-                <p className="truncate text-xs font-medium leading-none text-white/70">
-                  {quickPlayStream.title || "Live stream"}
-                </p>
+                <div className="flex items-center gap-2 max-w-full">
+                  <p className="truncate text-xs font-medium leading-none text-white/70">
+                    {quickPlayStream.title || "Live stream"}
+                  </p>
+                  {effectiveViewerCount > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center gap-1 text-[9px] font-bold text-red-400 bg-red-400/10 px-1 py-0.5 rounded leading-none pt-0.5">
+                      <Users className="w-2.5 h-2.5" />
+                      {effectiveViewerCount}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {tipHref ? (
