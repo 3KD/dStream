@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { SiteFooter } from "@/components/layout/SiteFooter";
+import { SiteFooterWrapper } from "@/components/layout/SiteFooterWrapper";
 import { GlobalQuickPlayDock } from "@/components/player/GlobalQuickPlayDock";
 import { GlobalStreamDirectoryPrefetch } from "@/components/stream/GlobalStreamDirectoryPrefetch";
 
@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="min-h-screen flex flex-col">
             <GlobalStreamDirectoryPrefetch />
             <div className="flex-1">{children}</div>
-            <SiteFooter />
+            <SiteFooterWrapper />
             <GlobalQuickPlayDock />
           </div>
         </Providers>
