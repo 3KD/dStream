@@ -11,3 +11,5 @@ out
 !.env.example
 .git
 .DS_Store
+apps/web/.next
+.next

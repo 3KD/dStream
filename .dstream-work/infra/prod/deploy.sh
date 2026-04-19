@@ -49,6 +49,8 @@ rsync -avz --delete \
   --exclude="recordings/" \
   --exclude=".git/" \
   --exclude=".DS_Store" \
+  --exclude="apps/web/.next/" \
+  --exclude="apps/desktop/dist/" \
   "$LOCAL_DIR/" "$SSH_TARGET:$REMOTE_DIR/"
 
 # 4. Boot the remote containers natively and flush server caches
