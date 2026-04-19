@@ -43,6 +43,9 @@ const nextConfig: NextConfig = {
       }
     ];
   },
+  generateBuildId: async () => {
+    return `dstream-build-${Date.now()}`;
+  },
 };
 
 export default nextConfig;
