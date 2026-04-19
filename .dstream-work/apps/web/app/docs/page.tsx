@@ -58,6 +58,7 @@ const eventKinds = [
   { kind: "30312", label: "Presence", note: "Viewer heartbeat and participation estimates." },
   { kind: "30313", label: "Moderation / roles", note: "Relay-scoped mute/block + moderator/subscriber role updates." },
   { kind: "30321", label: "Discovery moderation", note: "Operator hide/restore actions for official app discovery surfaces only." },
+  { kind: "10030", label: "Custom Emotes", note: "Visual emote mapping packs per broadcaster via emoji-picker-react integration." },
   { kind: "1", label: "Public chat", note: "Stream-associated public text events." },
   { kind: "4 / 20004", label: "DM / whisper", note: "Private encrypted channels for broadcaster/viewer coordination." }
 ];
