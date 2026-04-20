@@ -1,8 +1,8 @@
 {
-  email admin@${DSTREAM_DOMAIN:-dstream.stream}
+  email admin@{$DSTREAM_DOMAIN}
 }
 
-${DSTREAM_DOMAIN:-dstream.stream}, www.${DSTREAM_DOMAIN:-dstream.stream} {
+{$DSTREAM_DOMAIN}, www.{$DSTREAM_DOMAIN} {
   handle /relay* {
     uri strip_prefix /relay
     reverse_proxy dstream-relay-1:8080
@@ -11,4 +11,3 @@ ${DSTREAM_DOMAIN:-dstream.stream}, www.${DSTREAM_DOMAIN:-dstream.stream} {
     reverse_proxy dstream-web-1:5656
   }
 }
-

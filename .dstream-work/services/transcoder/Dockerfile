@@ -6,6 +6,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY services/transcoder/index.mjs /app/services/transcoder/index.mjs
+COPY index.mjs /app/index.mjs
 
-CMD ["node", "/app/services/transcoder/index.mjs"]
+CMD ["node", "/app/index.mjs"]

@@ -18,9 +18,10 @@
 #   DSTREAM_DEPLOY_HEALTHCHECK=1                      (run post-deploy route probes)
 #   DSTREAM_DEPLOY_SMOKE=1                            (run post-deploy production smoke)
 #   DSTREAM_DEPLOY_DISK_CLEANUP=1                     (run remote disk cleanup before build)
-#   DSTREAM_DEPLOY_MIN_FREE_GB=4                      (minimum free GB required before build)
-#   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (build web image locally and stream to host)
-#   DSTREAM_DEPLOY_LOCAL_WEB_PLATFORM=linux/amd64     (platform for local web build)
+#   DSTREAM_DEPLOY_MIN_FREE_GB=auto                   (minimum free GB required before build)
+#   DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=auto          (local prebuilt images: auto|none|all|csv of web,manifest,transcoder)
+#   DSTREAM_DEPLOY_LOCAL_BUILD_PLATFORM=linux/amd64   (platform for local app image builds)
+#   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (legacy alias for DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=web)
 #   DSTREAM_DEPLOY_DRY_RUN=1                          (validate local config and print selected source)
 
 set -euo pipefail
@@ -89,9 +90,19 @@ DEPLOY_SELF_HEAL="${DSTREAM_DEPLOY_SELF_HEAL:-1}"
 DEPLOY_HEALTHCHECK="${DSTREAM_DEPLOY_HEALTHCHECK:-1}"
 DEPLOY_SMOKE="${DSTREAM_DEPLOY_SMOKE:-1}"
 DEPLOY_DISK_CLEANUP="${DSTREAM_DEPLOY_DISK_CLEANUP:-1}"
-DEPLOY_MIN_FREE_GB="${DSTREAM_DEPLOY_MIN_FREE_GB:-4}"
-DEPLOY_LOCAL_WEB_BUILD="${DSTREAM_DEPLOY_LOCAL_WEB_BUILD:-0}"
-DEPLOY_LOCAL_WEB_PLATFORM="${DSTREAM_DEPLOY_LOCAL_WEB_PLATFORM:-linux/amd64}"
+DEPLOY_MIN_FREE_GB_RAW="${DSTREAM_DEPLOY_MIN_FREE_GB:-auto}"
+DEPLOY_LOCAL_BUILD_PLATFORM="${DSTREAM_DEPLOY_LOCAL_BUILD_PLATFORM:-linux/amd64}"
+if [[ -n "${DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES:-}" ]]; then
+  DEPLOY_LOCAL_BUILD_SERVICES_RAW="${DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES}"
+elif [[ -n "${DSTREAM_DEPLOY_LOCAL_WEB_BUILD+x}" ]]; then
+  if [[ "${DSTREAM_DEPLOY_LOCAL_WEB_BUILD}" == "1" ]]; then
+    DEPLOY_LOCAL_BUILD_SERVICES_RAW="web"
+  else
+    DEPLOY_LOCAL_BUILD_SERVICES_RAW="none"
+  fi
+else
+  DEPLOY_LOCAL_BUILD_SERVICES_RAW="auto"
+fi
 SSH_CONTROL_PATH="${DSTREAM_DEPLOY_SSH_CONTROL_PATH:-/tmp/dstream-%C}"
 SSH_MULTIPLEX="${DSTREAM_DEPLOY_SSH_MULTIPLEX:-1}"
 if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
@@ -114,30 +125,120 @@ run_ssh() {
   fi
 }
 
-build_local_web_image() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "ERROR: docker is required for DSTREAM_DEPLOY_LOCAL_WEB_BUILD=1."
-    exit 1
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "${value}"
+}
+
+docker_ready() {
+  command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
+}
+
+service_image_name() {
+  case "$1" in
+    web) printf '%s' "dstream-web:latest" ;;
+    manifest) printf '%s' "dstream-manifest:latest" ;;
+    transcoder) printf '%s' "dstream-transcoder:latest" ;;
+    *)
+      echo "ERROR: unsupported service for image export: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+parse_local_build_services() {
+  local raw="$1"
+  local token normalized
+  local requested=()
+
+  if [[ "${raw}" == "auto" ]]; then
+    if docker_ready; then
+      LOCAL_BUILD_SERVICES=(web manifest transcoder)
+    else
+      echo "🔹 Local Docker unavailable; falling back to remote app builds."
+      LOCAL_BUILD_SERVICES=()
+    fi
+    return
   fi
-  if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: local Docker daemon is not available for DSTREAM_DEPLOY_LOCAL_WEB_BUILD=1."
+
+  if [[ -z "${raw}" || "${raw}" == "none" ]]; then
+    LOCAL_BUILD_SERVICES=()
+    return
+  fi
+
+  if ! docker_ready; then
+    echo "ERROR: docker is required for local app image builds."
     exit 1
   fi
 
-  echo "🔹 Building web image locally (${DEPLOY_LOCAL_WEB_PLATFORM})..."
+  IFS=',' read -r -a requested <<< "${raw}"
+  LOCAL_BUILD_SERVICES=()
+  for token in "${requested[@]}"; do
+    token="$(trim "${token}")"
+    case "${token}" in
+      ""|none)
+        ;;
+      all)
+        normalized=(web manifest transcoder)
+        for token in "${normalized[@]}"; do
+          [[ " ${LOCAL_BUILD_SERVICES[*]} " == *" ${token} "* ]] || LOCAL_BUILD_SERVICES+=("${token}")
+        done
+        ;;
+      web|manifest|transcoder)
+        [[ " ${LOCAL_BUILD_SERVICES[*]} " == *" ${token} "* ]] || LOCAL_BUILD_SERVICES+=("${token}")
+        ;;
+      *)
+        echo "ERROR: unsupported DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES value: ${token}"
+        echo "Use auto, none, all, or a comma-separated list of web,manifest,transcoder."
+        exit 1
+        ;;
+    esac
+  done
+}
+
+service_selected_for_local_build() {
+  local service="$1"
+  local selected
+  for selected in "${LOCAL_BUILD_SERVICES[@]}"; do
+    if [[ "${selected}" == "${service}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+build_local_service_images() {
+  if (( ${#LOCAL_BUILD_SERVICES[@]} == 0 )); then
+    return
+  fi
+
+  echo "🔹 Building app images locally (${DEPLOY_LOCAL_BUILD_PLATFORM}): ${LOCAL_BUILD_SERVICES[*]}"
   (
     cd "${PROJECT_DIR}"
-    COMPOSE_PROJECT_NAME=dstream DOCKER_DEFAULT_PLATFORM="${DEPLOY_LOCAL_WEB_PLATFORM}" \
-      docker compose --env-file .env.production -f docker-compose.yml build web
+    DOCKER_DEFAULT_PLATFORM="${DEPLOY_LOCAL_BUILD_PLATFORM}" \
+      docker compose --env-file .env.production -f docker-compose.yml build "${LOCAL_BUILD_SERVICES[@]}"
   )
 }
 
-stream_local_web_image_to_remote() {
-  echo "🔹 Streaming local web image to remote..."
+stream_local_service_images_to_remote() {
+  local image_names=()
+  local service
+
+  if (( ${#LOCAL_BUILD_SERVICES[@]} == 0 )); then
+    return
+  fi
+
+  for service in "${LOCAL_BUILD_SERVICES[@]}"; do
+    image_names+=("$(service_image_name "${service}")")
+  done
+
+  echo "🔹 Streaming local app images to remote: ${LOCAL_BUILD_SERVICES[*]}"
   if [[ "${SSH_MULTIPLEX}" == "1" ]]; then
-    docker save dstream-web:latest | ssh "${SSH_OPTS[@]}" "${TARGET}" "docker load"
+    docker save "${image_names[@]}" | ssh "${SSH_OPTS[@]}" "${TARGET}" "docker load"
   else
-    docker save dstream-web:latest | ssh "${TARGET}" "docker load"
+    docker save "${image_names[@]}" | ssh "${TARGET}" "docker load"
   fi
 }
 
@@ -153,6 +254,23 @@ if [[ ! -f "${PROJECT_DIR}/.env.production" ]]; then
     echo "Copy .env.production.example -> .env.production and fill real values first."
   fi
   exit 1
+fi
+
+parse_local_build_services "${DEPLOY_LOCAL_BUILD_SERVICES_RAW}"
+REMOTE_BUILD_SERVICES=()
+for service in web manifest transcoder; do
+  if ! service_selected_for_local_build "${service}"; then
+    REMOTE_BUILD_SERVICES+=("${service}")
+  fi
+done
+if [[ "${DEPLOY_MIN_FREE_GB_RAW}" == "auto" ]]; then
+  if (( ${#REMOTE_BUILD_SERVICES[@]} == 0 )); then
+    DEPLOY_MIN_FREE_GB=2
+  else
+    DEPLOY_MIN_FREE_GB=4
+  fi
+else
+  DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB_RAW}"
 fi
 
 DEPLOY_GIT_HEAD=""
@@ -184,6 +302,16 @@ echo "   source: ${PROJECT_DIR_SOURCE}"
 if [[ -n "${DEPLOY_GIT_HEAD}" ]]; then
   echo "   git:    ${DEPLOY_GIT_BRANCH}@${DEPLOY_GIT_HEAD}"
 fi
+if (( ${#LOCAL_BUILD_SERVICES[@]} > 0 )); then
+  echo "   local app images: ${LOCAL_BUILD_SERVICES[*]}"
+else
+  echo "   local app images: none"
+fi
+if (( ${#REMOTE_BUILD_SERVICES[@]} > 0 )); then
+  echo "   remote app builds: ${REMOTE_BUILD_SERVICES[*]}"
+else
+  echo "   remote app builds: none"
+fi
 echo "   remote: ${TARGET}:${REMOTE_DIR}"
 
 if [[ "${DSTREAM_DEPLOY_DRY_RUN:-0}" == "1" ]]; then
@@ -209,7 +337,7 @@ rsync -az --delete \
 
 if [[ "${DEPLOY_DISK_CLEANUP}" == "1" ]]; then
   echo "🔹 Running remote disk cleanup..."
-  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && bash scripts/ops-disk-cleanup.sh"
+  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && if [[ -f scripts/ops-disk-cleanup.sh ]]; then bash scripts/ops-disk-cleanup.sh; else echo 'cleanup script missing; skipping'; fi"
 fi
 
 echo "🔹 Checking remote disk headroom..."
@@ -226,10 +354,8 @@ if (( remote_free_gb < DEPLOY_MIN_FREE_GB )); then
   exit 1
 fi
 
-if [[ "${DEPLOY_LOCAL_WEB_BUILD}" == "1" ]]; then
-  build_local_web_image
-  stream_local_web_image_to_remote
-fi
+build_local_service_images
+stream_local_service_images_to_remote
 
 COMPOSE_ARGS="-f docker-compose.yml"
 DEPLOY_REAL_WALLET="${DSTREAM_DEPLOY_REAL_WALLET:-auto}"
@@ -246,38 +372,40 @@ fi
 echo "🔹 Compose profile: $([[ "${DEPLOY_REAL_WALLET}" == "1" ]] && echo 'real-wallet' || echo 'base')"
 
 echo "🔹 Rebuilding and restarting containers..."
-if [[ "${DEPLOY_LOCAL_WEB_BUILD}" == "1" ]]; then
-  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
-    if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
-          docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
-      echo '--- compose build failure logs (tail 220) ---'; \
-      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-      exit 1; \
-    fi; \
-    if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
-      echo '--- compose up failure logs (tail 220) ---'; \
-      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-      exit 1; \
-    fi"
-else
-  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && \
-    if ! (docker compose ${COMPOSE_ARGS} --env-file .env.production build transcoder && \
-          docker compose ${COMPOSE_ARGS} --env-file .env.production build web && \
-          docker compose ${COMPOSE_ARGS} --env-file .env.production build manifest); then \
-      echo '--- compose build failure logs (tail 220) ---'; \
-      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-      exit 1; \
-    fi; \
-    if ! docker compose ${COMPOSE_ARGS} --env-file .env.production up -d --remove-orphans; then \
-      echo '--- compose up failure logs (tail 220) ---'; \
-      docker compose ${COMPOSE_ARGS} --env-file .env.production logs --tail 220 \
-        xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder || true; \
-      exit 1; \
-    fi"
+remote_build_csv=""
+if (( ${#REMOTE_BUILD_SERVICES[@]} > 0 )); then
+  remote_build_csv="$(IFS=,; printf '%s' "${REMOTE_BUILD_SERVICES[*]}")"
 fi
+run_ssh "${TARGET}" "bash -s -- '${REMOTE_DIR}' '${DEPLOY_REAL_WALLET}' '${remote_build_csv}'" <<'EOS'
+set -euo pipefail
+
+remote_dir="$1"
+deploy_real_wallet="$2"
+remote_build_csv="$3"
+
+compose_args=(-f docker-compose.yml)
+if [[ "${deploy_real_wallet}" == "1" ]]; then
+  compose_args+=(-f docker-compose.real-wallet.yml)
+fi
+log_targets=(xmr-wallet-init xmr-wallet-rpc xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest web mediamtx manifest transcoder)
+
+cd "${remote_dir}"
+
+if [[ -n "${remote_build_csv}" ]]; then
+  IFS=',' read -r -a remote_build_services <<< "${remote_build_csv}"
+  if ! docker compose "${compose_args[@]}" --env-file .env.production build "${remote_build_services[@]}"; then
+    echo '--- compose build failure logs (tail 220) ---'
+    docker compose "${compose_args[@]}" --env-file .env.production logs --tail 220 "${log_targets[@]}" || true
+    exit 1
+  fi
+fi
+
+if ! docker compose "${compose_args[@]}" --env-file .env.production up -d --remove-orphans; then
+  echo '--- compose up failure logs (tail 220) ---'
+  docker compose "${compose_args[@]}" --env-file .env.production logs --tail 220 "${log_targets[@]}" || true
+  exit 1
+fi
+EOS
 
 if [[ "${DEPLOY_SELF_HEAL}" == "1" ]]; then
   echo "🔹 Self-healing edge proxy (${DEPLOY_CADDY_CONTAINER})..."
@@ -291,7 +419,7 @@ domain="$4"
 
 mkdir -p "${remote_dir}/infra/prod" "${remote_dir}/.caddy-data" "${remote_dir}/.caddy-config"
 
-if [[ ! -s "${remote_dir}/infra/prod/Caddyfile" ]]; then
+if [[ ! -s "${remote_dir}/infra/prod/Caddyfile" ]] || grep -q '\${DSTREAM_DOMAIN:-' "${remote_dir}/infra/prod/Caddyfile"; then
   printf '%s\n' "${domain} {" "  reverse_proxy dstream-web-1:5656" "}" > "${remote_dir}/infra/prod/Caddyfile"
 fi
 
@@ -307,6 +435,7 @@ docker run -d \
   --name "${caddy_container}" \
   --restart unless-stopped \
   --network "${network_name}" \
+  -e "DSTREAM_DOMAIN=${domain}" \
   -p 80:80 \
   -p 443:443 \
   -p 443:443/udp \

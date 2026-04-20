@@ -258,6 +258,8 @@ DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/
 
 Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that sets that project dir automatically before delegating to the repo-root script. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
 
+When local Docker is available, the deploy script prebuilds and streams the `web`, `manifest`, and `transcoder` images so the production host only has to load and restart them. Set `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=none` if you need to fall back to remote app builds.
+
 To validate a specific env file without exporting it into your shell:
 
 ```bash

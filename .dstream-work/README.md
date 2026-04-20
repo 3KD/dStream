@@ -135,6 +135,8 @@ DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/
 
 If you are already inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a thin wrapper that pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace before calling the repo-root script.
 
+When local Docker is available, the deploy script now prebuilds and streams the `web`, `manifest`, and `transcoder` images from your machine so small production hosts do not spend RAM and disk on app builds. Set `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=none` only if you intentionally want remote app builds.
+
 Before production deploys, run:
 
 ```bash

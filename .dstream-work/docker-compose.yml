@@ -1,5 +1,6 @@
 services:
   web:
+    image: dstream-web:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -104,10 +105,10 @@ services:
     restart: unless-stopped
 
   manifest:
+    image: dstream-manifest:latest
     build:
-      context: .
+      context: ./services/manifest
       dockerfile: Dockerfile
-    command: ["node", "services/manifest/index.mjs"]
     environment:
       HLS_DIR: "/hls"
       MEDIAMTX_HLS_URL: "${MEDIAMTX_HLS_URL:-http://mediamtx:8880}"
@@ -155,9 +156,10 @@ services:
     restart: unless-stopped
 
   transcoder:
+    image: dstream-transcoder:latest
     build:
-      context: .
-      dockerfile: services/transcoder/Dockerfile
+      context: ./services/transcoder
+      dockerfile: Dockerfile
     environment:
       HLS_DIR: "/hls"
       TRANSCODER_SOURCE_HLS_BASE: "${TRANSCODER_SOURCE_HLS_BASE:-http://mediamtx:8880}"
