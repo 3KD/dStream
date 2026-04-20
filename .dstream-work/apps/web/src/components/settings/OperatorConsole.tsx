@@ -142,9 +142,10 @@ function nowSec() {
 
 interface OperatorConsoleProps {
   mode?: OperatorConsoleMode;
+  chrome?: "page" | "embedded";
 }
 
-export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
+export function OperatorConsole({ mode = "all", chrome = "page" }: OperatorConsoleProps) {
   const { identity, signEvent } = useIdentity();
   const relays = useMemo(() => getNostrRelays(), []);
   const storedSession = useStoredSession();
@@ -271,6 +272,563 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
       : mode === "monetization"
         ? "Stakes, escrow v3 multisig workflows, and verified tip receipts."
         : "Live stream state, announce status, presence, chat, and monetization controls.";
+  const renderContent = () =>
+    !identity ? (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300">
+      <div className="font-semibold text-white mb-2">Connect an identity to use the dashboard.</div>
+      <div className="text-neutral-400">Use the button in the header (NIP-07 preferred).</div>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Stream</div>
+              <div className="text-sm text-neutral-300">
+                {npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(identity.pubkey, { head: 12, tail: 8 })}
+              </div>
+            </div>
+            {storedSession && (
+              <div className="text-xs text-neutral-500 text-right">
+                Last live:{" "}
+                <span className="font-mono text-neutral-300">{new Date(storedSession.startedAt).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-neutral-400">Stream ID</label>
+            <input
+              value={streamId}
+              onChange={(e) => setStreamId(e.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="e.g. live-20260205-2015"
+            />
+            {originProblem && (
+              <div className="text-xs text-red-300">
+                Invalid Stream ID. <span className="text-red-200/80">{originProblem}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={watchHref}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold inline-flex items-center gap-2 disabled:opacity-50"
+              aria-disabled={!streamId.trim()}
+              onClick={(e) => {
+                if (!streamId.trim()) e.preventDefault();
+              }}
+            >
+              Open Watch <ExternalLink className="w-4 h-4" />
+            </Link>
+            <button
+              onClick={copyWatchLink}
+              disabled={!streamId.trim()}
+              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2 disabled:opacity-50"
+              title="Copy watch link"
+            >
+              <Copy className="w-4 h-4" />
+              {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
+            </button>
+            {hlsHref && (
+              <a
+                href={hlsHref}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2"
+              >
+                Open HLS <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-neutral-400">State</span>
+              <span
+                className={`font-mono inline-flex items-center gap-2 ${
+                  streamState === "live"
+                    ? "text-red-300"
+                    : streamState === "ended"
+                      ? "text-neutral-300"
+                      : streamState === "unknown"
+                        ? "text-amber-300"
+                        : "text-neutral-400"
+                }`}
+              >
+                <CircleDot
+                  className={`w-3.5 h-3.5 ${
+                    streamState === "live"
+                      ? "text-red-400"
+                      : streamState === "ended"
+                        ? "text-neutral-500"
+                        : streamState === "unknown"
+                          ? "text-amber-400"
+                          : "text-neutral-600"
+                  }`}
+                />
+                {streamState.toUpperCase()}
+              </span>
+            </div>
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-neutral-400">Announce</span>
+              <span className="font-mono text-neutral-300">
+                {announceLoading ? "loading…" : announce ? `${announce.status} (${new Date(announce.createdAt * 1000).toLocaleTimeString()})` : "none"}
+              </span>
+            </div>
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-neutral-400">Relays</span>
+              <span className="font-mono text-neutral-300">{relays.length}</span>
+            </div>
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-neutral-400">HLS</span>
+              <span className="font-mono text-neutral-300">
+                {hlsStatus === "idle"
+                  ? "idle"
+                  : hlsStatus === "checking"
+                    ? "checking…"
+                    : hlsStatus === "ok"
+                      ? `ready${hlsLastCode ? ` (${hlsLastCode})` : ""}`
+                      : `failed${hlsLastCode ? ` (${hlsLastCode})` : ""}`}
+                {hlsLastAt ? <span className="text-neutral-500"> · {new Date(hlsLastAt).toLocaleTimeString()}</span> : null}
+              </span>
+            </div>
+          </div>
+
+          {originStreamId && (
+            <div className="text-xs text-neutral-500">
+              Origin stream: <span className="font-mono break-all text-neutral-300">{originStreamId}</span>
+            </div>
+          )}
+          {announce?.streaming && (
+            <div className="text-xs text-neutral-500">
+              Streaming hint: <span className="font-mono break-all text-neutral-300">{announce.streaming}</span>
+            </div>
+          )}
+        </div>
+
+        {showOperations ? (
+          streamId.trim() ? (
+            <div className="h-[70vh] lg:h-[64vh]">
+              <ChatBox streamPubkey={identity.pubkey} streamId={streamId.trim()} />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
+              Enter a Stream ID to load chat and presence.
+            </div>
+          )
+        ) : (
+          <div className="h-[70vh] lg:h-[64vh]">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300 h-full">
+              <div className="font-semibold mb-2">Monetization Mode</div>
+              <div className="text-neutral-400">
+                Chat and presence are in <Link href="/settings/operations" className="text-blue-300 hover:text-blue-200">Operations</Link>.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-6">
+        {showMonetization && identity && streamId.trim() && xmrRpcAvailable && stakeRequiredAtomic && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MoneroLogo className="w-5 h-5 text-orange-400" />
+                <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Stakes (P2P)</div>
+              </div>
+              <button
+                onClick={() => void refreshStakes()}
+                disabled={stakesStatus === "loading"}
+                className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+              >
+                {stakesStatus === "loading" ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+
+            <div className="text-xs text-neutral-500">
+              Required: <span className="font-mono text-neutral-200">{formatXmrAtomic(stakeRequiredAtomic)} XMR</span> (confirmed)
+            </div>
+
+            {stakesError && <div className="text-xs text-red-300">{stakesError}</div>}
+
+            {stakes.length === 0 ? (
+              <div className="text-sm text-neutral-400">No stakes detected yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {stakes.slice(0, 12).map((s) => {
+                  let satisfied = false;
+                  try {
+                    satisfied = BigInt(s.confirmedAtomic) >= BigInt(stakeRequiredAtomic);
+                  } catch {
+                    satisfied = false;
+                  }
+                  const slashStatus = stakeSlashStatusByIndex[s.addressIndex] ?? "idle";
+                  const slashMessage = stakeSlashMessageByIndex[s.addressIndex] ?? "";
+                  return (
+                    <div
+                      key={`${s.addressIndex}:${s.observedAtMs ?? 0}`}
+                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm text-neutral-200 font-mono truncate">
+                          {formatXmrAtomic(s.confirmedAtomic)} XMR
+                          <span className="text-neutral-500"> confirmed</span>
+                          <span className="text-neutral-500"> · subaddr {s.addressIndex}</span>
+                        </div>
+                        <div className="text-xs text-neutral-500">
+                          {s.observedAtMs ? new Date(s.observedAtMs).toLocaleString() : "—"} · {s.transferCount} transfer(s) · max{" "}
+                          {s.confirmationsMax} conf · {satisfied ? "satisfied" : "pending"}
+                        </div>
+                        {slashMessage ? <div className="text-xs text-neutral-500">{slashMessage}</div> : null}
+                      </div>
+                      <button
+                        onClick={() => void slashStake(s.addressIndex)}
+                        disabled={slashStatus === "slashing"}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                        title="Sweep unlocked stake from this subaddress to broadcaster wallet"
+                      >
+                        {slashStatus === "slashing" ? "Slashing…" : slashStatus === "ok" ? "Slashed" : slashStatus === "fail" ? "Retry slash" : "Slash"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showMonetization && identity && streamId.trim() && xmrRpcAvailable && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MoneroLogo className="w-5 h-5 text-orange-400" />
+                <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Escrow v3 (multisig)</div>
+              </div>
+              <button
+                onClick={() => void refreshEscrowSession()}
+                disabled={escrowStatus === "working" || !(escrowSessionIdInput.trim() || escrowSession?.sessionId)}
+                className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+              >
+                {escrowStatus === "working" ? "Working…" : "Refresh"}
+              </button>
+            </div>
+
+            <div className="text-xs text-neutral-500">
+              Coordinator: <span className="font-mono text-neutral-200">{shortenText(identity.pubkey, { head: 10, tail: 8 })}</span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-neutral-400">Participants (64-hex pubkeys, comma/newline separated)</label>
+              <textarea
+                value={escrowParticipantsInput}
+                onChange={(e) => setEscrowParticipantsInput(e.target.value)}
+                className="w-full min-h-[84px] bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                placeholder="hexpubkey1, hexpubkey2"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs text-neutral-400">Threshold</label>
+                <input
+                  value={escrowThresholdInput}
+                  onChange={(e) => setEscrowThresholdInput(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-xs text-neutral-400">Session ID</label>
+                <input
+                  value={escrowSessionIdInput}
+                  onChange={(e) => setEscrowSessionIdInput(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                  placeholder="auto-filled after create"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => void createEscrowSession()}
+                disabled={escrowStatus === "working"}
+                className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-black text-xs font-bold disabled:opacity-50"
+              >
+                Create Session
+              </button>
+              <button
+                onClick={() => void refreshEscrowSession()}
+                disabled={escrowStatus === "working" || !(escrowSessionIdInput.trim() || escrowSession?.sessionId)}
+                className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+              >
+                Load Session
+              </button>
+            </div>
+
+            {escrowMessage ? (
+              <div className={`text-xs ${escrowStatus === "error" ? "text-red-300" : "text-neutral-400"}`}>{escrowMessage}</div>
+            ) : null}
+
+            {escrowSession && (
+              <div className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="text-neutral-500">
+                    Phase: <span className="font-mono text-neutral-200">{escrowSession.phase}</span>
+                  </div>
+                  <div className="text-neutral-500">
+                    Threshold: <span className="font-mono text-neutral-200">{escrowSession.threshold}</span>
+                  </div>
+                  <div className="text-neutral-500">
+                    Participants: <span className="font-mono text-neutral-200">{escrowSession.participantPubkeys.length}</span>
+                  </div>
+                  <div className="text-neutral-500">
+                    Exchange round: <span className="font-mono text-neutral-200">{escrowSession.exchange.round}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-neutral-500">Coordinator prepare info</div>
+                  <textarea
+                    readOnly
+                    value={escrowSession.prepare.coordinatorMultisigInfo || ""}
+                    className="w-full min-h-[70px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-300"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-neutral-500">Coordinator exchange info</div>
+                  <textarea
+                    readOnly
+                    value={escrowSession.exchange.coordinatorMultisigInfo || ""}
+                    className="w-full min-h-[64px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-300"
+                  />
+                </div>
+
+                <div className="text-xs text-neutral-500">
+                  Pending prepare:{" "}
+                  <span className="font-mono text-neutral-300">
+                    {escrowSession.prepare.pendingPubkeys.length
+                      ? escrowSession.prepare.pendingPubkeys.map((pk) => shortenText(pk, { head: 8, tail: 6 })).join(", ")
+                      : "none"}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-500">
+                  Pending exchange:{" "}
+                  <span className="font-mono text-neutral-300">
+                    {escrowSession.exchange.pendingPubkeys.length
+                      ? escrowSession.exchange.pendingPubkeys.map((pk) => shortenText(pk, { head: 8, tail: 6 })).join(", ")
+                      : "none"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => void runEscrowCoordinatorAction("make")}
+                    disabled={escrowStatus === "working"}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                  >
+                    Make
+                  </button>
+                  <button
+                    onClick={() => void runEscrowCoordinatorAction("exchange")}
+                    disabled={escrowStatus === "working"}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                  >
+                    Exchange
+                  </button>
+                  <button
+                    onClick={() => void runEscrowCoordinatorAction("import")}
+                    disabled={escrowStatus === "working"}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                  >
+                    Import
+                  </button>
+                  <button
+                    onClick={() => void runEscrowCoordinatorAction("sign")}
+                    disabled={escrowStatus === "working"}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                  >
+                    Sign
+                  </button>
+                  <button
+                    onClick={() => void runEscrowCoordinatorAction("submit")}
+                    disabled={escrowStatus === "working"}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50 col-span-2"
+                  >
+                    Submit
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-neutral-500">Import infos (one per line)</div>
+                  <textarea
+                    value={escrowImportInfosText}
+                    onChange={(e) => setEscrowImportInfosText(e.target.value)}
+                    className="w-full min-h-[72px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                    placeholder="peer_export_a&#10;peer_export_b"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <div className="text-xs text-neutral-500">Sign txDataHex</div>
+                    <input
+                      value={escrowSignTxDataHex}
+                      onChange={(e) => setEscrowSignTxDataHex(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs text-neutral-500">Submit txDataHex (optional override)</div>
+                    <input
+                      value={escrowSubmitTxDataHex}
+                      onChange={(e) => setEscrowSubmitTxDataHex(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                      placeholder="uses signed tx if empty"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-neutral-800 pt-3">
+                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Participant Join</div>
+                  <div className="flex gap-2">
+                    <select
+                      value={escrowParticipantPhase}
+                      onChange={(e) => setEscrowParticipantPhase(e.target.value === "exchange" ? "exchange" : "prepare")}
+                      className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:border-orange-500 focus:outline-none"
+                    >
+                      <option value="prepare">prepare</option>
+                      <option value="exchange">exchange</option>
+                    </select>
+                    <button
+                      onClick={() => void submitEscrowParticipantInfo()}
+                      disabled={escrowStatus === "working"}
+                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                    >
+                      Submit Participant Info
+                    </button>
+                  </div>
+                  <textarea
+                    value={escrowParticipantInfo}
+                    onChange={(e) => setEscrowParticipantInfo(e.target.value)}
+                    className="w-full min-h-[64px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
+                    placeholder="participant multisig info"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showMonetization && identity && streamId.trim() && xmrRpcAvailable && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MoneroLogo className="w-5 h-5 text-orange-400" />
+                <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Verified tips</div>
+              </div>
+              <button
+                onClick={() => void refreshTips()}
+                disabled={tipsStatus === "loading"}
+                className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+              >
+                {tipsStatus === "loading" ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+
+            {tipsError && <div className="text-xs text-red-300">{tipsError}</div>}
+
+            {tips.length === 0 ? (
+              <div className="text-sm text-neutral-400">No verified tips detected yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {tips.slice(0, 12).map((t) => {
+                  const key = `${t.observedAtMs}:${t.amountAtomic}:${t.addressIndex}`;
+                  const status = receiptStatusByKey[key] ?? "idle";
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm text-neutral-200 font-mono truncate">
+                          {formatXmrAtomic(t.amountAtomic)} XMR
+                          <span className="text-neutral-500"> · subaddr {t.addressIndex}</span>
+                        </div>
+                        <div className="text-xs text-neutral-500">
+                          {new Date(t.observedAtMs).toLocaleString()} · {t.confirmed ? "confirmed" : `unconfirmed (${t.confirmations})`}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => void publishReceipt(t)}
+                        disabled={status === "publishing"}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+                        title="Publish a kind 30314 receipt to configured relays"
+                      >
+                        {status === "publishing" ? "Publishing…" : status === "ok" ? "Receipt OK" : status === "fail" ? "Receipt failed" : "Publish receipt"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showOperations && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Presence</div>
+              {presenceConnected && <span className="text-[10px] px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">live</span>}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-neutral-950/40 border border-neutral-800 text-neutral-300">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-sm text-neutral-200">
+                  <span className="text-neutral-400">Viewers</span> <span className="font-mono">≈ {streamId.trim() ? viewerCount : 0}</span>
+                </div>
+                <div className="text-xs text-neutral-500">Best-effort, based on recent presence events.</div>
+              </div>
+            </div>
+
+            {streamId.trim() && viewerPubkeys.length > 0 && (
+              <div className="text-xs text-neutral-500">
+                <div className="mb-2">Recent viewers</div>
+                <div className="flex flex-wrap gap-2">
+                  {viewerPubkeys.slice(0, 18).map((pk) => {
+                    const n = pubkeyHexToNpub(pk);
+                    return (
+                      <span key={pk} className="px-2 py-1 rounded-lg bg-neutral-950/40 border border-neutral-800 font-mono text-neutral-300">
+                        {shortenText(n ?? pk, { head: n ? 10 : 8, tail: 6 })}
+                      </span>
+                    );
+                  })}
+                  {viewerPubkeys.length > 18 && (
+                    <span className="px-2 py-1 rounded-lg bg-neutral-950/40 border border-neutral-800 font-mono text-neutral-500">
+                      +{viewerPubkeys.length - 18}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showOperations && (
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-2 text-sm text-neutral-300">
+            <div className="font-semibold">Relays</div>
+            <div className="text-xs text-neutral-500">Configured relay(s):</div>
+            <div className="text-xs font-mono text-neutral-300 break-all">{relays.join(", ")}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   const [xmrRpcAvailable, setXmrRpcAvailable] = useState(false);
   useEffect(() => {
@@ -724,6 +1282,10 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
     [identity, relays, signEvent, streamId]
   );
 
+  const content = renderContent();
+
+  if (chrome === "embedded") return content;
+
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
@@ -740,562 +1302,7 @@ export function OperatorConsole({ mode = "all" }: OperatorConsoleProps) {
 
         <SettingsNav />
 
-        {!identity ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300">
-            <div className="font-semibold text-white mb-2">Connect an identity to use the dashboard.</div>
-            <div className="text-neutral-400">Use the button in the header (NIP-07 preferred).</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Stream</div>
-                    <div className="text-sm text-neutral-300">
-                      {npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(identity.pubkey, { head: 12, tail: 8 })}
-                    </div>
-                  </div>
-                  {storedSession && (
-                    <div className="text-xs text-neutral-500 text-right">
-                      Last live:{" "}
-                      <span className="font-mono text-neutral-300">{new Date(storedSession.startedAt).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Stream ID</label>
-                  <input
-                    value={streamId}
-                    onChange={(e) => setStreamId(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    placeholder="e.g. live-20260205-2015"
-                  />
-                  {originProblem && (
-                    <div className="text-xs text-red-300">
-                      Invalid Stream ID. <span className="text-red-200/80">{originProblem}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={watchHref}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold inline-flex items-center gap-2 disabled:opacity-50"
-                    aria-disabled={!streamId.trim()}
-                    onClick={(e) => {
-                      if (!streamId.trim()) e.preventDefault();
-                    }}
-                  >
-                    Open Watch <ExternalLink className="w-4 h-4" />
-                  </Link>
-                  <button
-                    onClick={copyWatchLink}
-                    disabled={!streamId.trim()}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2 disabled:opacity-50"
-                    title="Copy watch link"
-                  >
-                    <Copy className="w-4 h-4" />
-                    {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
-                  </button>
-                  {hlsHref && (
-                    <a
-                      href={hlsHref}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2"
-                    >
-                      Open HLS <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
-                    <span className="text-neutral-400">State</span>
-                    <span
-                      className={`font-mono inline-flex items-center gap-2 ${
-                        streamState === "live"
-                          ? "text-red-300"
-                          : streamState === "ended"
-                            ? "text-neutral-300"
-                            : streamState === "unknown"
-                              ? "text-amber-300"
-                              : "text-neutral-400"
-                      }`}
-                    >
-                      <CircleDot
-                        className={`w-3.5 h-3.5 ${
-                          streamState === "live"
-                            ? "text-red-400"
-                            : streamState === "ended"
-                              ? "text-neutral-500"
-                              : streamState === "unknown"
-                                ? "text-amber-400"
-                                : "text-neutral-600"
-                        }`}
-                      />
-                      {streamState.toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
-                    <span className="text-neutral-400">Announce</span>
-                    <span className="font-mono text-neutral-300">
-                      {announceLoading ? "loading…" : announce ? `${announce.status} (${new Date(announce.createdAt * 1000).toLocaleTimeString()})` : "none"}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
-                    <span className="text-neutral-400">Relays</span>
-                    <span className="font-mono text-neutral-300">{relays.length}</span>
-                  </div>
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between">
-                    <span className="text-neutral-400">HLS</span>
-                    <span className="font-mono text-neutral-300">
-                      {hlsStatus === "idle"
-                        ? "idle"
-                        : hlsStatus === "checking"
-                          ? "checking…"
-                          : hlsStatus === "ok"
-                            ? `ready${hlsLastCode ? ` (${hlsLastCode})` : ""}`
-                            : `failed${hlsLastCode ? ` (${hlsLastCode})` : ""}`}
-                      {hlsLastAt ? <span className="text-neutral-500"> · {new Date(hlsLastAt).toLocaleTimeString()}</span> : null}
-                    </span>
-                  </div>
-                </div>
-
-                {originStreamId && (
-                  <div className="text-xs text-neutral-500">
-                    Origin stream: <span className="font-mono break-all text-neutral-300">{originStreamId}</span>
-                  </div>
-                )}
-                {announce?.streaming && (
-                  <div className="text-xs text-neutral-500">
-                    Streaming hint: <span className="font-mono break-all text-neutral-300">{announce.streaming}</span>
-                  </div>
-                )}
-              </div>
-
-              {showOperations ? (
-                streamId.trim() ? (
-                  <div className="h-[70vh] lg:h-[64vh]">
-                    <ChatBox streamPubkey={identity.pubkey} streamId={streamId.trim()} />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
-                    Enter a Stream ID to load chat and presence.
-                  </div>
-                )
-              ) : (
-                <div className="h-[70vh] lg:h-[64vh]">
-                  <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300 h-full">
-                    <div className="font-semibold mb-2">Monetization Mode</div>
-                    <div className="text-neutral-400">
-                      Chat and presence are in <Link href="/settings/operations" className="text-blue-300 hover:text-blue-200">Operations</Link>.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-6">
-              {showMonetization && identity && streamId.trim() && xmrRpcAvailable && stakeRequiredAtomic && (
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <MoneroLogo className="w-5 h-5 text-orange-400" />
-                      <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Stakes (P2P)</div>
-                    </div>
-                    <button
-                      onClick={() => void refreshStakes()}
-                      disabled={stakesStatus === "loading"}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                    >
-                      {stakesStatus === "loading" ? "Loading…" : "Refresh"}
-                    </button>
-                  </div>
-
-                  <div className="text-xs text-neutral-500">
-                    Required: <span className="font-mono text-neutral-200">{formatXmrAtomic(stakeRequiredAtomic)} XMR</span> (confirmed)
-                  </div>
-
-                  {stakesError && <div className="text-xs text-red-300">{stakesError}</div>}
-
-                  {stakes.length === 0 ? (
-                    <div className="text-sm text-neutral-400">No stakes detected yet.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {stakes.slice(0, 12).map((s) => {
-                        let satisfied = false;
-                        try {
-                          satisfied = BigInt(s.confirmedAtomic) >= BigInt(stakeRequiredAtomic);
-                        } catch {
-                          satisfied = false;
-                        }
-                        const slashStatus = stakeSlashStatusByIndex[s.addressIndex] ?? "idle";
-                        const slashMessage = stakeSlashMessageByIndex[s.addressIndex] ?? "";
-                        return (
-                          <div
-                            key={`${s.addressIndex}:${s.observedAtMs ?? 0}`}
-                            className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between gap-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="text-sm text-neutral-200 font-mono truncate">
-                                {formatXmrAtomic(s.confirmedAtomic)} XMR
-                                <span className="text-neutral-500"> confirmed</span>
-                                <span className="text-neutral-500"> · subaddr {s.addressIndex}</span>
-                              </div>
-                              <div className="text-xs text-neutral-500">
-                                {s.observedAtMs ? new Date(s.observedAtMs).toLocaleString() : "—"} · {s.transferCount} transfer(s) · max{" "}
-                                {s.confirmationsMax} conf · {satisfied ? "satisfied" : "pending"}
-                              </div>
-                              {slashMessage ? <div className="text-xs text-neutral-500">{slashMessage}</div> : null}
-                            </div>
-                            <button
-                              onClick={() => void slashStake(s.addressIndex)}
-                              disabled={slashStatus === "slashing"}
-                              className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                              title="Sweep unlocked stake from this subaddress to broadcaster wallet"
-                            >
-                              {slashStatus === "slashing" ? "Slashing…" : slashStatus === "ok" ? "Slashed" : slashStatus === "fail" ? "Retry slash" : "Slash"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showMonetization && identity && streamId.trim() && xmrRpcAvailable && (
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <MoneroLogo className="w-5 h-5 text-orange-400" />
-                      <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Escrow v3 (multisig)</div>
-                    </div>
-                    <button
-                      onClick={() => void refreshEscrowSession()}
-                      disabled={escrowStatus === "working" || !(escrowSessionIdInput.trim() || escrowSession?.sessionId)}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                    >
-                      {escrowStatus === "working" ? "Working…" : "Refresh"}
-                    </button>
-                  </div>
-
-                  <div className="text-xs text-neutral-500">
-                    Coordinator: <span className="font-mono text-neutral-200">{shortenText(identity.pubkey, { head: 10, tail: 8 })}</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">Participants (64-hex pubkeys, comma/newline separated)</label>
-                    <textarea
-                      value={escrowParticipantsInput}
-                      onChange={(e) => setEscrowParticipantsInput(e.target.value)}
-                      className="w-full min-h-[84px] bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                      placeholder="hexpubkey1, hexpubkey2"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-xs text-neutral-400">Threshold</label>
-                      <input
-                        value={escrowThresholdInput}
-                        onChange={(e) => setEscrowThresholdInput(e.target.value)}
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:border-orange-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <label className="text-xs text-neutral-400">Session ID</label>
-                      <input
-                        value={escrowSessionIdInput}
-                        onChange={(e) => setEscrowSessionIdInput(e.target.value)}
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                        placeholder="auto-filled after create"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => void createEscrowSession()}
-                      disabled={escrowStatus === "working"}
-                      className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-black text-xs font-bold disabled:opacity-50"
-                    >
-                      Create Session
-                    </button>
-                    <button
-                      onClick={() => void refreshEscrowSession()}
-                      disabled={escrowStatus === "working" || !(escrowSessionIdInput.trim() || escrowSession?.sessionId)}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                    >
-                      Load Session
-                    </button>
-                  </div>
-
-                  {escrowMessage ? (
-                    <div className={`text-xs ${escrowStatus === "error" ? "text-red-300" : "text-neutral-400"}`}>{escrowMessage}</div>
-                  ) : null}
-
-                  {escrowSession && (
-                    <div className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/40 p-3">
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="text-neutral-500">
-                          Phase: <span className="font-mono text-neutral-200">{escrowSession.phase}</span>
-                        </div>
-                        <div className="text-neutral-500">
-                          Threshold: <span className="font-mono text-neutral-200">{escrowSession.threshold}</span>
-                        </div>
-                        <div className="text-neutral-500">
-                          Participants: <span className="font-mono text-neutral-200">{escrowSession.participantPubkeys.length}</span>
-                        </div>
-                        <div className="text-neutral-500">
-                          Exchange round: <span className="font-mono text-neutral-200">{escrowSession.exchange.round}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-neutral-500">Coordinator prepare info</div>
-                        <textarea
-                          readOnly
-                          value={escrowSession.prepare.coordinatorMultisigInfo || ""}
-                          className="w-full min-h-[70px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-300"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-neutral-500">Coordinator exchange info</div>
-                        <textarea
-                          readOnly
-                          value={escrowSession.exchange.coordinatorMultisigInfo || ""}
-                          className="w-full min-h-[64px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-300"
-                        />
-                      </div>
-
-                      <div className="text-xs text-neutral-500">
-                        Pending prepare:{" "}
-                        <span className="font-mono text-neutral-300">
-                          {escrowSession.prepare.pendingPubkeys.length
-                            ? escrowSession.prepare.pendingPubkeys.map((pk) => shortenText(pk, { head: 8, tail: 6 })).join(", ")
-                            : "none"}
-                        </span>
-                      </div>
-                      <div className="text-xs text-neutral-500">
-                        Pending exchange:{" "}
-                        <span className="font-mono text-neutral-300">
-                          {escrowSession.exchange.pendingPubkeys.length
-                            ? escrowSession.exchange.pendingPubkeys.map((pk) => shortenText(pk, { head: 8, tail: 6 })).join(", ")
-                            : "none"}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => void runEscrowCoordinatorAction("make")}
-                          disabled={escrowStatus === "working"}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                        >
-                          Make
-                        </button>
-                        <button
-                          onClick={() => void runEscrowCoordinatorAction("exchange")}
-                          disabled={escrowStatus === "working"}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                        >
-                          Exchange
-                        </button>
-                        <button
-                          onClick={() => void runEscrowCoordinatorAction("import")}
-                          disabled={escrowStatus === "working"}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                        >
-                          Import
-                        </button>
-                        <button
-                          onClick={() => void runEscrowCoordinatorAction("sign")}
-                          disabled={escrowStatus === "working"}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                        >
-                          Sign
-                        </button>
-                        <button
-                          onClick={() => void runEscrowCoordinatorAction("submit")}
-                          disabled={escrowStatus === "working"}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50 col-span-2"
-                        >
-                          Submit
-                        </button>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-neutral-500">Import infos (one per line)</div>
-                        <textarea
-                          value={escrowImportInfosText}
-                          onChange={(e) => setEscrowImportInfosText(e.target.value)}
-                          className="w-full min-h-[72px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                          placeholder="peer_export_a&#10;peer_export_b"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <div className="text-xs text-neutral-500">Sign txDataHex</div>
-                          <input
-                            value={escrowSignTxDataHex}
-                            onChange={(e) => setEscrowSignTxDataHex(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-xs text-neutral-500">Submit txDataHex (optional override)</div>
-                          <input
-                            value={escrowSubmitTxDataHex}
-                            onChange={(e) => setEscrowSubmitTxDataHex(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                            placeholder="uses signed tx if empty"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 border-t border-neutral-800 pt-3">
-                        <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Participant Join</div>
-                        <div className="flex gap-2">
-                          <select
-                            value={escrowParticipantPhase}
-                            onChange={(e) => setEscrowParticipantPhase(e.target.value === "exchange" ? "exchange" : "prepare")}
-                            className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:border-orange-500 focus:outline-none"
-                          >
-                            <option value="prepare">prepare</option>
-                            <option value="exchange">exchange</option>
-                          </select>
-                          <button
-                            onClick={() => void submitEscrowParticipantInfo()}
-                            disabled={escrowStatus === "working"}
-                            className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                          >
-                            Submit Participant Info
-                          </button>
-                        </div>
-                        <textarea
-                          value={escrowParticipantInfo}
-                          onChange={(e) => setEscrowParticipantInfo(e.target.value)}
-                          className="w-full min-h-[64px] bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-orange-500 focus:outline-none"
-                          placeholder="participant multisig info"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showMonetization && identity && streamId.trim() && xmrRpcAvailable && (
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <MoneroLogo className="w-5 h-5 text-orange-400" />
-                      <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Verified tips</div>
-                    </div>
-                    <button
-                      onClick={() => void refreshTips()}
-                      disabled={tipsStatus === "loading"}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                    >
-                      {tipsStatus === "loading" ? "Loading…" : "Refresh"}
-                    </button>
-                  </div>
-
-                  {tipsError && <div className="text-xs text-red-300">{tipsError}</div>}
-
-                  {tips.length === 0 ? (
-                    <div className="text-sm text-neutral-400">No verified tips detected yet.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {tips.slice(0, 12).map((t) => {
-                        const key = `${t.observedAtMs}:${t.amountAtomic}:${t.addressIndex}`;
-                        const status = receiptStatusByKey[key] ?? "idle";
-                        return (
-                          <div
-                            key={key}
-                            className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 flex items-center justify-between gap-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="text-sm text-neutral-200 font-mono truncate">
-                                {formatXmrAtomic(t.amountAtomic)} XMR
-                                <span className="text-neutral-500"> · subaddr {t.addressIndex}</span>
-                              </div>
-                              <div className="text-xs text-neutral-500">
-                                {new Date(t.observedAtMs).toLocaleString()} · {t.confirmed ? "confirmed" : `unconfirmed (${t.confirmations})`}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => void publishReceipt(t)}
-                              disabled={status === "publishing"}
-                              className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                              title="Publish a kind 30314 receipt to configured relays"
-                            >
-                              {status === "publishing" ? "Publishing…" : status === "ok" ? "Receipt OK" : status === "fail" ? "Receipt failed" : "Publish receipt"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showOperations && (
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Presence</div>
-                    {presenceConnected && <span className="text-[10px] px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">live</span>}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-neutral-950/40 border border-neutral-800 text-neutral-300">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-neutral-200">
-                      <span className="text-neutral-400">Viewers</span> <span className="font-mono">≈ {streamId.trim() ? viewerCount : 0}</span>
-                    </div>
-                    <div className="text-xs text-neutral-500">Best-effort, based on recent presence events.</div>
-                  </div>
-                </div>
-
-                {streamId.trim() && viewerPubkeys.length > 0 && (
-                  <div className="text-xs text-neutral-500">
-                    <div className="mb-2">Recent viewers</div>
-                    <div className="flex flex-wrap gap-2">
-                      {viewerPubkeys.slice(0, 18).map((pk) => {
-                        const n = pubkeyHexToNpub(pk);
-                        return (
-                          <span key={pk} className="px-2 py-1 rounded-lg bg-neutral-950/40 border border-neutral-800 font-mono text-neutral-300">
-                            {shortenText(n ?? pk, { head: n ? 10 : 8, tail: 6 })}
-                          </span>
-                        );
-                      })}
-                      {viewerPubkeys.length > 18 && (
-                        <span className="px-2 py-1 rounded-lg bg-neutral-950/40 border border-neutral-800 font-mono text-neutral-500">
-                          +{viewerPubkeys.length - 18}
-                        </span>
-                      )}
-                    </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showOperations && (
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-2 text-sm text-neutral-300">
-                  <div className="font-semibold">Relays</div>
-                  <div className="text-xs text-neutral-500">Configured relay(s):</div>
-                  <div className="text-xs font-mono text-neutral-300 break-all">{relays.join(", ")}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {content}
       </main>
     </div>
   );

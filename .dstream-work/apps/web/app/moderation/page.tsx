@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, EyeOff, Shield, ShieldCheck, Trash2, Volume2, VolumeX } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
-import { TrustAndBlocksManager } from "@/components/settings/TrustAndBlocksManager";
 import { useIdentity } from "@/context/IdentityContext";
 import { useDiscoveryModeration } from "@/hooks/useDiscoveryModeration";
 import { useStreamModeration } from "@/hooks/useStreamModeration";
@@ -651,11 +650,6 @@ export default function ModerationPage() {
             {notice && <div className="text-xs text-neutral-300">{notice}</div>}
           </>
         )}
-        
-        {/* Global blocks and safety */}
-        <div className="pt-8">
-          <TrustAndBlocksManager />
-        </div>
       </main>
     </div>
   );

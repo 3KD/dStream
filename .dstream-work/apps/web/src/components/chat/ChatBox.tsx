@@ -1,9 +1,9 @@
 "use client";
 
-import { Users, ArrowDownToLine } from "lucide-react";
+import { Users, ArrowDownToLine, Bitcoin } from "lucide-react";
 
 import { useEffect, useRef } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useStreamModeration } from "@/hooks/useStreamModeration";
 import { useIdentity } from "@/context/IdentityContext";
@@ -40,6 +40,7 @@ export function ChatBox({
   clearWindowRequestNonce,
   onClearWindowRequestHandled,
   onMessageCountChange,
+  headerRightSlot,
   className
 }: {
   streamPubkey: string;
@@ -51,6 +52,7 @@ export function ChatBox({
   clearWindowRequestNonce?: number;
   onClearWindowRequestHandled?: (ok: boolean) => void;
   onMessageCountChange?: (count: number) => void;
+  headerRightSlot?: ReactNode;
   className?: string;
 }) {
   const { identity, signEvent } = useIdentity();
@@ -464,13 +466,14 @@ export function ChatBox({
           {!isConnected && moderation.isLoading && <span className="text-[10px] text-neutral-500">syncing moderation…</span>}
         </div>
         <div className="flex items-center gap-4">
+          {headerRightSlot}
           <button
             type="button"
             onClick={() => setTipDialogOpen(true)}
             className="flex items-center justify-center gap-1.5 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 hover:text-orange-400 text-neutral-300 rounded-lg text-xs font-bold transition-all"
             title="Support Creator (Lightning/XMR)"
           >
-            <span className="text-yellow-500 text-sm leading-none pt-0.5">⚡</span> Support / Tip
+            <Bitcoin className="w-3.5 h-3.5 text-orange-500" /> Support / Tip
           </button>
           <span className="text-xs text-neutral-500 hidden sm:inline-block">
             {visibleMessages.length} msgs{hiddenCount > 0 ? ` (+${hiddenCount} hidden)` : ""}

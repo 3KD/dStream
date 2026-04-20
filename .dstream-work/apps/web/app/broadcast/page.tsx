@@ -1773,38 +1773,27 @@ export default function BroadcastPage() {
     }
   }, [hlsLocalUrl]);
 
+  const broadcastStatusBadge = (
+    <span
+      className={`min-w-[120px] text-center px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg ${
+        status === "live"
+          ? "bg-red-600/20 text-red-300 border-red-500/40"
+          : status === "connecting"
+            ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
+            : "bg-neutral-900/70 text-neutral-300 border-neutral-800"
+      }`}
+    >
+      <span className="inline-flex items-center gap-2">
+        <CircleDot className={`w-3.5 h-3.5 ${status === "live" ? "text-red-400" : "text-neutral-400"}`} />
+        {status === "live" ? "LIVE" : status === "connecting" ? "CONNECTING" : mediaStream ? "PREVIEW" : "OFFLINE"}
+      </span>
+    </span>
+  );
+
   return (
       <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
       <main className="max-w-[1720px] mx-auto px-6 pb-10 pt-6">
-        <header className="flex flex-wrap items-end justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
-              <Radio className="w-6 h-6 text-blue-500" />
-              Broadcast
-            </h1>
-          </div>
-          <div className="flex items-end gap-3">
-            <span
-              className={`min-w-[120px] text-center px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg ${
-                status === "live"
-                  ? "bg-red-600/20 text-red-300 border-red-500/40"
-                  : status === "connecting"
-                    ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
-                    : "bg-neutral-900/70 text-neutral-300 border-neutral-800"
-              }`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <CircleDot className={`w-3.5 h-3.5 ${status === "live" ? "text-red-400" : "text-neutral-400"}`} />
-                {status === "live" ? "LIVE" : status === "connecting" ? "CONNECTING" : mediaStream ? "PREVIEW" : "OFFLINE"}
-              </span>
-            </span>
-            <Link className="text-sm text-neutral-300 hover:text-white" href="/">
-              Home
-            </Link>
-          </div>
-        </header>
-
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -3133,6 +3122,7 @@ export default function BroadcastPage() {
                 followerOnly={chatFollowerOnly}
                 clearWindowRequestNonce={chatClearRequestNonce}
                 onClearWindowRequestHandled={handleChatClearRequestHandled}
+                headerRightSlot={broadcastStatusBadge}
               />
             </div>
 

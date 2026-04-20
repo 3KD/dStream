@@ -10,6 +10,7 @@ import { useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { hexToBytes, shortenText } from "@/lib/encoding";
 import { SettingsNav } from "@/components/settings/SettingsNav";
+import { TrustAndBlocksManager } from "@/components/settings/TrustAndBlocksManager";
 
 const IDENTITY_STORE_STORAGE_KEY = "dstream_identity_store_v2";
 const SOCIAL_STORE_STORAGE_KEY = "dstream_social_v1";
@@ -508,8 +509,8 @@ export default function SettingsPage() {
       <main className="max-w-4xl mx-auto p-8 space-y-8">
         <header className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-neutral-500">Identity and preferences.</p>
+            <h1 className="text-2xl font-bold">Security &amp; Storage</h1>
+            <p className="text-sm text-neutral-500">Identity, safety controls, aliases, and local backups.</p>
           </div>
         </header>
 
@@ -773,6 +774,8 @@ export default function SettingsPage() {
                 </div>
               )}
             </section>
+
+            <TrustAndBlocksManager />
 
 
             <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-3">
