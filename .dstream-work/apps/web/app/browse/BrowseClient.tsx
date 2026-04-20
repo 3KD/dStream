@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
 import { useGuild } from "@/hooks/useGuild";
@@ -35,15 +35,28 @@ function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: 
 
 export default function BrowseClient() {
   const social = useSocial();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const guildQueryRaw = searchParams.get("guild");
+  const tabQuery = searchParams.get("tab");
   const guildQuery = useMemo(() => parseGuildQuery(guildQueryRaw), [guildQueryRaw]);
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
   const { streams: liveStreams, isLoading: liveLoading } = useStreamAnnounces({ liveOnly: true, limit: 180 });
   const { streams: allStreams, isLoading: archiveLoading } = useStreamAnnounces({ liveOnly: false, limit: 260 });
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const favoritesOnly = tabQuery === "following";
   const [curatedOnly, setCuratedOnly] = useState(false);
   const [liveOnly, setLiveOnly] = useState(false);
+
+  const setBrowseTab = (tab: "browse" | "following") => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (tab === "following") {
+      nextParams.set("tab", "following");
+    } else {
+      nextParams.delete("tab");
+    }
+    const nextQuery = nextParams.toString();
+    router.push(nextQuery ? `/browse?${nextQuery}` : "/browse");
+  };
 
   useEffect(() => {
     if (guildQuery) setCuratedOnly(true);
@@ -144,6 +157,30 @@ export default function BrowseClient() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-2xl font-bold">Browse</h1>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setBrowseTab("browse")}
+                aria-pressed={!favoritesOnly}
+                className={`text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors ${
+                  favoritesOnly
+                    ? "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                    : "bg-blue-500/20 border-blue-500/50 text-blue-200"
+                }`}
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                onClick={() => setBrowseTab("following")}
+                aria-pressed={favoritesOnly}
+                className={`text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors ${
+                  favoritesOnly
+                    ? "bg-blue-500/20 border-blue-500/50 text-blue-200"
+                    : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                }`}
+              >
+                Following
+              </button>
               <Link
                 className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
                 href="/guilds"
@@ -165,18 +202,6 @@ export default function BrowseClient() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setFavoritesOnly((current) => !current)}
-              aria-pressed={favoritesOnly}
-              className={`text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors ${
-                favoritesOnly
-                  ? "bg-blue-500/20 border-blue-500/50 text-blue-200"
-                  : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-              }`}
-            >
-              Favorites only
-            </button>
             <button
               type="button"
               onClick={() => setCuratedOnly((current) => !current)}
@@ -215,9 +240,9 @@ export default function BrowseClient() {
         ) : visibleLiveStreams.length === 0 && visibleVideoStreams.length === 0 && visibleOfflineStreams.length === 0 ? (
           <div className="rounded-xl border border-neutral-800 p-8 text-neutral-400 text-center">
             {favoritesOnly && curatedOnly
-              ? "No favorite curated streams found."
+              ? "No followed curated streams found."
               : favoritesOnly
-                ? "No favorite streams found."
+                ? "No followed streams found."
                 : curatedOnly
                   ? "No curated streams found."
                   : "No streams found."}

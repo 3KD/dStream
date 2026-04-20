@@ -11,7 +11,6 @@ interface SimpleHeaderProps {
 }
 
 const NAV_ITEMS: Array<{ href: string; label: string }> = [
-  { href: "/following", label: "Following" },
   { href: "/browse", label: "Browse" },
   { href: "/guilds", label: "Guilds" },
   { href: "/inbox", label: "Inbox" },
