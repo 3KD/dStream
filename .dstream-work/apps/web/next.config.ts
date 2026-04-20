@@ -46,9 +46,6 @@ const nextConfig: NextConfig = {
   generateBuildId: async () => {
     return `dstream-build-${Date.now()}`;
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },

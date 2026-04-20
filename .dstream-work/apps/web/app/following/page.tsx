@@ -7,7 +7,6 @@ import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useSocial } from "@/context/SocialContext";
 import { parseStreamFavoriteKey } from "@/lib/social/store";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
-import { formatPubkeyLabel } from "@/lib/nostr-ids";
 
 // Re-using the format helper from settings
 function formatLabel(pubkeyHex: string, alias?: string | null) {

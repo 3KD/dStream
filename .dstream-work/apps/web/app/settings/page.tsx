@@ -200,6 +200,7 @@ export default function SettingsPage() {
   const [aliasValue, setAliasValue] = useState("");
   const [aliasError, setAliasError] = useState<string | null>(null);
 
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const [identityNotice, setIdentityNotice] = useState<string | null>(null);
   const [identityBusy, setIdentityBusy] = useState<"extension" | "generate" | "import" | null>(null);
   const [importSecret, setImportSecret] = useState("");
@@ -250,9 +251,6 @@ export default function SettingsPage() {
 
 
 
-  useEffect(() => {
-    setDefaultPaymentDrafts(settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
-  }, [settings.paymentDefaults.paymentMethods]);
 
   const downloadLocalBackup = useCallback(() => {
     try {
