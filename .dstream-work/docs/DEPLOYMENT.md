@@ -249,7 +249,14 @@ This validates production-critical config, including:
 - refund policy bounds in deploy mode (`DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`),
 - transcoder profile sanity checks.
 
-`infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
+`infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use the repo-root script with `DSTREAM_DEPLOY_PROJECT_DIR` set explicitly when you have multiple local dStream checkouts:
+
+```bash
+cd /Users/erik/Projects/JRNY
+DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
+```
+
+Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that sets that project dir automatically before delegating to the repo-root script. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
 
 To validate a specific env file without exporting it into your shell:
 

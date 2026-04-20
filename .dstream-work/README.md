@@ -126,6 +126,15 @@ This validates manifest verification + tamper signaling markers from `/dev/e2e`.
 
 See `docs/DEPLOYMENT.md`, `.env.example`, and `.env.production.example`.
 
+Canonical production deploy:
+
+```bash
+cd /Users/erik/Projects/JRNY
+DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
+```
+
+If you are already inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a thin wrapper that pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace before calling the repo-root script.
+
 Before production deploys, run:
 
 ```bash

@@ -30,6 +30,8 @@ cd /Users/erik/Projects/JRNY
 DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
 ```
 
+If you run deploys from inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a wrapper around the repo-root script and pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace automatically.
+
 Verify (single gate command):
 
 ```bash

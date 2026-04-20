@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # dStream (current stack) push-to-deploy script.
-# Deploys the modern root docker-compose stack from sibling `../dStream` by default.
+# Deploys the selected dStream project root.
+# When multiple local dStream checkouts exist, DSTREAM_DEPLOY_PROJECT_DIR must be
+# set explicitly so the script does not deploy the wrong workspace.
 #
 # Usage:
-#   ./deploy.sh user@host
+#   DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/project ./deploy.sh user@host
 #
 # Optional env vars:
-#   DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/project   (default: ../../../dStream, fallback: ../../.dstream-work)
+#   DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/project   (required when multiple local dStream roots exist)
 #   DSTREAM_DEPLOY_REMOTE_DIR=/opt/dstream            (remote project path)
 #   DSTREAM_DEPLOY_REAL_WALLET=1                      (include docker-compose.real-wallet.yml)
 #   DSTREAM_DEPLOY_NETWORK=dstream_default            (docker network for app + caddy)
@@ -19,6 +21,7 @@
 #   DSTREAM_DEPLOY_MIN_FREE_GB=4                      (minimum free GB required before build)
 #   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (build web image locally and stream to host)
 #   DSTREAM_DEPLOY_LOCAL_WEB_PLATFORM=linux/amd64     (platform for local web build)
+#   DSTREAM_DEPLOY_DRY_RUN=1                          (validate local config and print selected source)
 
 set -euo pipefail
 
@@ -29,12 +32,55 @@ if [[ -z "${TARGET}" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -d "${SCRIPT_DIR}/../../../dStream" ]]; then
-  DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../../dStream" && pwd)"
+
+resolve_dir() {
+  local path="$1"
+  if [[ -d "${path}" ]]; then
+    (
+      cd "${path}"
+      pwd
+    )
+  fi
+}
+
+WORKSPACE_PROJECT_DIR="$(resolve_dir "${SCRIPT_DIR}/../../.dstream-work" || true)"
+LEGACY_PROJECT_DIR="$(resolve_dir "${SCRIPT_DIR}/../../../dStream" || true)"
+PROJECT_DIR="${DSTREAM_DEPLOY_PROJECT_DIR:-}"
+PROJECT_DIR_SOURCE="DSTREAM_DEPLOY_PROJECT_DIR"
+if [[ -n "${PROJECT_DIR}" ]]; then
+  if [[ ! -d "${PROJECT_DIR}" ]]; then
+    echo "ERROR: DSTREAM_DEPLOY_PROJECT_DIR does not exist: ${PROJECT_DIR}"
+    exit 1
+  fi
+  PROJECT_DIR="$(cd "${PROJECT_DIR}" && pwd)"
 else
-  DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../.dstream-work" && pwd)"
+  PROJECT_DIR_SOURCE="auto-detect"
+  CANDIDATE_DIRS=()
+  if [[ -n "${WORKSPACE_PROJECT_DIR}" ]]; then
+    CANDIDATE_DIRS+=("${WORKSPACE_PROJECT_DIR}")
+  fi
+  if [[ -n "${LEGACY_PROJECT_DIR}" && "${LEGACY_PROJECT_DIR}" != "${WORKSPACE_PROJECT_DIR}" ]]; then
+    CANDIDATE_DIRS+=("${LEGACY_PROJECT_DIR}")
+  fi
+
+  if (( ${#CANDIDATE_DIRS[@]} == 0 )); then
+    echo "ERROR: could not find a local dStream project root."
+    echo "Set DSTREAM_DEPLOY_PROJECT_DIR to the current dStream project root."
+    exit 1
+  fi
+
+  if (( ${#CANDIDATE_DIRS[@]} > 1 )); then
+    echo "ERROR: multiple local dStream project roots detected."
+    echo "Set DSTREAM_DEPLOY_PROJECT_DIR explicitly to the one you want to deploy:"
+    for candidate in "${CANDIDATE_DIRS[@]}"; do
+      echo "  - ${candidate}"
+    done
+    exit 1
+  fi
+
+  PROJECT_DIR="${CANDIDATE_DIRS[0]}"
 fi
-PROJECT_DIR="${DSTREAM_DEPLOY_PROJECT_DIR:-${DEFAULT_PROJECT_DIR}}"
+
 REMOTE_DIR="${DSTREAM_DEPLOY_REMOTE_DIR:-/opt/dstream}"
 DEPLOY_NETWORK="${DSTREAM_DEPLOY_NETWORK:-dstream_default}"
 DEPLOY_CADDY_CONTAINER="${DSTREAM_DEPLOY_CADDY_CONTAINER:-dStream_caddy}"
@@ -109,6 +155,13 @@ if [[ ! -f "${PROJECT_DIR}/.env.production" ]]; then
   exit 1
 fi
 
+DEPLOY_GIT_HEAD=""
+DEPLOY_GIT_BRANCH=""
+if command -v git >/dev/null 2>&1 && git -C "${PROJECT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  DEPLOY_GIT_HEAD="$(git -C "${PROJECT_DIR}" rev-parse --short HEAD)"
+  DEPLOY_GIT_BRANCH="$(git -C "${PROJECT_DIR}" rev-parse --abbrev-ref HEAD)"
+fi
+
 if [[ "${DSTREAM_DEPLOY_SKIP_PREFLIGHT:-0}" != "1" ]]; then
   if [[ ! -f "${PROJECT_DIR}/scripts/harden-check.mjs" ]]; then
     echo "ERROR: ${PROJECT_DIR}/scripts/harden-check.mjs not found."
@@ -127,7 +180,16 @@ fi
 
 echo "🚀 Deploying dStream current stack"
 echo "   local:  ${PROJECT_DIR}"
+echo "   source: ${PROJECT_DIR_SOURCE}"
+if [[ -n "${DEPLOY_GIT_HEAD}" ]]; then
+  echo "   git:    ${DEPLOY_GIT_BRANCH}@${DEPLOY_GIT_HEAD}"
+fi
 echo "   remote: ${TARGET}:${REMOTE_DIR}"
+
+if [[ "${DSTREAM_DEPLOY_DRY_RUN:-0}" == "1" ]]; then
+  echo "🧪 Dry run complete. Skipping rsync/build/ssh."
+  exit 0
+fi
 
 echo "🔹 Ensuring remote directory exists..."
 run_ssh "${TARGET}" "mkdir -p '${REMOTE_DIR}'"

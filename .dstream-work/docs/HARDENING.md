@@ -45,6 +45,8 @@ The check validates:
 Deployment script gate:
 
 - `infra/prod/deploy.sh` now runs this preflight automatically before rsync/build.
+- Use the repo-root `infra/prod/deploy.sh` with `DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work` when multiple local dStream checkouts exist.
+- Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that pins the project dir to this workspace before delegating to the repo-root script.
 - deploy auto-enables the `docker-compose.real-wallet.yml` overlay when `.env.production` points wallet RPC origin at `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
 - To bypass intentionally (for temporary/dev usage only): `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1`.
 
