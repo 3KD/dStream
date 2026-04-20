@@ -33,6 +33,3 @@ export default function SettingsProfilePage() {
     </div>
   );
 }
-        <EmoteManager />
-      </section>
-
