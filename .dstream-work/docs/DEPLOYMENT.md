@@ -50,6 +50,10 @@ See `.env.example`. Quick reference:
 **Server-only (Monero verified tips)**
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN`: Monero wallet RPC origin (expects `POST <origin>/json_rpc`).
 - `DSTREAM_XMR_WALLET_RPC_USER` / `DSTREAM_XMR_WALLET_RPC_PASS`: Basic auth (required in hardened production when wallet RPC is enabled).
+- `DSTREAM_XMR_DAEMON_ADDRESS`: remote Monero daemon used by the bundled `xmr-wallet-rpc` service.
+- `DSTREAM_XMR_DAEMON_SSL`: wallet-rpc daemon SSL mode (`enabled|disabled|autodetect`).
+- If you set `DSTREAM_XMR_DAEMON_SSL=enabled`, Monero wallet-rpc also requires a trusted certificate path/fingerprint (`--daemon-ssl-ca-certificates`, `--daemon-ssl-allowed-fingerprints`) or an onion/I2P endpoint. Plain public nodes on port `18081` generally need `disabled`.
+- The bundled `xmr-wallet-rpc` service starts with `--no-initial-sync` so the RPC port comes up immediately even when the wallet still needs to catch up against a remote daemon.
 - `DSTREAM_XMR_ACCOUNT_INDEX`: account index used for allocating subaddresses (default `0`).
 - `DSTREAM_XMR_CONFIRMATIONS_REQUIRED`: confirmations required for “confirmed” tips (default `10`).
 - `DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`: minimum served-bytes receipts required for stake refunds (default `0`).
@@ -64,6 +68,7 @@ See `.env.example`. Quick reference:
 - `DSTREAM_XMR_SESSION_SECRET`: HMAC secret for tip/stake session tokens (**required in production**).
 - `DSTREAM_XMR_ESCROW_SESSION_TTL_SEC`: escrow-v3 multisig session TTL in seconds (default `3600`).
 - `DSTREAM_XMR_WALLET_FILE_PASS`: wallet-file password used by real-wallet init flow.
+- In the base single-wallet production stack, `DSTREAM_XMR_WALLET_FILE_PASS` is also used to open an existing `/wallet/node_wallet` when its password differs from `DSTREAM_XMR_WALLET_RPC_PASS`.
 - `DSTREAM_XMR_RECEIVER_WALLET_NAME` / `DSTREAM_XMR_SENDER_WALLET_NAME`: wallet filenames for real-wallet stack bootstrap.
 - `DSTREAM_XMR_INIT_TIMEOUT_SECS`: wallet init wait timeout for `xmr-wallet-init` in real-wallet stack (default `300`).
 - `DSTREAM_XMR_INIT_WALLET_RETRY_SECS`: wallet open/create retry window after RPC becomes reachable (default `120`).

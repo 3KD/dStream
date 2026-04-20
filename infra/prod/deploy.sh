@@ -19,7 +19,7 @@
 #   DSTREAM_DEPLOY_SMOKE=1                            (run post-deploy production smoke)
 #   DSTREAM_DEPLOY_DISK_CLEANUP=1                     (run remote disk cleanup before build)
 #   DSTREAM_DEPLOY_MIN_FREE_GB=auto                   (minimum free GB required before build)
-#   DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=auto          (local prebuilt images: auto|none|all|csv of web,manifest,transcoder)
+#   DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=auto          (local prebuilt app images: auto|none|all|csv of web,manifest,transcoder)
 #   DSTREAM_DEPLOY_LOCAL_BUILD_PLATFORM=linux/amd64   (platform for local app image builds)
 #   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (legacy alias for DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=web)
 #   DSTREAM_DEPLOY_DRY_RUN=1                          (validate local config and print selected source)
@@ -258,13 +258,22 @@ fi
 
 parse_local_build_services "${DEPLOY_LOCAL_BUILD_SERVICES_RAW}"
 REMOTE_BUILD_SERVICES=()
-for service in web manifest transcoder; do
+for service in web manifest transcoder xmr-wallet-init xmr-wallet-rpc; do
   if ! service_selected_for_local_build "${service}"; then
     REMOTE_BUILD_SERVICES+=("${service}")
   fi
 done
 if [[ "${DEPLOY_MIN_FREE_GB_RAW}" == "auto" ]]; then
-  if (( ${#REMOTE_BUILD_SERVICES[@]} == 0 )); then
+  remote_requires_heavy_build=0
+  for service in "${REMOTE_BUILD_SERVICES[@]}"; do
+    case "${service}" in
+      web|manifest|transcoder)
+        remote_requires_heavy_build=1
+        break
+        ;;
+    esac
+  done
+  if (( remote_requires_heavy_build == 0 )); then
     DEPLOY_MIN_FREE_GB=2
   else
     DEPLOY_MIN_FREE_GB=4
@@ -308,9 +317,9 @@ else
   echo "   local app images: none"
 fi
 if (( ${#REMOTE_BUILD_SERVICES[@]} > 0 )); then
-  echo "   remote app builds: ${REMOTE_BUILD_SERVICES[*]}"
+  echo "   remote service builds: ${REMOTE_BUILD_SERVICES[*]}"
 else
-  echo "   remote app builds: none"
+  echo "   remote service builds: none"
 fi
 echo "   remote: ${TARGET}:${REMOTE_DIR}"
 

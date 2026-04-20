@@ -70,12 +70,17 @@ services:
     build:
       context: ./infra/xmr-wallet
     environment:
+      DSTREAM_XMR_WALLET_FILE_PASS: "${DSTREAM_XMR_WALLET_FILE_PASS:-}"
       DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
     entrypoint: ["sh", "-c"]
     command: 
       - |
+        wallet_pass="$${DSTREAM_XMR_WALLET_FILE_PASS:-}"
+        if [ -z "$$wallet_pass" ]; then
+          wallet_pass="$${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
+        fi
         if [ ! -f /wallet/node_wallet.keys ]; then
-          monero-wallet-cli --generate-new-wallet=/wallet/node_wallet --password=$${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password} --mnemonic-language=English --command=exit
+          monero-wallet-cli --generate-new-wallet=/wallet/node_wallet --password="$$wallet_pass" --mnemonic-language=English --command=exit
         else
           echo "XMR wallet already exists, skipping initialization."
         fi
@@ -86,18 +91,23 @@ services:
   xmr-wallet-rpc:
     build:
       context: ./infra/xmr-wallet
+    environment:
+      DSTREAM_XMR_DAEMON_SSL: "${DSTREAM_XMR_DAEMON_SSL:-}"
+      DSTREAM_XMR_WALLET_FILE_PASS: "${DSTREAM_XMR_WALLET_FILE_PASS:-}"
+      DSTREAM_XMR_WALLET_RPC_PASS: "${DSTREAM_XMR_WALLET_RPC_PASS:-}"
     depends_on:
       xmr-wallet-init:
         condition: service_completed_successfully
     command:
       - "--wallet-file=/wallet/node_wallet"
-      - "--password=${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
       - "--rpc-bind-port=18083"
       - "--rpc-bind-ip=0.0.0.0"
       - "--confirm-external-bind"
       - "--rpc-login=${DSTREAM_XMR_WALLET_RPC_USER:-dstream}:${DSTREAM_XMR_WALLET_RPC_PASS:-dstream-default-password}"
       - "--daemon-address=${DSTREAM_XMR_DAEMON_ADDRESS:-node.monerohash.com:18081}"
+      - "--daemon-ssl=${DSTREAM_XMR_DAEMON_SSL:-autodetect}"
       - "--trusted-daemon"
+      - "--no-initial-sync"
     volumes:
       - xmr_wallet_data:/wallet
     expose:
