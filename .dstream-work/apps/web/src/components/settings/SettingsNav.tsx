@@ -1,16 +1,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, Gauge, CircleDollarSign } from "lucide-react";
+import { Settings, Gauge, CircleDollarSign, User, Sliders } from "lucide-react";
 
 export function SettingsNav() {
   const pathname = usePathname() || "";
 
   const tabs = [
     {
-      name: "General",
+      name: "Security & Storage",
       href: "/settings",
       icon: Settings,
       active: pathname === "/settings",
+    },
+    {
+      name: "Profile",
+      href: "/settings/profile",
+      icon: User,
+      active: pathname === "/settings/profile",
+    },
+    {
+      name: "Preferences",
+      href: "/settings/preferences",
+      icon: Sliders,
+      active: pathname === "/settings/preferences",
     },
     {
       name: "Operations",
