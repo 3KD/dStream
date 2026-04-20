@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useSocial } from "@/context/SocialContext";
-import { formatPubkeyLabel } from "@/lib/nostr-ids";
+import { pubkeyHexToNpub } from "@/lib/nostr-ids";
+import { shortenText } from "@/lib/encoding";
+
+function formatPubkeyLabel(pubkeyHex: string, alias?: string | null) {
+  const npub = pubkeyHexToNpub(pubkeyHex);
+  const base = npub ? shortenText(npub, { head: 14, tail: 8 }) : shortenText(pubkeyHex, { head: 14, tail: 8 });
+  return alias ? `${alias} (${base})` : base;
+}
 
 export function TrustAndBlocksManager() {
   const social = useSocial();

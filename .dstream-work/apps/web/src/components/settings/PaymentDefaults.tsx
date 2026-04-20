@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSocial } from "@/context/SocialContext";
 import {
-  type PaymentMethodDraft,
-  paymentMethodToDraft,
-  createPaymentMethodDraft,
-  validatePaymentMethodDrafts,
   PAYMENT_ASSET_ORDER,
   PAYMENT_ASSET_META,
   getWalletIntegrationsForAsset,
-  type StreamPaymentAsset,
   type WalletIntegrationId
-} from "@/lib/payments/types";
+} from "@/lib/payments/catalog";
+import {
+  type PaymentMethodDraft,
+  paymentMethodToDraft,
+  createPaymentMethodDraft,
+  validatePaymentMethodDrafts
+} from "@/lib/payments/methods";
+import { type StreamPaymentAsset } from "@dstream/protocol";
 
 export function PaymentDefaults() {
   const social = useSocial();

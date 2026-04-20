@@ -1,6 +1,18 @@
 import { useMemo } from "react";
 import { PlugZap, ExternalLink } from "lucide-react";
-import { WALLET_INTEGRATIONS, PAYMENT_ASSET_META, walletModeLabel, walletModeHint } from "@/lib/payments/types";
+import { WALLET_INTEGRATIONS, PAYMENT_ASSET_META } from "@/lib/payments/catalog";
+
+export function walletModeLabel(mode: "native_app" | "browser_extension" | "external_cli") {
+  if (mode === "browser_extension") return "Browser extension";
+  if (mode === "external_cli") return "CLI / RPC";
+  return "Native app";
+}
+
+export function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli") {
+  if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
+  if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
+  return "Open the native wallet app and send to the copied address or wallet URI target.";
+}
 
 export function WalletIntegrationsInfo() {
   const walletIntegrationsByMode = useMemo(() => {
