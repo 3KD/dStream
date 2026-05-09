@@ -22,6 +22,7 @@
 #   DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=auto          (local prebuilt app images: auto|none|all|csv of web,manifest,transcoder)
 #   DSTREAM_DEPLOY_LOCAL_BUILD_PLATFORM=linux/amd64   (platform for local app image builds)
 #   DSTREAM_DEPLOY_LOCAL_WEB_BUILD=0                  (legacy alias for DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=web)
+#   DSTREAM_DEPLOY_REQUIRE_LOCAL_ENV=0                (require local .env.production instead of preserving remote env)
 #   DSTREAM_DEPLOY_DRY_RUN=1                          (validate local config and print selected source)
 
 set -euo pipefail
@@ -92,6 +93,7 @@ DEPLOY_SMOKE="${DSTREAM_DEPLOY_SMOKE:-1}"
 DEPLOY_DISK_CLEANUP="${DSTREAM_DEPLOY_DISK_CLEANUP:-1}"
 DEPLOY_MIN_FREE_GB_RAW="${DSTREAM_DEPLOY_MIN_FREE_GB:-auto}"
 DEPLOY_LOCAL_BUILD_PLATFORM="${DSTREAM_DEPLOY_LOCAL_BUILD_PLATFORM:-linux/amd64}"
+DEPLOY_REQUIRE_LOCAL_ENV="${DSTREAM_DEPLOY_REQUIRE_LOCAL_ENV:-0}"
 if [[ -n "${DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES:-}" ]]; then
   DEPLOY_LOCAL_BUILD_SERVICES_RAW="${DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES}"
 elif [[ -n "${DSTREAM_DEPLOY_LOCAL_WEB_BUILD+x}" ]]; then
@@ -251,12 +253,63 @@ if [[ ! -f "${PROJECT_DIR}/docker-compose.yml" ]]; then
   exit 1
 fi
 
+LOCAL_ENV_FILE="${PROJECT_DIR}/.env.production"
+LOCAL_ENV_AVAILABLE=0
 if [[ ! -f "${PROJECT_DIR}/.env.production" ]]; then
-  echo "ERROR: ${PROJECT_DIR}/.env.production not found."
-  if [[ -f "${PROJECT_DIR}/.env.production.example" ]]; then
-    echo "Copy .env.production.example -> .env.production and fill real values first."
+  if [[ "${DEPLOY_REQUIRE_LOCAL_ENV}" == "1" ]]; then
+    echo "ERROR: ${PROJECT_DIR}/.env.production not found."
+    if [[ -f "${PROJECT_DIR}/.env.production.example" ]]; then
+      echo "Copy .env.production.example -> .env.production and fill real values first."
+    fi
+    exit 1
   fi
+  echo "🔹 Local .env.production not found; preserving remote ${REMOTE_DIR}/.env.production."
+  case "${DEPLOY_LOCAL_BUILD_SERVICES_RAW}" in
+    ""|auto|none)
+      DEPLOY_LOCAL_BUILD_SERVICES_RAW="none"
+      ;;
+    *)
+      echo "ERROR: local app image builds require ${PROJECT_DIR}/.env.production."
+      echo "Set DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=none to use the remote production env."
+      exit 1
+      ;;
+  esac
+else
+  LOCAL_ENV_AVAILABLE=1
+fi
+
+run_remote_harden_preflight() {
+  echo "🔹 Running remote deploy preflight (harden:deploy)..."
+  run_ssh "${TARGET}" "bash -s -- '${REMOTE_DIR}'" <<'EOS'
+set -euo pipefail
+remote_dir="$1"
+cd "${remote_dir}"
+if [[ ! -f .env.production ]]; then
+  echo "ERROR: ${remote_dir}/.env.production not found on remote."
   exit 1
+fi
+if command -v node >/dev/null 2>&1; then
+  HARDEN_MODE=deploy ENV_FILE="${remote_dir}/.env.production" node scripts/harden-check.mjs
+  exit 0
+fi
+if command -v docker >/dev/null 2>&1; then
+  docker run --rm \
+    -v "${remote_dir}:/work:ro" \
+    -w /work \
+    node:22-alpine \
+    sh -c 'HARDEN_MODE=deploy ENV_FILE=/work/.env.production node scripts/harden-check.mjs'
+  exit 0
+fi
+echo "ERROR: neither node nor docker is available for remote harden preflight."
+exit 1
+EOS
+}
+
+if [[ "${LOCAL_ENV_AVAILABLE}" == "1" ]]; then
+  if [[ ! -f "${LOCAL_ENV_FILE}" ]]; then
+    echo "ERROR: ${LOCAL_ENV_FILE} not found."
+    exit 1
+  fi
 fi
 
 parse_local_build_services "${DEPLOY_LOCAL_BUILD_SERVICES_RAW}"
@@ -297,15 +350,18 @@ if [[ "${DSTREAM_DEPLOY_SKIP_PREFLIGHT:-0}" != "1" ]]; then
     echo "ERROR: ${PROJECT_DIR}/scripts/harden-check.mjs not found."
     exit 1
   fi
-  if ! command -v node >/dev/null 2>&1; then
+  if [[ "${LOCAL_ENV_AVAILABLE}" == "0" ]]; then
+    echo "🔹 Deferring deploy preflight until after sync; local production env is not present."
+  elif ! command -v node >/dev/null 2>&1; then
     echo "ERROR: node is required for preflight checks."
     exit 1
+  else
+    echo "🔹 Running deploy preflight (harden:deploy)..."
+    (
+      cd "${PROJECT_DIR}"
+      HARDEN_MODE=deploy ENV_FILE="${LOCAL_ENV_FILE}" node scripts/harden-check.mjs
+    )
   fi
-  echo "🔹 Running deploy preflight (harden:deploy)..."
-  (
-    cd "${PROJECT_DIR}"
-    HARDEN_MODE=deploy ENV_FILE="${PROJECT_DIR}/.env.production" node scripts/harden-check.mjs
-  )
 fi
 
 echo "🚀 Deploying dStream current stack"
@@ -338,6 +394,7 @@ echo "🔹 Syncing files..."
 rsync -az --delete \
   -e "${RSYNC_SSH_CMD}" \
   --exclude '.git' \
+  --exclude '.env.production' \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.turbo' \
@@ -347,9 +404,16 @@ rsync -az --delete \
   --exclude '*.log' \
   "${PROJECT_DIR}/" "${TARGET}:${REMOTE_DIR}/"
 
+echo "🔹 Verifying remote production env..."
+run_ssh "${TARGET}" "test -f '${REMOTE_DIR}/.env.production'"
+
+if [[ "${DSTREAM_DEPLOY_SKIP_PREFLIGHT:-0}" != "1" && "${LOCAL_ENV_AVAILABLE}" == "0" ]]; then
+  run_remote_harden_preflight
+fi
+
 if [[ "${DEPLOY_DISK_CLEANUP}" == "1" ]]; then
   echo "🔹 Running remote disk cleanup..."
-  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && if [[ -f scripts/ops-disk-cleanup.sh ]]; then bash scripts/ops-disk-cleanup.sh; else echo 'cleanup script missing; skipping'; fi"
+  run_ssh "${TARGET}" "cd '${REMOTE_DIR}' && if [[ -f scripts/ops-disk-cleanup.sh ]]; then bash scripts/ops-disk-cleanup.sh; else echo 'cleanup script missing; pruning unused Docker build/image/container data'; docker builder prune -af || true; docker image prune -af || true; docker container prune -f || true; fi"
 fi
 
 echo "🔹 Checking remote disk headroom..."
@@ -372,7 +436,9 @@ stream_local_service_images_to_remote
 COMPOSE_ARGS="-f docker-compose.yml"
 DEPLOY_REAL_WALLET="${DSTREAM_DEPLOY_REAL_WALLET:-auto}"
 if [[ "${DEPLOY_REAL_WALLET}" == "auto" ]]; then
-  if grep -Eiq '^DSTREAM_XMR_WALLET_RPC_ORIGIN=.*xmr-wallet-rpc-(receiver|sender)' "${PROJECT_DIR}/.env.production"; then
+  if [[ "${LOCAL_ENV_AVAILABLE}" == "1" ]] && grep -Eiq '^DSTREAM_XMR_WALLET_RPC_ORIGIN=.*xmr-wallet-rpc-(receiver|sender)' "${LOCAL_ENV_FILE}"; then
+    DEPLOY_REAL_WALLET="1"
+  elif [[ "${LOCAL_ENV_AVAILABLE}" == "0" ]] && run_ssh "${TARGET}" "grep -Eiq '^DSTREAM_XMR_WALLET_RPC_ORIGIN=.*xmr-wallet-rpc-(receiver|sender)' '${REMOTE_DIR}/.env.production'"; then
     DEPLOY_REAL_WALLET="1"
   else
     DEPLOY_REAL_WALLET="0"
