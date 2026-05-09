@@ -2,8 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, PackagePlus, Pencil, RefreshCcw, ShieldPlus, Trash2 } from "lucide-react";
-import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protocol";
+import {
+  PAYMENT_RAIL_IDS,
+  PAYMENT_SESSION_PROOF_MODES,
+  type PaymentRailId,
+  type PaymentSessionProofMode,
+  STREAM_PAYMENT_ASSETS,
+  type StreamPaymentAsset
+} from "@dstream/protocol";
 import { useIdentity } from "@/context/IdentityContext";
+import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import {
   buildAccessAdminProof,
@@ -24,6 +32,9 @@ import {
   type VideoPlaylistCatalogRow
 } from "@/lib/access/client";
 import type { AccessEntitlement } from "@/lib/access/types";
+import { PAYMENT_ASSET_META } from "@/lib/payments/catalog";
+import { paymentMethodToSettlementTarget, normalizePaymentSettlementTarget } from "@/lib/payments/targets";
+import { getPaymentRailForAsset, getPaymentRailForMethod } from "@/lib/payments/rails";
 import {
   buildVideoEntitlementCoverage,
   buildVideoPricingCoverage,
@@ -38,6 +49,10 @@ import {
   getVideoPurchasePolicyLabel,
   type VideoPurchasePolicy
 } from "@/lib/access/videoPackagePolicy";
+import {
+  readVideoPackagePaymentSessionConfig,
+  writeVideoPackagePaymentSessionConfig
+} from "@/lib/access/paymentSessionConfig";
 
 const STREAM_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const PLAYLIST_ID_RE = /^(?:__root__|[a-zA-Z0-9][a-zA-Z0-9._-]{0,79})$/;
@@ -129,6 +144,7 @@ function formatStatsTimestamp(seconds: number | undefined): string | null {
 
 export function VideoAccessPackagesPanel() {
   const { identity, signEvent } = useIdentity();
+  const social = useSocial();
 
   const [hostInput, setHostInput] = useState("");
   const [streamIdInput, setStreamIdInput] = useState("");
@@ -139,6 +155,14 @@ export function VideoAccessPackagesPanel() {
   const [paymentAsset, setPaymentAsset] = useState<StreamPaymentAsset>("xmr");
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentRailIdInput, setPaymentRailIdInput] = useState("");
+  const [paymentTargetDestinationInput, setPaymentTargetDestinationInput] = useState("");
+  const [paymentTargetNetworkInput, setPaymentTargetNetworkInput] = useState("");
+  const [paymentTargetReferenceInput, setPaymentTargetReferenceInput] = useState("");
+  const [paymentTargetLabelInput, setPaymentTargetLabelInput] = useState("");
+  const [paymentTargetContractInput, setPaymentTargetContractInput] = useState("");
+  const [paymentSessionEndpointInput, setPaymentSessionEndpointInput] = useState("");
+  const [paymentSessionLabelInput, setPaymentSessionLabelInput] = useState("");
+  const [paymentSessionProofModeInput, setPaymentSessionProofModeInput] = useState<PaymentSessionProofMode | "">("");
   const [durationHoursInput, setDurationHoursInput] = useState("720");
   const [purchasePolicyInput, setPurchasePolicyInput] = useState<VideoPurchasePolicy>(DEFAULT_Video_PURCHASE_POLICY);
   const [statusInput, setStatusInput] = useState<VideoAccessPackageStatus>("active");
@@ -176,11 +200,17 @@ export function VideoAccessPackagesPanel() {
   const [showOnlyCurrentStreamPackages, setShowOnlyCurrentStreamPackages] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [clientOrigin, setClientOrigin] = useState("");
 
   useEffect(() => {
     if (!identity?.pubkey) return;
     setHostInput((prev) => (prev.trim() ? prev : identity.pubkey));
   }, [identity?.pubkey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setClientOrigin(window.location.origin);
+  }, []);
 
   useEffect(() => {
     const onImport = (event: Event) => {
@@ -242,6 +272,27 @@ export function VideoAccessPackagesPanel() {
   const selectedBulkRelativePathSet = useMemo(() => new Set(selectedBulkRelativePaths), [selectedBulkRelativePaths]);
   const playlistCatalogById = useMemo(() => new Map(playlistCatalogRows.map((row) => [row.id, row])), [playlistCatalogRows]);
   const bulkPresetConfig = BULK_PRESETS[bulkPreset];
+  const paymentAssetMeta = PAYMENT_ASSET_META[paymentAsset];
+  const normalizedPaymentRailId = useMemo(() => {
+    const value = paymentRailIdInput.trim().toLowerCase();
+    return PAYMENT_RAIL_IDS.includes(value as PaymentRailId) ? (value as PaymentRailId) : undefined;
+  }, [paymentRailIdInput]);
+  const effectivePaymentRailId = useMemo(
+    () => normalizedPaymentRailId ?? getPaymentRailForAsset(paymentAsset).id,
+    [normalizedPaymentRailId, paymentAsset]
+  );
+  const builtInPaymentOperatorEndpoint = useMemo(
+    () => (clientOrigin ? `${clientOrigin}/api/payment-operator` : ""),
+    [clientOrigin]
+  );
+  const selectedRailRequiresNodeOperator = effectivePaymentRailId !== "xmr";
+  const matchingPaymentDefault = useMemo(() => {
+    return social.settings.paymentDefaults.paymentMethods.find((method) => {
+      if (method.asset !== paymentAsset) return false;
+      if (!normalizedPaymentRailId) return true;
+      return getPaymentRailForMethod(method).id === normalizedPaymentRailId;
+    }) ?? null;
+  }, [normalizedPaymentRailId, paymentAsset, social.settings.paymentDefaults.paymentMethods]);
   const streamPlaylistPackagesById = useMemo(() => {
     const result = new Map<string, VideoAccessPackage>();
     if (!normalizedStreamIdInput) return result;
@@ -397,6 +448,14 @@ export function VideoAccessPackagesPanel() {
     setPaymentAsset("xmr");
     setPaymentAmountInput("");
     setPaymentRailIdInput("");
+    setPaymentTargetDestinationInput("");
+    setPaymentTargetNetworkInput("");
+    setPaymentTargetReferenceInput("");
+    setPaymentTargetLabelInput("");
+    setPaymentTargetContractInput("");
+    setPaymentSessionEndpointInput("");
+    setPaymentSessionLabelInput("");
+    setPaymentSessionProofModeInput("");
     setDurationHoursInput("720");
     setPurchasePolicyInput(DEFAULT_Video_PURCHASE_POLICY);
     setStatusInput("active");
@@ -413,11 +472,116 @@ export function VideoAccessPackagesPanel() {
     setPaymentAsset(row.paymentAsset);
     setPaymentAmountInput(row.paymentAmount);
     setPaymentRailIdInput(row.paymentRailId ?? "");
+    setPaymentTargetDestinationInput(row.paymentTarget?.destination ?? "");
+    setPaymentTargetNetworkInput(row.paymentTarget?.network ?? "");
+    setPaymentTargetReferenceInput(row.paymentTarget?.reference ?? "");
+    setPaymentTargetLabelInput(row.paymentTarget?.label ?? "");
+    setPaymentTargetContractInput(row.paymentTarget?.contractAddress ?? "");
+    const sessionConfig = readVideoPackagePaymentSessionConfig(row);
+    setPaymentSessionEndpointInput(sessionConfig.operatorEndpoint ?? "");
+    setPaymentSessionLabelInput(sessionConfig.operatorLabel ?? "");
+    setPaymentSessionProofModeInput(sessionConfig.proofMode ?? "");
     setDurationHoursInput(String(row.durationHours));
     setPurchasePolicyInput(getVideoPurchasePolicyFromMetadata(row.metadata));
     setStatusInput(row.status);
     setVisibilityInput(row.visibility);
   }, []);
+
+  const buildPaymentTarget = useCallback(
+    (amountInput: string) => {
+      const hasAnyInput =
+        !!paymentTargetDestinationInput.trim() ||
+        !!paymentTargetNetworkInput.trim() ||
+        !!paymentTargetReferenceInput.trim() ||
+        !!paymentTargetLabelInput.trim() ||
+        !!paymentTargetContractInput.trim();
+      if (!hasAnyInput) return undefined;
+      const target = normalizePaymentSettlementTarget(
+        {
+          destination: paymentTargetDestinationInput,
+          network: paymentTargetNetworkInput,
+          reference: paymentTargetReferenceInput,
+          label: paymentTargetLabelInput,
+          contractAddress: paymentTargetContractInput
+        },
+        {
+          asset: paymentAsset,
+          railId: normalizedPaymentRailId,
+          amount: amountInput,
+          recipientPubkey: normalizedHostPubkey ?? undefined
+        }
+      );
+      if (!target) {
+        throw new Error("Payment target is invalid for the selected asset/rail. Use a reusable destination, not a one-time invoice.");
+      }
+      return target;
+    },
+    [
+      normalizedHostPubkey,
+      normalizedPaymentRailId,
+      paymentAsset,
+      paymentTargetContractInput,
+      paymentTargetDestinationInput,
+      paymentTargetLabelInput,
+      paymentTargetNetworkInput,
+      paymentTargetReferenceInput
+    ]
+  );
+
+  const buildPackageMetadata = useCallback(
+    (existingMetadata?: Record<string, unknown>) => {
+      const operatorEndpoint =
+        paymentSessionEndpointInput.trim() || (selectedRailRequiresNodeOperator ? builtInPaymentOperatorEndpoint : undefined);
+      const proofMode =
+        selectedRailRequiresNodeOperator
+          ? "operator_observed"
+          : paymentSessionProofModeInput || undefined;
+      return (
+      writeVideoPackagePaymentSessionConfig({
+        purchasePolicy: purchasePolicyInput,
+        existingMetadata,
+        sessionConfig: {
+          operatorEndpoint,
+          operatorLabel: paymentSessionLabelInput.trim() || undefined,
+          proofMode
+        }
+      })
+      );
+    },
+    [
+      builtInPaymentOperatorEndpoint,
+      paymentSessionEndpointInput,
+      paymentSessionLabelInput,
+      paymentSessionProofModeInput,
+      purchasePolicyInput,
+      selectedRailRequiresNodeOperator
+    ]
+  );
+
+  const useSavedWalletTarget = useCallback(() => {
+    if (!matchingPaymentDefault) {
+      setError("No saved wallet default matches the current asset/rail.");
+      return;
+    }
+    const target = paymentMethodToSettlementTarget(matchingPaymentDefault, {
+      railId: normalizedPaymentRailId,
+      reference: paymentTargetReferenceInput.trim() || undefined,
+      contractAddress: paymentTargetContractInput.trim() || undefined,
+      recipientPubkey: normalizedHostPubkey ?? undefined
+    });
+    setPaymentTargetDestinationInput(target.destination);
+    setPaymentTargetNetworkInput(target.network ?? "");
+    setPaymentTargetLabelInput(target.label ?? "");
+    setPaymentTargetContractInput(target.contractAddress ?? "");
+    setError(null);
+    setNotice(`Loaded package target from saved ${matchingPaymentDefault.asset.toUpperCase()} wallet default.`);
+  }, [
+    matchingPaymentDefault,
+    normalizedHostPubkey,
+    normalizedPaymentRailId,
+    paymentTargetContractInput,
+    paymentTargetReferenceInput
+  ]);
 
   const loadPackages = useCallback(async () => {
     setError(null);
@@ -726,10 +890,11 @@ export function VideoAccessPackagesPanel() {
             paymentAsset,
             paymentAmount: amount,
             paymentRailId: paymentRailIdInput.trim() || undefined,
+            paymentTarget: buildPaymentTarget(amount),
             durationHours,
             status: "active",
             visibility: visibilityInput,
-            metadata: { purchasePolicy: purchasePolicyInput },
+            metadata: buildPackageMetadata(existingByPlaylist.get(playlistId)?.metadata),
             operatorProofEvent: proof
           });
           updatedRows.push(result.package);
@@ -765,7 +930,8 @@ export function VideoAccessPackagesPanel() {
     packages,
     paymentAsset,
     paymentRailIdInput,
-    purchasePolicyInput,
+    buildPackageMetadata,
+    buildPaymentTarget,
     selectedBulkPlaylistIds,
     streamIdInput,
     visibilityInput
@@ -835,10 +1001,11 @@ export function VideoAccessPackagesPanel() {
             paymentAsset,
             paymentAmount: amount,
             paymentRailId: paymentRailIdInput.trim() || undefined,
+            paymentTarget: buildPaymentTarget(amount),
             durationHours,
             status: "active",
             visibility: visibilityInput,
-            metadata: { purchasePolicy: purchasePolicyInput },
+            metadata: buildPackageMetadata(existingByRelativePath.get(normalizedRelativePath)?.metadata),
             operatorProofEvent: proof
           });
           updatedRows.push(result.package);
@@ -876,7 +1043,8 @@ export function VideoAccessPackagesPanel() {
     packages,
     paymentAsset,
     paymentRailIdInput,
-    purchasePolicyInput,
+    buildPackageMetadata,
+    buildPaymentTarget,
     selectedBulkRelativePaths,
     streamIdInput,
     visibilityInput
@@ -938,10 +1106,11 @@ export function VideoAccessPackagesPanel() {
         paymentAsset,
         paymentAmount: amount,
         paymentRailId: paymentRailIdInput.trim() || undefined,
+        paymentTarget: buildPaymentTarget(amount),
         durationHours,
         status: statusInput,
         visibility: visibilityInput,
-        metadata: { purchasePolicy: purchasePolicyInput },
+        metadata: buildPackageMetadata(editingPackageId ? packages.find((entry) => entry.id === editingPackageId)?.metadata : undefined),
         operatorProofEvent: proof
       });
       setPackages((prev) => {
@@ -960,11 +1129,13 @@ export function VideoAccessPackagesPanel() {
     descriptionInput,
     durationHoursInput,
     editingPackageId,
+    buildPackageMetadata,
+    buildPaymentTarget,
     normalizedHostPubkey,
     paymentAmountInput,
     paymentAsset,
     paymentRailIdInput,
-    purchasePolicyInput,
+    packages,
     playlistIdInput,
     relativePathInput,
     statusInput,
@@ -1024,6 +1195,7 @@ export function VideoAccessPackagesPanel() {
           paymentAsset: row.paymentAsset,
           paymentAmount: row.paymentAmount,
           paymentRailId: row.paymentRailId,
+          paymentTarget: row.paymentTarget,
           durationHours: row.durationHours,
           status: "active",
           visibility: row.visibility,
@@ -1050,6 +1222,15 @@ export function VideoAccessPackagesPanel() {
     setPaymentAsset(row.paymentAsset);
     setPaymentAmountInput(row.paymentAmount);
     setPaymentRailIdInput(row.paymentRailId ?? "");
+    setPaymentTargetDestinationInput(row.paymentTarget?.destination ?? "");
+    setPaymentTargetNetworkInput(row.paymentTarget?.network ?? "");
+    setPaymentTargetReferenceInput(row.paymentTarget?.reference ?? "");
+    setPaymentTargetLabelInput(row.paymentTarget?.label ?? "");
+    setPaymentTargetContractInput(row.paymentTarget?.contractAddress ?? "");
+    const sessionConfig = readVideoPackagePaymentSessionConfig(row);
+    setPaymentSessionEndpointInput(sessionConfig.operatorEndpoint ?? "");
+    setPaymentSessionLabelInput(sessionConfig.operatorLabel ?? "");
+    setPaymentSessionProofModeInput(sessionConfig.proofMode ?? "");
     setDurationHoursInput(String(row.durationHours));
     setPurchasePolicyInput(getVideoPurchasePolicyFromMetadata(row.metadata));
     setStatusInput("disabled");
@@ -1248,6 +1429,96 @@ export function VideoAccessPackagesPanel() {
             placeholder="Rail ID (optional)"
             className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
           />
+        </div>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-500">Verified Settlement Target</div>
+            <button
+              type="button"
+              onClick={useSavedWalletTarget}
+              disabled={!matchingPaymentDefault}
+              className="px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
+            >
+              {matchingPaymentDefault ? "Use saved wallet target" : "No saved target for this asset"}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_14rem] gap-2">
+            <input
+              value={paymentTargetDestinationInput}
+              onChange={(event) => setPaymentTargetDestinationInput(event.target.value)}
+              placeholder={`Destination (${paymentAssetMeta.placeholder})`}
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+            />
+            <input
+              value={paymentTargetNetworkInput}
+              onChange={(event) => setPaymentTargetNetworkInput(event.target.value)}
+              placeholder={`Network (${paymentAssetMeta.defaultNetwork ?? "optional"})`}
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <input
+              value={paymentTargetReferenceInput}
+              onChange={(event) => setPaymentTargetReferenceInput(event.target.value)}
+              placeholder="Reference / tag / memo (optional)"
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+            />
+            <input
+              value={paymentTargetLabelInput}
+              onChange={(event) => setPaymentTargetLabelInput(event.target.value)}
+              placeholder="Target label (optional)"
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            />
+            <input
+              value={paymentTargetContractInput}
+              onChange={(event) => setPaymentTargetContractInput(event.target.value)}
+              placeholder="Contract override (optional)"
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+            />
+          </div>
+          <div className="text-[11px] text-neutral-500">
+            Leave this blank when the target will be allocated at session start. That is the normal path for XMR wallet-rpc packages and
+            also works for remote node-operator sessions that mint per-purchase targets themselves. For Lightning packages with a static
+            target, use a reusable lightning address or LNURL, not a one-time BOLT11 invoice; the host pubkey is bound automatically for
+            package zap receipts.
+          </div>
+        </div>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
+          <div className="text-[11px] uppercase tracking-wide text-neutral-500">Payment Session Operator</div>
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_16rem] gap-2">
+            <input
+              value={paymentSessionEndpointInput}
+              onChange={(event) => setPaymentSessionEndpointInput(event.target.value)}
+              placeholder="Node-operator endpoint (blank = built-in local operator)"
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+            />
+            <input
+              value={paymentSessionLabelInput}
+              onChange={(event) => setPaymentSessionLabelInput(event.target.value)}
+              placeholder="Operator label (optional)"
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            />
+            <select
+              value={paymentSessionProofModeInput}
+              onChange={(event) => setPaymentSessionProofModeInput((event.target.value as PaymentSessionProofMode | "") || "")}
+              disabled={selectedRailRequiresNodeOperator}
+              className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+            >
+              <option value="">Auto proof mode</option>
+              {PAYMENT_SESSION_PROOF_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-[11px] text-neutral-500">
+            {selectedRailRequiresNodeOperator
+              ? `Non-XMR packages use node-operator sessions. Leave the endpoint blank to use this host's built-in operator at ${
+                  builtInPaymentOperatorEndpoint || "/api/payment-operator"
+                }. Proof mode is locked to operator_observed for those rails.`
+              : "XMR packages default to the embedded wallet-rpc operator path. Set an endpoint only if you want to delegate XMR sessions to an external operator."}
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <select
@@ -1788,6 +2059,18 @@ export function VideoAccessPackagesPanel() {
                 Scope:{" "}
                 <span className="font-mono text-neutral-400">
                   {row.relativePath ? `file:${row.relativePath}` : row.playlistId ? `playlist:${row.playlistId}` : "stream:*"}
+                </span>
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                Target:{" "}
+                <span className="font-mono text-neutral-400 break-all">
+                  {row.paymentTarget
+                    ? `${row.paymentTarget.destination}${row.paymentTarget.network ? ` @ ${row.paymentTarget.network}` : ""}${
+                        row.paymentTarget.reference ? ` · ref ${row.paymentTarget.reference}` : ""
+                      }`
+                    : readVideoPackagePaymentSessionConfig(row).enabled
+                      ? "allocated at session start"
+                      : "not configured"}
                 </span>
               </div>
               <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-2.5 py-2 text-[11px] text-neutral-500">

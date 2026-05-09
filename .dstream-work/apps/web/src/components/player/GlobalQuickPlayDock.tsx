@@ -8,7 +8,6 @@ import { GlobalPlayerSlot, useGlobalPlayer } from "@/context/GlobalPlayerContext
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
 import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
-import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
 import { buildWatchHref } from "@/lib/watchHref";
@@ -263,6 +262,22 @@ export function GlobalQuickPlayDock() {
 
     return false;
   }, []);
+
+  const handleBackgroundPlayToggle = useCallback(() => {
+    const nextEnabled = !backgroundPlayEnabled;
+    setBackgroundPlayEnabled(nextEnabled);
+    if (!nextEnabled) return;
+
+    const video = videoRef.current;
+    if (video && video.paused && !video.ended) {
+      void video.play().catch(() => {
+        // ignore browser policy failures
+      });
+    }
+    if (touchDevice) {
+      void requestSystemPip();
+    }
+  }, [backgroundPlayEnabled, requestSystemPip, touchDevice]);
 
   useEffect(() => {
     setTouchDevice(isTouchDevice());
@@ -882,7 +897,7 @@ export function GlobalQuickPlayDock() {
             <div className="flex flex-col gap-1 items-center relative">
               <button
                 type="button"
-                onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                onClick={handleBackgroundPlayToggle}
                 className={`rounded-lg border px-1 py-1 text-[10px] font-semibold transition z-10 ${
                   backgroundPlayEnabled
                     ? "border-blue-400/60 bg-blue-500/20 text-blue-100"

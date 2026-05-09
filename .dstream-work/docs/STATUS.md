@@ -1,6 +1,6 @@
 # dStream Rebuild — Status
 
-Last updated: 2026-02-12
+Last updated: 2026-04-26
 
 ## Current state
 
@@ -14,6 +14,8 @@ Last updated: 2026-02-12
   - `npm run smoke:e2e:firefox` (Firefox): same flow + generated MediaMTX config
   - `npm run smoke:integrity` (Safari): same flow + manifest verification + tamper marker
   - `npm run smoke:integrity:firefox` (Firefox): same flow + generated MediaMTX config
+  - `npm run smoke:payments`: route-level payment-session smoke for XMR wallet-rpc subaddress settlement, Lightning operator settlement, EVM/Solana/TRON/UTXO/XRPL/Cardano operator sessions, viewer unlock readback, and private archive playback-token issuance
+  - `npm run smoke:payments:live`: configured-provider smoke for XMR wallet-rpc, optional Lightning health, UTXO nodes, EVM, Solana, TRON, XRPL, and Cardano providers; unconfigured rails are skipped unless `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1`
   - `npm run smoke:escrow`: stake session + wallet inject + viewer refund + broadcaster slash settlement (mock wallet mode; prints `SKIP` on real-wallet stacks)
   - `npm run smoke:escrow:v3`: multisig coordination session (prepare/make/exchange/import/sign/submit in mock mode; real-wallet mode validates up to exchange/import with automatic multisig-experimental enablement)
   - `npm run smoke:wallet`: wallet interoperability smoke (tip subaddress allocation + detection/confirmation polling; supports external wallets)
@@ -41,7 +43,11 @@ Last updated: 2026-02-12
 - ✅ Escrow v3 multisig coordination shipped: session + participant joins + coordinator make/exchange/import/sign/submit routes under `/api/xmr/escrow/session/*` plus dashboard control surface (`/dashboard`)
 - ✅ Real-wallet escrow-v3 smoke auto-enables Monero multisig experimental mode for ephemeral wallets via `monero-wallet-cli` before exchange.
 - ✅ Analytics dashboard shipped: `/analytics` (real presence + Monero tip/stake telemetry)
-- ✅ Multi-asset payout rails shipped in broadcast/watch/settings (XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE) with copy + wallet URI guidance; Monero remains the only verified settlement backend.
+- ✅ Multi-asset payout rails shipped in broadcast/watch/settings (XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE). Paid archive access now runs through payment sessions before grant: Monero package purchases use wallet-rpc subaddresses, Lightning can allocate zap-bound invoices from LNURL/Lightning-address targets, EVM/Solana/TRON/UTXO/Cardano use built-in amount-delta observation, and XRPL uses destination tags or amount deltas. Every verified rail normalizes into the same contract (`PaymentSettlementProof` → `VerifiedPaymentSettlement`).
+- ✅ The node-operator HTTP boundary is explicit and versioned in `docs/PAYMENT_OPERATOR_API.md`, with built-in same-origin operator routes at `/api/payment-operator/sessions/*`, readiness reporting at `/api/payment-operator/readiness`, and route-level smoke coverage for XMR, Lightning, EVM, Solana, TRON, UTXO, XRPL, and Cardano session flows.
+- ✅ Non-XMR paid archive packages are operator-first by default in the package settings UI: saves auto-wire the built-in local operator when no custom endpoint is supplied, `operator_observed` is enforced for those rails, and legacy client-proof fallback stays behind an explicit dev flag.
+- ✅ Operator setup/readiness UI and viewer unlock timeline are now part of the app: `/settings/monetization` shows health/config/readiness per rail, and the watch unlock panel shows session creation, target allocation, wallet/proof, verifier, and access grant/failure steps.
+- ✅ The payment productionization queue in `docs/PAYMENT_RAIL_COMPLETION_QUEUE.md` is complete: readiness UI, live provider smoke, viewer timeline, docs cleanup, operator security hardening, buyer wallet UX polish, and lint warning cleanup are all done.
 - ✅ Escrow trust boundary remains explicit: current model is multisig coordination + origin-enforced settlement, not on-chain contract escrow
 - ✅ Mobile store-release automation shipped: Fastlane lanes + signing/env checks + scripted release commands for TestFlight/App Store and Play internal/production (`docs/MOBILE_STORE_DEPLOY.md`)
 

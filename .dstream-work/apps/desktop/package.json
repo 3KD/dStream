@@ -1,6 +1,9 @@
 {
   "name": "desktop",
   "version": "1.0.0",
+  "description": "Desktop shell for dStream.",
+  "author": "dStream",
+  "homepage": "https://dstream.stream",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -10,10 +13,12 @@
   "build": {
     "appId": "stream.dstream.desktop",
     "productName": "dStream",
+    "icon": "assets/icon.png",
     "directories": {
       "output": "dist"
     },
     "mac": {
+      "identity": null,
       "target": [
         "dmg",
         "zip"

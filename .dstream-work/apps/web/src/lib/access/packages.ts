@@ -1,8 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
-import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protocol";
+import {
+  STREAM_PAYMENT_ASSETS,
+  type PaymentRailId,
+  type PaymentSettlementTarget,
+  type StreamPaymentAsset,
+  type VerifiedPaymentSettlement
+} from "@dstream/protocol";
 import { grantAccessEntitlement, listAccessEntitlements } from "./store";
 import type { AccessEntitlement, AccessEntitlementSource } from "./types";
 import { readTextFileWithBackup, writeJsonFileAtomic } from "../storage/jsonFileStore";
+import { buildCanonicalSettlementSourceRef, normalizeVerifiedPaymentSettlement } from "../payments/settlement";
+import { normalizePaymentSettlementTarget } from "../payments/targets";
+import {
+  assertPaymentOperatorEndpointAllowed,
+  canUseLegacyVideoPackagePaymentFallback,
+  readVideoPackagePaymentSessionConfig,
+  requiresNodeOperatorForVideoPackagePaymentSession,
+  resolveVideoPackageRailId
+} from "./paymentSessionConfig";
 
 const STORE_PATH =
   (process.env.DSTREAM_Video_PACKAGE_STORE_PATH ?? "/var/lib/dstream/video-packages.json").trim() ||
@@ -27,6 +42,7 @@ export interface VideoAccessPackage {
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
   paymentRailId?: string;
+  paymentTarget?: PaymentSettlementTarget;
   durationHours: number;
   status: VideoAccessPackageStatus;
   visibility: VideoAccessPackageVisibility;
@@ -50,6 +66,7 @@ export interface VideoPackagePurchaseRecord {
   createdAtSec: number;
   expiresAtSec?: number;
   settlementRef?: string;
+  verifiedSettlement?: VerifiedPaymentSettlement;
   metadata: Record<string, unknown>;
 }
 
@@ -182,6 +199,21 @@ function parseStoredPackage(input: unknown): VideoAccessPackage | null {
   const createdAtSec = parsePositiveInt(row.createdAtSec);
   const updatedAtSec = parsePositiveInt(row.updatedAtSec);
   if (!createdAtSec || !updatedAtSec) return null;
+  const paymentRailId = sanitizeShortText(row.paymentRailId, 80) ?? undefined;
+  const paymentTarget =
+    normalizePaymentSettlementTarget((row as { paymentTarget?: unknown }).paymentTarget, {
+      asset: paymentAsset,
+      railId: paymentRailId as PaymentRailId | undefined,
+      amount: paymentAmount,
+      recipientPubkey: hostPubkey
+    }) ??
+    normalizePaymentSettlementTarget((row as { metadata?: { paymentTarget?: unknown } }).metadata?.paymentTarget, {
+      asset: paymentAsset,
+      railId: paymentRailId as PaymentRailId | undefined,
+      amount: paymentAmount,
+      recipientPubkey: hostPubkey
+    }) ??
+    undefined;
   return {
     id: row.id,
     hostPubkey,
@@ -193,7 +225,8 @@ function parseStoredPackage(input: unknown): VideoAccessPackage | null {
     description: sanitizeShortText(row.description, 500) ?? undefined,
     paymentAsset,
     paymentAmount,
-    paymentRailId: sanitizeShortText(row.paymentRailId, 80) ?? undefined,
+    paymentRailId,
+    paymentTarget,
     durationHours,
     status: parseStatus(row.status),
     visibility: parseVisibility(row.visibility),
@@ -228,6 +261,10 @@ function parseStoredPurchase(input: unknown): VideoPackagePurchaseRecord | null 
     createdAtSec,
     expiresAtSec: parsePositiveInt(row.expiresAtSec) ?? undefined,
     settlementRef: sanitizeShortText(row.settlementRef, 240) ?? undefined,
+    verifiedSettlement:
+      normalizeVerifiedPaymentSettlement((row as { verifiedSettlement?: unknown }).verifiedSettlement) ??
+      normalizeVerifiedPaymentSettlement((row as { metadata?: { verifiedSettlement?: unknown } }).metadata?.verifiedSettlement) ??
+      undefined,
     metadata: sanitizeMetadata(row.metadata)
   };
 }
@@ -320,11 +357,13 @@ function buildSourceRefFromInput(input: {
   packageId: string;
   sourceRef?: string;
   settlementRef?: string;
+  verifiedSettlement?: VerifiedPaymentSettlement;
   viewerPubkey: string;
   metadata?: Record<string, unknown>;
 }): string {
   const direct = sanitizeShortText(input.sourceRef, 220);
   if (direct) return direct;
+  if (input.verifiedSettlement) return buildCanonicalSettlementSourceRef(input.verifiedSettlement);
   const settlement = sanitizeShortText(input.settlementRef, 220);
   if (settlement) return `settlement:${settlement}`;
   const fingerprint = createHash("sha256")
@@ -387,6 +426,7 @@ export function upsertVideoAccessPackage(input: {
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
   paymentRailId?: string;
+  paymentTarget?: PaymentSettlementTarget | Record<string, unknown>;
   durationHours: number;
   status?: VideoAccessPackageStatus;
   visibility?: VideoAccessPackageVisibility;
@@ -403,6 +443,16 @@ export function upsertVideoAccessPackage(input: {
   const paymentAsset = normalizePaymentAsset(input.paymentAsset);
   const paymentAmount = normalizeAmount(input.paymentAmount);
   const paymentRailId = sanitizeShortText(input.paymentRailId, 80) ?? undefined;
+  const paymentTarget =
+    paymentAsset && paymentAmount
+      ? normalizePaymentSettlementTarget(input.paymentTarget, {
+          asset: paymentAsset,
+          railId: paymentRailId as PaymentRailId | undefined,
+          amount: paymentAmount,
+          recipientPubkey: hostPubkey ?? undefined
+        }) ?? undefined
+      : undefined;
+  const inputMetadata = sanitizeMetadata(input.metadata);
   const durationHours = parsePositiveInt(input.durationHours);
   const status = parseStatus(input.status);
   const visibility = parseVisibility(input.visibility);
@@ -422,6 +472,33 @@ export function upsertVideoAccessPackage(input: {
     const existing = packagesCache.find((entry) => entry.id === packageId);
     if (!existing) throw new Error("Video package not found.");
     if (existing.hostPubkey !== hostPubkey) throw new Error("Cannot update package for a different host.");
+    const mergedMetadata = { ...existing.metadata, ...inputMetadata };
+    const sessionConfig = readVideoPackagePaymentSessionConfig({
+      paymentAsset,
+      paymentRailId,
+      paymentTarget,
+      metadata: mergedMetadata
+    });
+    const railId = resolveVideoPackageRailId({
+      paymentAsset,
+      paymentRailId,
+      paymentTarget
+    });
+    if (requiresNodeOperatorForVideoPackagePaymentSession({ paymentAsset, paymentRailId, paymentTarget })) {
+      const legacyAllowed = canUseLegacyVideoPackagePaymentFallback({
+        paymentAsset,
+        paymentRailId,
+        paymentTarget,
+        metadata: mergedMetadata
+      });
+      if (sessionConfig.operatorEndpoint) assertPaymentOperatorEndpointAllowed(sessionConfig.operatorEndpoint);
+      if (!sessionConfig.operatorEndpoint && !legacyAllowed) {
+        throw new Error("Non-XMR paid packages require a node-operator session endpoint. Configure paymentSession.operatorEndpoint or explicitly enable legacy fallback in dev.");
+      }
+      if (sessionConfig.operatorEndpoint && sessionConfig.proofMode !== "operator_observed" && !legacyAllowed) {
+        throw new Error(`Non-XMR ${railId} packages must use operator_observed session proof mode unless legacy fallback is explicitly enabled in dev.`);
+      }
+    }
     existing.streamId = streamId;
     existing.playlistId = playlistId;
     existing.relativePath = relativePath;
@@ -431,13 +508,41 @@ export function upsertVideoAccessPackage(input: {
     existing.paymentAsset = paymentAsset;
     existing.paymentAmount = paymentAmount;
     existing.paymentRailId = paymentRailId;
+    existing.paymentTarget = paymentTarget;
     existing.durationHours = durationHours;
     existing.status = status;
     existing.visibility = visibility;
-    existing.metadata = { ...existing.metadata, ...sanitizeMetadata(input.metadata) };
+    existing.metadata = mergedMetadata;
     existing.updatedAtSec = timestamp;
     persist();
     return { ...existing };
+  }
+
+  const sessionConfig = readVideoPackagePaymentSessionConfig({
+    paymentAsset,
+    paymentRailId,
+    paymentTarget,
+    metadata: inputMetadata
+  });
+  const railId = resolveVideoPackageRailId({
+    paymentAsset,
+    paymentRailId,
+    paymentTarget
+  });
+  if (requiresNodeOperatorForVideoPackagePaymentSession({ paymentAsset, paymentRailId, paymentTarget })) {
+    const legacyAllowed = canUseLegacyVideoPackagePaymentFallback({
+      paymentAsset,
+      paymentRailId,
+      paymentTarget,
+      metadata: inputMetadata
+    });
+    if (sessionConfig.operatorEndpoint) assertPaymentOperatorEndpointAllowed(sessionConfig.operatorEndpoint);
+    if (!sessionConfig.operatorEndpoint && !legacyAllowed) {
+      throw new Error("Non-XMR paid packages require a node-operator session endpoint. Configure paymentSession.operatorEndpoint or explicitly enable legacy fallback in dev.");
+    }
+    if (sessionConfig.operatorEndpoint && sessionConfig.proofMode !== "operator_observed" && !legacyAllowed) {
+      throw new Error(`Non-XMR ${railId} packages must use operator_observed session proof mode unless legacy fallback is explicitly enabled in dev.`);
+    }
   }
 
   const created: VideoAccessPackage = {
@@ -452,10 +557,11 @@ export function upsertVideoAccessPackage(input: {
     paymentAsset,
     paymentAmount,
     paymentRailId,
+    paymentTarget,
     durationHours,
     status,
     visibility,
-    metadata: sanitizeMetadata(input.metadata),
+    metadata: inputMetadata,
     createdAtSec: timestamp,
     updatedAtSec: timestamp
   };
@@ -488,6 +594,7 @@ export function grantVideoPackagePurchaseAccess(input: {
   source?: AccessEntitlementSource;
   sourceRef?: string;
   settlementRef?: string;
+  verifiedSettlement?: VerifiedPaymentSettlement;
   startsAtSec?: number;
   metadata?: Record<string, unknown>;
 }): { package: VideoAccessPackage; entitlement: AccessEntitlement; purchase: VideoPackagePurchaseRecord; granted: boolean } {
@@ -503,6 +610,7 @@ export function grantVideoPackagePurchaseAccess(input: {
     packageId: pkg.id,
     sourceRef: input.sourceRef,
     settlementRef: input.settlementRef,
+    verifiedSettlement: input.verifiedSettlement,
     viewerPubkey,
     metadata: input.metadata
   });
@@ -534,6 +642,7 @@ export function grantVideoPackagePurchaseAccess(input: {
         relativePath: pkg.relativePath ?? null,
         paymentAsset: pkg.paymentAsset,
         paymentAmount: pkg.paymentAmount,
+        verifiedSettlement: input.verifiedSettlement ?? null,
         ...sanitizeMetadata(input.metadata)
       }
     });
@@ -550,7 +659,8 @@ export function grantVideoPackagePurchaseAccess(input: {
     resourceId: pkg.resourceId,
     createdAtSec: nowSec(),
     expiresAtSec: entitlement.expiresAtSec,
-    settlementRef: sanitizeShortText(input.settlementRef, 240) ?? undefined,
+    settlementRef: sanitizeShortText(input.settlementRef, 240) ?? input.verifiedSettlement?.settlementRef ?? undefined,
+    verifiedSettlement: input.verifiedSettlement,
     metadata: sanitizeMetadata(input.metadata)
   };
   purchasesCache.push(purchase);

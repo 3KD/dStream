@@ -1,12 +1,14 @@
 import type { VideoPurchasePolicy } from "./videoPackagePolicy";
 
 export type VideoCheckoutVerificationMode =
+  | "verified_settlement"
   | "stake_verified"
   | "external_verified"
   | "operator_override"
   | "unverified_fallback";
 
 export function formatVideoCheckoutVerificationMode(mode: VideoCheckoutVerificationMode | null | undefined): string | null {
+  if (mode === "verified_settlement") return "verified settlement";
   if (mode === "stake_verified") return "verified stake settlement";
   if (mode === "external_verified") return "verified external settlement";
   if (mode === "operator_override") return "host operator confirmation";
@@ -49,4 +51,3 @@ export function normalizeVideoPurchaseErrorMessage(
   }
   return raw;
 }
-

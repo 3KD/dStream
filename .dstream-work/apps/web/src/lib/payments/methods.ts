@@ -9,9 +9,9 @@ const PAYMENT_AMOUNT_MAX_DECIMALS: Record<StreamPaymentAsset, number> = {
   xmr: 12,
   eth: 18,
   btc: 8,
-  usdt: 8,
+  usdt: 6,
   xrp: 6,
-  usdc: 8,
+  usdc: 6,
   sol: 9,
   trx: 6,
   doge: 8,
@@ -35,6 +35,16 @@ function isBtcLightningPayload(input: string): boolean {
   const value = stripScheme(input.trim(), "lightning");
   if (!value) return false;
   return BTC_LIGHTNING_INVOICE_RE.test(value) || BTC_LIGHTNING_LNURL_RE.test(value) || BTC_LIGHTNING_ADDRESS_RE.test(value);
+}
+
+function isTronNetwork(networkRaw: string | null | undefined): boolean {
+  const value = (networkRaw ?? "").trim().toLowerCase();
+  return value.includes("tron");
+}
+
+function isSolanaNetwork(networkRaw: string | null | undefined): boolean {
+  const value = (networkRaw ?? "").trim().toLowerCase();
+  return value === "solana" || value === "mainnet-beta" || value === "devnet" || value === "testnet";
 }
 
 export interface PaymentMethodDraft {
@@ -76,10 +86,12 @@ export function paymentMethodToDraft(input: StreamPaymentMethod): PaymentMethodD
   };
 }
 
-export function normalizePaymentAddress(asset: StreamPaymentAsset, addressRaw: string): string {
+export function normalizePaymentAddress(asset: StreamPaymentAsset, addressRaw: string, networkRaw?: string): string {
   const address = addressRaw.trim();
   if (!address) return "";
   if (asset === "btc") return stripScheme(address, "lightning").trim();
+  if (asset === "usdt" && isTronNetwork(networkRaw)) return address;
+  if (asset === "usdc" && isSolanaNetwork(networkRaw)) return address;
   if (asset === "eth" || asset === "usdt" || asset === "usdc" || asset === "pepe") return address.toLowerCase();
   return address;
 }
@@ -159,11 +171,23 @@ export function validatePaymentAddress(asset: StreamPaymentAsset, addressRaw: st
       if (/^[48][1-9A-HJ-NP-Za-km-z]{94,105}$/.test(address)) return null;
       return "Monero address format is invalid.";
     case "eth":
-    case "usdt":
-    case "usdc":
     case "pepe":
       if (/^0x[a-fA-F0-9]{40}$/.test(address)) return null;
       return "EVM address must be 0x + 40 hex chars.";
+    case "usdt":
+      if (isTronNetwork(networkRaw)) {
+        if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) return null;
+        return "TRON USDT address format is invalid.";
+      }
+      if (/^0x[a-fA-F0-9]{40}$/.test(address)) return null;
+      return "USDT address must be TRON base58 or 0x + 40 hex chars.";
+    case "usdc":
+      if (isSolanaNetwork(networkRaw)) {
+        if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) return null;
+        return "Solana USDC address format is invalid.";
+      }
+      if (/^0x[a-fA-F0-9]{40}$/.test(address)) return null;
+      return "USDC address must be Solana base58 or 0x + 40 hex chars.";
     case "btc":
       if (isBtcLightningNetwork(networkRaw) || isBtcLightningPayload(address)) {
         if (isBtcLightningPayload(address)) return null;
@@ -202,7 +226,7 @@ export function toPaymentMethod(input: PaymentMethodDraft): { method: StreamPaym
   const asset = normalizePaymentAsset(input.asset);
   if (!asset) return { method: null, error: "Asset is required." };
 
-  const address = normalizePaymentAddress(asset, input.address);
+  const address = normalizePaymentAddress(asset, input.address, input.network);
   const addressError = validatePaymentAddress(asset, address, input.network);
   if (addressError) return { method: null, error: addressError };
   const amount = input.amount.trim() ? normalizePaymentAmount(asset, input.amount, input.network, address) : null;

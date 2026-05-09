@@ -94,7 +94,7 @@ export default function GuildDetailPage() {
     setImage(guild.image ?? "");
     setTopicsRaw(guild.topics.join(", "));
     setFeatured(guild.featuredStreams);
-  }, [guild?.createdAt]);
+  }, [guild]);
 
   const addFeatured = useCallback(() => {
     setSaveError(null);

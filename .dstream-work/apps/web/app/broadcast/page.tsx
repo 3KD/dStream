@@ -11,7 +11,7 @@ import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
-import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
+import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER, comparePaymentAssetOrder } from "@/lib/payments/catalog";
 import { getPaymentRailForMethod } from "@/lib/payments/rails";
 import {
   getNativeWalletCapability,
@@ -199,7 +199,7 @@ const ENCODER_GUIDE_OPTIONS: Array<{ id: EncoderGuide; label: string }> = [
 
 export default function BroadcastPage() {
   const { identity, signEvent } = useIdentity();
-  const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
+  const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
   const [requestedStreamId, setRequestedStreamId] = useState<string | null>(null);
@@ -690,6 +690,25 @@ export default function BroadcastPage() {
   }, [xmr]);
   const paymentValidation = useMemo(() => validatePaymentMethodDrafts(paymentDrafts), [paymentDrafts]);
   const paymentInputError = paymentValidation.errors[0] ?? null;
+  const chatSupportPaymentMethods = useMemo<StreamPaymentMethod[]>(() => {
+    const methods = new Map<string, StreamPaymentMethod>();
+
+    for (const method of paymentValidation.methods) {
+      const key = `${method.asset}:${(method.network ?? "").trim().toLowerCase()}:${method.address.trim().toLowerCase()}`;
+      methods.set(key, method);
+    }
+
+    const xmrAddress = xmr.trim();
+    if (xmrAddress && !xmrInputError) {
+      methods.set(`xmr::${xmrAddress.toLowerCase()}`, { asset: "xmr", address: xmrAddress, label: "Monero" });
+    }
+
+    return Array.from(methods.values()).sort((left, right) => {
+      const byAsset = comparePaymentAssetOrder(left.asset, right.asset);
+      if (byAsset !== 0) return byAsset;
+      return left.address.localeCompare(right.address);
+    });
+  }, [paymentValidation.methods, xmr, xmrInputError]);
   const captureResolutionDims = useMemo(() => {
     if (captureResolution === "source") return null;
     return CAPTURE_RESOLUTION_PRESETS[captureResolution];
@@ -1424,6 +1443,7 @@ export default function BroadcastPage() {
   }, [
     autoLadder,
     captionInputError,
+    contentWarningReason,
     identity,
     image,
     hostMode,
@@ -2481,7 +2501,7 @@ export default function BroadcastPage() {
                                 <span className="text-neutral-300">
                                   {rail.name}
                                 </span>{" "}
-                                · {rail.execution === "verified_backend" ? "verified backend" : "wallet URI / copy"}
+                                · {rail.execution === "verified_backend" ? "verified backend" : "wallet handoff"}
                                 {row.amount.trim()
                                   ? ` · amount: ${row.amount.trim()}${isBtcLightning ? " sats" : ` ${PAYMENT_ASSET_META[row.asset].symbol}`}`
                                   : ""}
@@ -3120,6 +3140,7 @@ export default function BroadcastPage() {
                 slowModeSec={chatSlowModeSecParsed ?? undefined}
                 subscriberOnly={chatSubscriberOnly}
                 followerOnly={chatFollowerOnly}
+                paymentMethods={chatSupportPaymentMethods}
                 clearWindowRequestNonce={chatClearRequestNonce}
                 onClearWindowRequestHandled={handleChatClearRequestHandled}
                 headerRightSlot={broadcastStatusBadge}

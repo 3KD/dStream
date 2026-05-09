@@ -17,7 +17,6 @@ import {
   upsertVideoCatalogEntryClient,
   type VideoAnalyticsSummaryRow,
   type VideoAccessPackage,
-  type VideoCatalogEntry,
   type VideoCatalogListRow,
   type VideoProcessingState,
   type VideoCatalogVisibility

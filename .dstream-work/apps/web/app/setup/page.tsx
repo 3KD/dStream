@@ -12,7 +12,6 @@ export default function SetupWizard() {
   const [loading, setLoading] = useState(false);
   
   // Response state
-  const [setupComplete, setSetupComplete] = useState(false);
   const [autoApplied, setAutoApplied] = useState(false);
   const [generatedEnv, setGeneratedEnv] = useState("");
   const [projectPath, setProjectPath] = useState("path/to/dstream");
@@ -31,7 +30,6 @@ export default function SetupWizard() {
         setGeneratedEnv(data.envContent);
         setAutoApplied(data.autoApplied);
         if (data.projectPath) setProjectPath(data.projectPath);
-        setSetupComplete(true);
         setStep(3);
       } else {
         alert("Setup failed: " + data.error);
@@ -176,7 +174,7 @@ export default function SetupWizard() {
                 
                 {autoApplied ? (
                   <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
-                    High-entropy cryptographic secrets were successfully injected into your host's <b>.env.production</b> file!
+                    High-entropy cryptographic secrets were successfully injected into your host&apos;s <b>.env.production</b> file!
                   </div>
                 ) : (
                   <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-200 text-sm flex flex-col items-center gap-2">

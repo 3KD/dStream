@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { BookOpen, ExternalLink, Shield, ShieldAlert, Key, Video, DollarSign, Signal } from "lucide-react";
+import { Key, Video, DollarSign, Signal } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 
 export default function CreatorManualPage() {
@@ -32,7 +31,7 @@ export default function CreatorManualPage() {
               <li>Navigate to your <strong>Settings</strong> icon.</li>
               <li>Select <strong>Generate Identity</strong>. This will produce a mathematical keypair.</li>
               <li className="text-amber-300 font-semibold">
-                CRITICAL: Backup your Private Key. This is the only way to prove you own your account, your community reputation, and your channel handle. dStream does not have a "Forgot Password" button because the network is entirely decentralized.
+                CRITICAL: Backup your Private Key. This is the only way to prove you own your account, your community reputation, and your channel handle. dStream does not have a &quot;Forgot Password&quot; button because the network is entirely decentralized.
               </li>
             </ol>
             
@@ -41,7 +40,7 @@ export default function CreatorManualPage() {
               Because there is no central corporation to ban bad actors, moderation is localized to your channel:
             </p>
             <ul className="list-disc pl-5 text-sm text-neutral-300 space-y-2">
-              <li>Click on a viewer's profile in Chat and click <strong>Mute</strong> to shield them from your view.</li>
+              <li>Click on a viewer&apos;s profile in Chat and click <strong>Mute</strong> to shield them from your view.</li>
               <li>Click <strong>Ban</strong> to mathematically discard their messages from the relay entirely so no other viewers see them.</li>
               <li>Use the <code>/w [Npub]</code> command in chat to securely decrypt and whisper private messages to moderators or trusted community members.</li>
             </ul>
@@ -63,7 +62,7 @@ export default function CreatorManualPage() {
           <div className="mt-4 p-4 rounded-xl border border-neutral-800 bg-neutral-950/50">
             <h4 className="text-sm font-semibold text-neutral-200 mb-2">OBS Integration</h4>
             <p className="text-xs text-neutral-400">
-              Starting in OBS v30, they natively support <strong>WHIP</strong>. You can completely bypass the browser studio by pasting your stream's WHIP Proxy Endpoint into your OBS <em>Server</em> field, and streaming straight to the swarm.
+              Starting in OBS v30, they natively support <strong>WHIP</strong>. You can completely bypass the browser studio by pasting your stream&apos;s WHIP Proxy Endpoint into your OBS <em>Server</em> field, and streaming straight to the swarm.
             </p>
           </div>
         </section>
@@ -105,10 +104,10 @@ export default function CreatorManualPage() {
             <h2 className="text-2xl font-bold">4. Unstoppable Economics: Monero Tipping</h2>
           </div>
           <p className="text-neutral-300 text-sm leading-relaxed mt-2">
-            With dStream, there is no banking middle-man tracking your community's generosity.
+            With dStream, there is no banking middle-man tracking your community&apos;s generosity.
           </p>
           <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2 mt-4">
-            <li>Ensure your node's <code>xmr-wallet-rpc</code> is securely firing on your droplet, and your wallet address is bound in Settings.</li>
+            <li>Ensure your node&apos;s <code>xmr-wallet-rpc</code> is securely firing on your droplet, and your wallet address is bound in Settings.</li>
             <li>Viewers who click the orange <strong>Drop Tip</strong> button in your live chat will pop open a Monero QR Code modal.</li>
             <li>The server securely maps an ephemeral Subaddress physically to your active stream.</li>
             <li>When a user scans the QR code and submits the drop, the network will ping the daemon. Once the mempool detects 0-confirmations, the UI shifts to <em>Pending</em>.</li>

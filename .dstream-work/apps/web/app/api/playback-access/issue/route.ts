@@ -6,6 +6,7 @@ import {
 import { makeOriginStreamId } from "@/lib/origin";
 import { evaluateAccess } from "@/lib/access/evaluator";
 import type { AccessDecision } from "@/lib/access/types";
+import { getLatestStreamAnnounce } from "@/lib/server/streamAnnounceLookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,25 @@ export async function POST(req: Request): Promise<Response> {
   const streamId = asString(payload.streamId);
   const providedOriginStreamId = asString(payload.originStreamId);
 
-  const registration = registerPlaybackPolicyFromAnnounceEvent(announceEvent);
+  const registration = announceEvent
+    ? registerPlaybackPolicyFromAnnounceEvent(announceEvent)
+    : streamPubkey && streamId
+      ? await (async () => {
+          const latestAnnounce = await getLatestStreamAnnounce(streamPubkey, streamId);
+          if (!latestAnnounce?.raw) {
+            return {
+              ok: false as const,
+              status: 404,
+              error: "stream announce not found"
+            };
+          }
+          return registerPlaybackPolicyFromAnnounceEvent(latestAnnounce.raw);
+        })()
+      : {
+          ok: false as const,
+          status: 400,
+          error: "announceEvent or streamPubkey + streamId is required"
+        };
   if (!registration.ok) {
     return Response.json({ ok: false, error: registration.error }, { status: registration.status });
   }

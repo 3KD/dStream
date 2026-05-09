@@ -53,6 +53,9 @@ export async function POST(req: Request): Promise<Response> {
       paymentAsset: paymentAsset as StreamPaymentAsset,
       paymentAmount,
       paymentRailId: asString(payload.paymentRailId) || undefined,
+      paymentTarget: payload.paymentTarget && typeof payload.paymentTarget === "object" && !Array.isArray(payload.paymentTarget)
+        ? (payload.paymentTarget as Record<string, unknown>)
+        : undefined,
       durationHours,
       status: parseStatus(payload.status),
       visibility: parseVisibility(payload.visibility),

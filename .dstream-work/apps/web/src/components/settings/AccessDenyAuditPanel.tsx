@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, ShieldAlert } from "lucide-react";
 import { useIdentity } from "@/context/IdentityContext";
 import { shortenText } from "@/lib/encoding";
@@ -87,8 +87,6 @@ export function AccessDenyAuditPanel() {
     if (!identity?.pubkey) return;
     setHostInput((prev) => (prev.trim() ? prev : identity.pubkey));
   }, [identity?.pubkey]);
-
-  const normalizedHostPubkey = useMemo(() => normalizePubkeyInput(hostInput), [hostInput]);
 
   const buildProof = useCallback(
     async (hostPubkey: string) => {

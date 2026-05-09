@@ -14,9 +14,9 @@ JRNY’s vision requires:
 
 ## Decision
 
-### 1) Monero-first verification boundary
+### 1) Monero-first in-tree verifier
 
-For v1 “everything”, **verified** tipping is Monero-only. Other payment rails can be exposed as address/URI payout methods, but they are not treated as verified settlement events unless covered by a dedicated ADR.
+Monero is the first verifier shipped directly inside the dStream origin stack. It establishes the reference shape for verified settlement flows, but it is no longer the exclusive verified rail boundary. Cross-rail settlement normalization is defined in ADR `0031`.
 
 ### 2) Verified tips use wallet RPC + subaddresses
 

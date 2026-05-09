@@ -183,7 +183,8 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; l
 
   useEffect(() => {
     if (!streamPubkey || !streamId) return;
-    if (chatATags.length === 0) return;
+    const activeChatATags = chatATagsKey ? chatATagsKey.split("|") : [];
+    if (activeChatATags.length === 0) return;
 
     setMessages([]);
     setIsConnected(false);
@@ -191,7 +192,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; l
 
     const filter: Filter = {
       kinds: PUBLIC_CHAT_KINDS,
-      "#a": chatATags,
+      "#a": activeChatATags,
       since: Math.floor(Date.now() / 1000) - STREAM_CHAT_HISTORY_LOOKBACK_SEC,
       limit: STREAM_CHAT_HISTORY_LIMIT
     };

@@ -114,7 +114,7 @@ export function useNostrProfiles(pubkeysInput: string[]) {
         // ignore
       }
     };
-  }, [pubkeysKey, relays]);
+  }, [pubkeys, relays]);
 
   useEffect(() => {
     const pending = Object.values(profilesByPubkey).filter((record) => record.profile.nip05 && record.nip05Verified === null);

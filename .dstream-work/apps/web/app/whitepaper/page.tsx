@@ -44,8 +44,9 @@ export default function WhitepaperPage() {
                 under host policy constraints.
               </p>
               <p>
-                <span className="text-neutral-100 font-semibold">Value plane:</span> Monero verification uses wallet-rpc sessions; additional assets
-                are direct payout rails with wallet URI integration.
+                <span className="text-neutral-100 font-semibold">Value plane:</span> Monero wallet-rpc and multi-rail payment sessions map assets
+                into the same settlement contract. Wallet handoff remains payment initiation UX, while package unlocks resolve through payment-session
+                status and verified settlement.
               </p>
             </div>
           </section>
@@ -96,8 +97,9 @@ export default function WhitepaperPage() {
               <li>Tip/session APIs support verified Monero transfer detection and confirmation status.</li>
               <li>Stake/session APIs support required stake checks and refund settlement route.</li>
               <li>Escrow-v3 APIs provide multisig coordination steps for participant/coordinator exchange.</li>
-              <li>Additional assets (ETH/BTC/USDT/XRP/USDC/SOL/TRX/DOGE/BCH/ADA/PEPE) are payout methods with URI helpers.</li>
-              <li>Wallet preferences are configured per asset in Settings and surfaced on watch page.</li>
+              <li>Additional assets (ETH/BTC/USDT/XRP/USDC/SOL/TRX/DOGE/BCH/ADA/PEPE) now flow through package payment sessions before access is granted.</li>
+              <li>Node operators can allocate or observe per-purchase targets while dStream normalizes the resulting settlement into the same verified contract.</li>
+              <li>Wallet preferences are configured per asset in Settings and surfaced on watch page, but grant logic consumes payment-session state and verified settlement records rather than raw wallet handoff state.</li>
             </ul>
             <p className="text-sm text-amber-300/90">
               Trust boundary: this implementation coordinates escrow policy in app/origin services; it is not a trustless generalized on-chain VM.
@@ -128,6 +130,7 @@ export default function WhitepaperPage() {
             </div>
             <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 font-mono text-xs text-neutral-200 space-y-1">
               <div>npm run harden:deploy -- .env.production</div>
+              <div>npm run smoke:payments</div>
               <div>npm run smoke:external:readiness</div>
               <div>npm run smoke:prod:runtime</div>
               <div>npm run gate:prod -- .env.production</div>

@@ -201,6 +201,9 @@ parse_local_build_services() {
 service_selected_for_local_build() {
   local service="$1"
   local selected
+  if (( ${#LOCAL_BUILD_SERVICES[@]} == 0 )); then
+    return 1
+  fi
   for selected in "${LOCAL_BUILD_SERVICES[@]}"; do
     if [[ "${selected}" == "${service}" ]]; then
       return 0

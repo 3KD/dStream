@@ -52,6 +52,13 @@ interface PersistedPlaybackState {
 
 type PlaybackMode = "hls" | "whep" | "direct";
 
+type PipCapableVideo = HTMLVideoElement & {
+  webkitSetPresentationMode?: (mode: "inline" | "picture-in-picture" | "fullscreen") => void;
+  webkitPresentationMode?: string;
+  disablePictureInPicture?: boolean;
+  requestPictureInPicture?: () => Promise<void>;
+};
+
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(0, Math.min(1, value));
@@ -173,6 +180,9 @@ export function Player({
   const playbackModeRef = useRef<PlaybackMode>("hls");
   const onReadyRef = useRef(onReady);
   const selectedQualityRef = useRef(-1);
+  const shouldResumeAfterBackgroundRef = useRef(false);
+  const userPausedRef = useRef(false);
+  const lastBackgroundRecoveryAtRef = useRef(0);
 
   const fallbackSrcRef = useRef(fallbackSrc);
   const playbackStateKeyRef = useRef(playbackStateKey);
@@ -197,7 +207,6 @@ export function Player({
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
   const [isMobilePlayback, setIsMobilePlayback] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const [preferNativeHls, setPreferNativeHls] = useState(false);
 
   useEffect(() => {
@@ -258,6 +267,7 @@ export function Player({
   }, [backgroundPlayEnabled]);
 
   const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
+  const effectiveLowLatencyEnabled = lowLatencyEnabled && !effectiveBackgroundPlayEnabled;
 
   useEffect(() => {
     selectedQualityRef.current = selectedQuality;
@@ -350,31 +360,60 @@ export function Player({
     try {
       if (typeof window !== "undefined" && "MediaMetadata" in window) {
         mediaSession.metadata = new window.MediaMetadata({
-          title: isLiveStream ? "dStream Live" : "dStream Replay",
+          title: overlayTitle?.trim() || (isLiveStream ? "dStream Live" : "dStream Replay"),
           artist: "dStream"
         });
       }
-      mediaSession.setActionHandler("play", () => {
+      const setActionHandler = (
+        action: MediaSessionAction,
+        handler: ((details: MediaSessionActionDetails) => void) | null
+      ) => {
+        try {
+          mediaSession.setActionHandler(action, handler);
+        } catch {
+          // ignore unsupported action handlers
+        }
+      };
+      setActionHandler("play", () => {
+        userPausedRef.current = false;
+        shouldResumeAfterBackgroundRef.current = true;
         void video.play().catch(() => {
           // ignore
         });
       });
-      mediaSession.setActionHandler("pause", () => {
+      setActionHandler("pause", () => {
+        userPausedRef.current = true;
+        shouldResumeAfterBackgroundRef.current = false;
         video.pause();
+      });
+      setActionHandler("seekbackward", (details) => {
+        if (isLiveStream) return;
+        const offset = details.seekOffset ?? 10;
+        video.currentTime = Math.max(0, video.currentTime - offset);
+      });
+      setActionHandler("seekforward", (details) => {
+        if (isLiveStream) return;
+        const offset = details.seekOffset ?? 10;
+        video.currentTime = Math.min(video.duration || Number.MAX_SAFE_INTEGER, video.currentTime + offset);
+      });
+      setActionHandler("seekto", (details) => {
+        if (typeof details.seekTime !== "number" || !Number.isFinite(details.seekTime)) return;
+        video.currentTime = Math.max(0, details.seekTime);
       });
     } catch {
       // ignore unsupported environments
     }
 
     return () => {
-      try {
-        mediaSession.setActionHandler("play", null);
-        mediaSession.setActionHandler("pause", null);
-      } catch {
-        // ignore
+      for (const action of ["play", "pause", "seekbackward", "seekforward", "seekto"] as MediaSessionAction[]) {
+        try {
+          mediaSession.setActionHandler(action, null);
+        } catch {
+          // ignore
+        }
       }
     };
-  }, [isLiveStream, src]);
+  }, [isLiveStream, overlayTitle, src]);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -388,31 +427,135 @@ export function Player({
   }, [error, isPlaying]);
 
   useEffect(() => {
-    if (typeof document === "undefined" || !effectiveBackgroundPlayEnabled) return;
+    if (typeof document === "undefined" || typeof window === "undefined" || !effectiveBackgroundPlayEnabled || error) {
+      shouldResumeAfterBackgroundRef.current = false;
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
-    const keepPlaybackAlive = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (video.ended) return;
-      if (!video.paused) return;
-      void video.play().catch(() => {
-        // ignore browser policy failures
-      });
+
+    const resumeTimers = new Set<ReturnType<typeof setTimeout>>();
+
+    const recoverTransport = () => {
+      const hls = hlsRef.current;
+      if (!hls) return;
+      const now = Date.now();
+      if (now - lastBackgroundRecoveryAtRef.current < 2500) return;
+      lastBackgroundRecoveryAtRef.current = now;
+      try {
+        hls.startLoad();
+      } catch {
+        // ignore
+      }
     };
-    let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const shouldResume = () => {
+      return shouldResumeAfterBackgroundRef.current && !userPausedRef.current && !video.ended;
+    };
+
+    const scheduleResume = (delayMs: number) => {
+      const timer = setTimeout(() => {
+        resumeTimers.delete(timer);
+        if (!shouldResume()) return;
+        if (video.readyState < 3) recoverTransport();
+        if (!video.paused) return;
+        void video.play().catch(() => {
+          // Mobile browsers may reject hidden-tab play; retry on foreground/pageshow.
+        });
+      }, delayMs);
+      resumeTimers.add(timer);
+    };
+
+    const scheduleResumeSweep = () => {
+      for (const delayMs of [0, 180, 650, 1600, 3200]) scheduleResume(delayMs);
+    };
+
+    const rememberPlayingIntent = () => {
+      if (!userPausedRef.current && !video.ended && !video.paused) {
+        shouldResumeAfterBackgroundRef.current = true;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        rememberPlayingIntent();
+        if (shouldResume()) {
+          recoverTransport();
+          scheduleResumeSweep();
+        }
+        return;
+      }
+      if (!shouldResume()) return;
+      recoverTransport();
+      scheduleResumeSweep();
+    };
+
+    const onPageHide = () => {
+      rememberPlayingIntent();
+      if (shouldResume()) scheduleResumeSweep();
+    };
+
+    const onPageShow = () => {
+      if (!shouldResume()) return;
+      recoverTransport();
+      scheduleResumeSweep();
+    };
+
     const onPause = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (resumeTimer) clearTimeout(resumeTimer);
-      resumeTimer = setTimeout(keepPlaybackAlive, 120);
+      if (document.visibilityState !== "hidden" || userPausedRef.current || video.ended) return;
+      shouldResumeAfterBackgroundRef.current = true;
+      scheduleResumeSweep();
     };
-    document.addEventListener("visibilitychange", keepPlaybackAlive);
+
+    const onPlay = () => {
+      userPausedRef.current = false;
+      if (!video.ended) shouldResumeAfterBackgroundRef.current = true;
+    };
+
+    const onEnded = () => {
+      shouldResumeAfterBackgroundRef.current = false;
+    };
+
+    const onBufferPressure = () => {
+      if (!shouldResume()) return;
+      recoverTransport();
+      scheduleResumeSweep();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("freeze", onPageHide);
+    document.addEventListener("resume", onPageShow);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     video.addEventListener("pause", onPause);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("ended", onEnded);
+    video.addEventListener("waiting", onBufferPressure);
+    video.addEventListener("stalled", onBufferPressure);
+    video.addEventListener("suspend", onBufferPressure);
+
+    if (document.visibilityState === "hidden" && !video.paused && !video.ended) {
+      shouldResumeAfterBackgroundRef.current = true;
+      recoverTransport();
+      scheduleResumeSweep();
+    }
+
     return () => {
-      if (resumeTimer) clearTimeout(resumeTimer);
-      document.removeEventListener("visibilitychange", keepPlaybackAlive);
+      for (const timer of resumeTimers) clearTimeout(timer);
+      resumeTimers.clear();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("freeze", onPageHide);
+      document.removeEventListener("resume", onPageShow);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("waiting", onBufferPressure);
+      video.removeEventListener("stalled", onBufferPressure);
+      video.removeEventListener("suspend", onBufferPressure);
     };
-  }, [effectiveBackgroundPlayEnabled]);
+  }, [effectiveBackgroundPlayEnabled, error, src, whepSrc]);
 
   useEffect(() => {
     if (error || needsClick || volume !== 0) {
@@ -431,7 +574,12 @@ export function Player({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const syncPlaying = () => setIsPlaying(!video.paused && !video.ended);
+    const syncPlaying = () => {
+      const nextPlaying = !video.paused && !video.ended;
+      if (nextPlaying) userPausedRef.current = false;
+      if (video.ended) shouldResumeAfterBackgroundRef.current = false;
+      setIsPlaying(nextPlaying);
+    };
     syncPlaying();
     video.addEventListener("play", syncPlaying);
     video.addEventListener("pause", syncPlaying);
@@ -543,6 +691,13 @@ export function Player({
 
     const video = videoRef.current;
     let cancelled = false;
+    try {
+      video.preload = "auto";
+      video.playsInline = true;
+      (video as HTMLVideoElement & { webkitPlaysInline?: boolean }).webkitPlaysInline = true;
+    } catch {
+      // ignore
+    }
     const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
       persistedPlayback && typeof persistedPlayback.currentTime === "number" && Number.isFinite(persistedPlayback.currentTime)
@@ -755,6 +910,7 @@ export function Player({
         integrityEnabled && hlsSource.includes("/api/dev/tamper-hls/")
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
+      const hlsBufferLength = effectiveBackgroundPlayEnabled ? 120 : effectiveLowLatencyEnabled ? 30 : 90;
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
@@ -767,12 +923,17 @@ export function Player({
         fragLoadingMaxRetry: 30,
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetryTimeout: 8000,
-        maxBufferLength: lowLatencyEnabled ? 30 : 90,
-        backBufferLength: lowLatencyEnabled ? 30 : 90,
-        liveSyncDurationCount: lowLatencyEnabled ? 3 : 5,
-        liveMaxLatencyDurationCount: lowLatencyEnabled ? 5 : 8,
+        maxBufferLength: hlsBufferLength,
+        maxMaxBufferLength: effectiveBackgroundPlayEnabled ? 180 : hlsBufferLength,
+        backBufferLength: effectiveBackgroundPlayEnabled ? 120 : effectiveLowLatencyEnabled ? 30 : 90,
+        liveSyncDurationCount: effectiveLowLatencyEnabled ? 3 : effectiveBackgroundPlayEnabled ? 6 : 5,
+        liveMaxLatencyDurationCount: effectiveLowLatencyEnabled ? 5 : effectiveBackgroundPlayEnabled ? 10 : 8,
+        maxBufferHole: effectiveBackgroundPlayEnabled ? 1.5 : 0.5,
+        maxSeekHole: effectiveBackgroundPlayEnabled ? 2 : 0.5,
+        nudgeMaxRetry: effectiveBackgroundPlayEnabled ? 8 : 3,
+        startFragPrefetch: true,
         fLoader: P2PFragmentLoader,
-        lowLatencyMode: lowLatencyEnabled,
+        lowLatencyMode: effectiveLowLatencyEnabled,
         dstreamRefs: dstreamRefs,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
@@ -935,6 +1096,8 @@ export function Player({
           }
         })();
       }
+    } else if (effectiveBackgroundPlayEnabled) {
+      startBestEffort(primarySrc);
     } else if (primaryKind === "direct") {
       startDirect(primarySrc);
     } else {
@@ -942,7 +1105,7 @@ export function Player({
         const { mode, attemptedWhep } = await pickPlaybackMode({
           whepSrc: endpoint,
           rtcSupported,
-          preferLowLatency: lowLatencyEnabled,
+          preferLowLatency: effectiveLowLatencyEnabled,
           tryWhep
         });
         if (cancelled) return;
@@ -975,18 +1138,16 @@ export function Player({
         // ignore
       }
       try {
-        const v = videoRef.current;
-        if (v) {
-          v.pause();
-          v.removeAttribute("src");
-          v.load();
-        }
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
       } catch {
         // ignore
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    effectiveBackgroundPlayEnabled,
     isMobilePlayback,
     lowLatencyEnabled,
     preferNativeHls,
@@ -994,7 +1155,7 @@ export function Player({
     whepSrc
   ]);
 
-  const canTogglePip = typeof document !== "undefined" && "pictureInPictureEnabled" in document;
+  const canTogglePip = typeof document !== "undefined" && ("pictureInPictureEnabled" in document || preferNativeHls);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1064,18 +1225,46 @@ export function Player({
     return note;
   }, [note]);
 
-  const togglePip = async () => {
-    const video = videoRef.current;
+  const requestPictureInPictureMode = async (forceEnter = false) => {
+    const video = videoRef.current as PipCapableVideo | null;
     if (!video) return;
     try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else if ((document as any).pictureInPictureEnabled && !(video as any).disablePictureInPicture) {
-        await (video as any).requestPictureInPicture();
+      const doc = document as Document & {
+        pictureInPictureElement?: Element;
+        pictureInPictureEnabled?: boolean;
+        exitPictureInPicture?: () => Promise<void>;
+      };
+      if (doc.pictureInPictureElement === video) {
+        if (forceEnter) {
+          setIsPip(true);
+          return;
+        }
+        await doc.exitPictureInPicture?.();
+        setIsPip(false);
+        return;
+      }
+      if (doc.pictureInPictureEnabled && !video.disablePictureInPicture && typeof video.requestPictureInPicture === "function") {
+        await video.requestPictureInPicture();
+        setIsPip(true);
+        return;
+      }
+      if (typeof video.webkitSetPresentationMode === "function") {
+        const active = video.webkitPresentationMode === "picture-in-picture";
+        if (active && forceEnter) {
+          setIsPip(true);
+          return;
+        }
+        const nextMode = active ? "inline" : "picture-in-picture";
+        video.webkitSetPresentationMode(nextMode);
+        setIsPip(nextMode === "picture-in-picture");
       }
     } catch {
       // ignore
     }
+  };
+
+  const togglePip = async () => {
+    await requestPictureInPictureMode(false);
   };
 
   const toggleFullscreen = async () => {
@@ -1099,6 +1288,8 @@ export function Player({
     try {
       video.currentTime = target;
       setTimelinePosition(target);
+      userPausedRef.current = false;
+      shouldResumeAfterBackgroundRef.current = true;
       void video.play().catch(() => {
         // ignore autoplay restrictions
       });
@@ -1116,6 +1307,7 @@ export function Player({
     try {
       video.muted = false;
       video.volume = next;
+      userPausedRef.current = false;
     } catch {
       // ignore
     }
@@ -1125,11 +1317,15 @@ export function Player({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused || video.ended) {
+      userPausedRef.current = false;
+      shouldResumeAfterBackgroundRef.current = true;
       void video.play().catch(() => {
         // ignore autoplay restrictions
       });
       return;
     }
+    userPausedRef.current = true;
+    shouldResumeAfterBackgroundRef.current = false;
     video.pause();
   };
 
@@ -1146,6 +1342,28 @@ export function Player({
       video.volume = 0;
     } catch {
       // ignore
+    }
+  };
+
+  const handleBackgroundPlayToggle = () => {
+    const nextEnabled = !effectiveBackgroundPlayEnabled;
+    setBackgroundPlayEnabled(nextEnabled);
+    if (!nextEnabled) {
+      shouldResumeAfterBackgroundRef.current = false;
+      return;
+    }
+
+    const video = videoRef.current;
+    userPausedRef.current = false;
+    if (video && !video.ended) {
+      shouldResumeAfterBackgroundRef.current = true;
+      void video.play().catch(() => {
+        setStatus("Click to play");
+        setNeedsClick(true);
+      });
+    }
+    if (isMobilePlayback) {
+      void requestPictureInPictureMode(true);
     }
   };
 
@@ -1192,6 +1410,8 @@ export function Player({
     if (needsClick || currentlyMuted || currentlyPaused) {
       unmuteFromGesture();
       setNeedsClick(false);
+      userPausedRef.current = false;
+      shouldResumeAfterBackgroundRef.current = true;
       void video.play().catch(() => {
         setStatus("Click to play");
         setNeedsClick(true);
@@ -1217,6 +1437,8 @@ export function Player({
       }
     } else {
       // Desktop: Clicking the video surface pauses it
+      userPausedRef.current = true;
+      shouldResumeAfterBackgroundRef.current = false;
       video.pause();
       setStatus("Paused");
     }
@@ -1225,8 +1447,7 @@ export function Player({
   return (
     <div className={`relative w-full ${layoutMode === "fill" ? "flex h-full min-h-[24rem] flex-col" : ""}`}>
       <div
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        aria-label={status}
         className={`group/player relative w-full bg-black rounded-2xl overflow-hidden border border-neutral-800 ${
           layoutMode === "fill" ? "min-h-[16rem] flex-1" : "aspect-video"
         }`}
@@ -1236,12 +1457,14 @@ export function Player({
             <span className="bg-red-900 border border-red-500 text-red-100 text-sm px-3 py-1 uppercase rounded-lg font-bold mb-3 shadow-[0_0_20px_rgba(220,38,38,0.4)]">18+ Explicit Content</span>
             <p className="text-sm text-neutral-300 max-w-[80%] mb-5 !leading-relaxed">
               This broadcast contains mature material restricted by the broadcaster:<br />
-              <strong className="text-white">"{contentWarningReason}"</strong>
+              <strong className="text-white">&quot;{contentWarningReason}&quot;</strong>
             </p>
             <button
               onClick={() => {
                 setNsfwConsented(true);
                 if (videoRef.current) {
+                  userPausedRef.current = false;
+                  shouldResumeAfterBackgroundRef.current = true;
                   videoRef.current.play().catch(() => {});
                 }
               }}
@@ -1255,6 +1478,7 @@ export function Player({
           ref={videoRef}
           className={`w-full h-full cursor-pointer ${!nsfwConsented ? 'opacity-0' : 'opacity-100'}`}
           playsInline
+          preload="auto"
           controls={effectiveNativeControls && nsfwConsented}
           autoPlay={nsfwConsented}
           muted={volume === 0}
@@ -1284,9 +1508,9 @@ export function Player({
           </button>
         )}
 
-                {showAuxControls && !error && !needsClick && (viewerCount !== undefined || p2pPeers !== undefined) && (
+        {showAuxControls && !error && !needsClick && (viewerCount !== undefined || p2pPeers !== undefined || auxMetaSlot || overlayTitleLabel) && (
           <div
-            className={`absolute inset-x-0 top-0 z-20 flex flex-row items-start justify-end bg-gradient-to-b from-black/80 via-black/30 to-transparent pt-4 pb-12 px-4 pointer-events-none transition-opacity duration-200 ${
+            className={`absolute inset-x-0 top-0 z-20 flex flex-row items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/30 to-transparent pt-4 pb-12 px-4 pointer-events-none transition-opacity duration-200 ${
               isMobilePlayback
                 ? mobileControlsVisible
                   ? "opacity-100"
@@ -1294,17 +1518,25 @@ export function Player({
                 : "opacity-0 group-hover/player:opacity-100"
             }`}
           >
-            <div className="flex bg-neutral-900/60 backdrop-blur border border-white/10 rounded-xl overflow-hidden text-[11px] font-mono font-medium tracking-wide">
-              {viewerCount !== undefined && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-white/10 text-neutral-300">
-                  <Users className="w-3.5 h-3.5" />
-                  {viewerCount} Live
-                </div>
-              )}
-              {p2pPeers !== undefined && (
-                <div className="flex items-center px-3 py-1.5 text-neutral-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2 animate-pulse" />
-                  {p2pPeers} P2P
+            <div className="min-w-0 flex-1 text-sm font-semibold text-white/90 drop-shadow">
+              {overlayTitleLabel}
+            </div>
+            <div className="flex shrink-0 items-start gap-2 pointer-events-auto">
+              {auxMetaSlot}
+              {(viewerCount !== undefined || p2pPeers !== undefined) && (
+                <div className="flex bg-neutral-900/60 backdrop-blur border border-white/10 rounded-xl overflow-hidden text-[11px] font-mono font-medium tracking-wide">
+                  {viewerCount !== undefined && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-white/10 text-neutral-300">
+                      <Users className="w-3.5 h-3.5" />
+                      {viewerCount} Live
+                    </div>
+                  )}
+                  {p2pPeers !== undefined && (
+                    <div className="flex items-center px-3 py-1.5 text-neutral-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2 animate-pulse" />
+                      {p2pPeers} P2P
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1438,18 +1670,19 @@ export function Player({
                 <button
                   type="button"
                   onClick={() => setLowLatencyEnabled((cur) => !cur)}
-                  disabled={playbackMode !== "hls"}
+                  disabled={playbackMode !== "hls" || effectiveBackgroundPlayEnabled}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold tracking-wider transition ${
-                    lowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
+                    effectiveLowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
                   } disabled:opacity-50`}
+                  title={effectiveBackgroundPlayEnabled ? "Background audio uses stable HLS instead of low-latency mode" : "Low-latency playback"}
                 >
-                  <div className={`w-2 h-2 rounded-full ${lowLatencyEnabled ? "bg-white" : "bg-neutral-600"}`} />
+                  <div className={`w-2 h-2 rounded-full ${effectiveLowLatencyEnabled ? "bg-white" : "bg-neutral-600"}`} />
                   Low-Latency
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                  onClick={handleBackgroundPlayToggle}
                   className={`flex px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
                     effectiveBackgroundPlayEnabled
                       ? "bg-white/10 border-white/20 text-white"
@@ -1479,7 +1712,7 @@ export function Player({
                   type="button"
                   onClick={() => void togglePip()}
                   disabled={!canTogglePip}
-                  className="px-2 py-1 rounded-lg hover:bg-neutral-800 transition disabled:opacity-50 text-[11px] font-semibold text-neutral-300"
+                  className={`px-2 py-1 rounded-lg hover:bg-neutral-800 transition disabled:opacity-50 text-[11px] font-semibold ${isPip ? "text-white" : "text-neutral-300"}`}
                   title="Picture in Picture"
                 >
                   PiP

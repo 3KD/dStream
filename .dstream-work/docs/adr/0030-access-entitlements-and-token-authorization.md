@@ -10,7 +10,7 @@ Current access behavior is split across:
 - announce-derived private/public gating,
 - short-lived playback tokens,
 - Monero verified tip/stake session logic,
-- non-XMR payment methods exposed as wallet URI/copy flows.
+- payment rails that need to converge on one verified settlement contract.
 
 This works for basic private streams but does not provide one persistent, auditable model for:
 
@@ -52,8 +52,12 @@ Refresh/new tokens always re-check current entitlement state.
 
 Payment rails produce settlement records; entitlement grants are a separate explicit step.
 
-- Monero remains the only verified backend settlement rail in current stack.
-- Other rails remain wallet URI/copy until dedicated verifiers are implemented.
+- Every rail must converge on the same settlement truth model:
+  - client submits `PaymentSettlementProof` (or an equivalent rail proof payload)
+  - verifier returns `VerifiedPaymentSettlement`
+  - entitlement grant consumes that normalized record
+- Monero wallet-rpc remains the in-tree verifier.
+- Lightning, EVM, Solana, TRON, XRPL, and BTC now verify in-tree against the same settlement record shape; Cardano, DOGE, and BCH use the same path once their provider/node envs are configured.
 
 ### 5) Preserve backward compatibility
 
@@ -64,8 +68,10 @@ Existing announce allowlist/private/public semantics remain valid and are mapped
 - Access behavior becomes deterministic and auditable.
 - Revocation/expiry works consistently across live, Video, and chat.
 - Paid access packages (per-item/per-playlist/time-window) become implementable without custom one-off logic.
-- Non-verified rails can be supported with explicit provisional/manual grant policy instead of implicit trust.
+- Wallet/app handoff can remain a UX detail, but it no longer defines settlement truth.
+- Non-verified rails can still be supported with explicit provisional/manual grant policy instead of implicit trust.
 
 ## References
 
 - Contract/spec: `docs/ACCESS_ENTITLEMENTS_CONTRACT.md`
+- Settlement contract: `docs/adr/0031-canonical-multi-rail-verified-settlement.md`

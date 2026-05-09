@@ -68,7 +68,7 @@ export function useTipSession(streamPubkey: string, streamId: string) {
           amountAtomic: data.amountAtomic
         }));
       }
-    } catch (err) {
+    } catch {
       // transient network errors ignored during polling
     }
   }, [clearPolling]);

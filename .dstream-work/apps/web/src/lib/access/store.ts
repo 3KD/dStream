@@ -266,6 +266,7 @@ export function grantAccessEntitlement(input: {
   if (actions.length === 0) throw new Error("actions must include at least one action.");
 
   const source = parseEntitlementSource(input.source);
+  const sourceRef = sanitizeShortText(input.sourceRef, 400) ?? undefined;
   const startsAtSec = input.startsAtSec && input.startsAtSec > 0 ? Math.trunc(input.startsAtSec) : timestamp;
   const expiresAtSec = input.expiresAtSec && input.expiresAtSec > 0 ? Math.trunc(input.expiresAtSec) : undefined;
   if (expiresAtSec && expiresAtSec <= startsAtSec) {
@@ -277,6 +278,8 @@ export function grantAccessEntitlement(input: {
       row.hostPubkey === hostPubkey &&
       row.subjectPubkey === subjectPubkey &&
       row.resourceId === resourceId &&
+      row.source === source &&
+      (row.sourceRef ?? undefined) === sourceRef &&
       row.status !== "revoked"
   );
 
@@ -284,7 +287,7 @@ export function grantAccessEntitlement(input: {
     const merged = new Set<string>([...existing.actions, ...actions]);
     existing.actions = Array.from(merged);
     existing.source = source;
-    existing.sourceRef = sanitizeShortText(input.sourceRef, 400) ?? existing.sourceRef;
+    existing.sourceRef = sourceRef ?? existing.sourceRef;
     existing.startsAtSec = Math.min(existing.startsAtSec, startsAtSec);
     existing.expiresAtSec = expiresAtSec ?? existing.expiresAtSec;
     existing.metadata = { ...existing.metadata, ...sanitizeMetadata(input.metadata) };
@@ -301,7 +304,7 @@ export function grantAccessEntitlement(input: {
     resourceId,
     actions,
     source,
-    sourceRef: sanitizeShortText(input.sourceRef, 400) ?? undefined,
+    sourceRef,
     status: "active",
     startsAtSec,
     expiresAtSec,

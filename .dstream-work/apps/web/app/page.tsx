@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Users, Bitcoin } from "lucide-react";
+import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Bitcoin } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
@@ -23,7 +23,7 @@ export default function HomePage() {
   const router = useRouter();
   const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
   const { streams: announcedStreams, isLoading: videoLoading } = useStreamAnnounces({ liveOnly: false, limit: 180 });
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery] = useState("");
   const [heroCollapsed, setHeroCollapsed] = useState(false);
 
   useEffect(() => {
@@ -169,6 +169,7 @@ export default function HomePage() {
                         streamId={stream.streamId}
                         title={stream.title || "Live stream preview"}
                         fallbackImage={stream.image}
+                        streamingUrl={stream.streaming}
                         enabled={index < 12}
                       />
                           </div>
@@ -241,7 +242,6 @@ export default function HomePage() {
                   >
                     <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                       {stream.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={stream.image}
                           alt={stream.title || "Video thumbnail"}

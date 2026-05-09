@@ -39,14 +39,30 @@ export function resolveVideoPolicy(stream: StreamAnnounce): StreamVideoPolicy {
   return { mode: "off" };
 }
 
+function hasExplicitVideoMode(stream: StreamAnnounce): boolean {
+  return stream.video?.mode === "public" || stream.video?.mode === "paid";
+}
+
 export function isReplayEligibleStream(stream: StreamAnnounce): boolean {
   if (stream.status !== "ended") return false;
   if (stream.videoVisibility === "private") return false;
-  
+
   const policy = resolveVideoPolicy(stream);
   if (policy.mode === "off") return false;
 
-  return true;
+  const playbackUrl = stream.streaming?.trim() ?? "";
+  if (!playbackUrl) return false;
+
+  // Ended streams that still point at live HLS paths should not appear as replay-ready.
+  if (isLikelyLivePlaybackUrl(playbackUrl) && !isLikelyVideoPlaybackUrl(playbackUrl)) return false;
+
+  // Explicit replay/archive endpoints are safe to surface.
+  if (isLikelyVideoPlaybackUrl(playbackUrl)) return true;
+
+  // Raw media files are only replay-ready when the broadcaster explicitly opted into Video mode.
+  if (isLikelyPublicPlayableMediaUrl(playbackUrl)) return hasExplicitVideoMode(stream);
+
+  return false;
 }
 
 export function videoModeLabel(policy: StreamVideoPolicy): string {

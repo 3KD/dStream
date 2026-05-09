@@ -1,5 +1,7 @@
 import { grantAccessEntitlement, listAccessEntitlements, revokeAccessEntitlement } from "./store";
 import { ACCESS_ACTIONS, type AccessAction, type AccessEntitlement } from "./types";
+import type { VerifiedPaymentSettlement } from "@dstream/protocol";
+import { buildCanonicalSettlementSourceRef, buildSettlementMetadata } from "../payments/settlement";
 
 const DEFAULT_STAKE_GRANT_ACTIONS: AccessAction[] = ["watch_live", "watch_video", "chat_send", "p2p_assist", "rebroadcast"];
 
@@ -115,7 +117,14 @@ export type StakeSettlementGrantResult = {
   entitlement: AccessEntitlement | null;
 };
 
-export function grantVerifiedStakeSettlementAccess(input: StakeSettlementGrantInput): StakeSettlementGrantResult {
+export interface VerifiedSettlementGrantInput {
+  hostPubkey: string;
+  viewerPubkey: string;
+  streamId: string;
+  settlement: VerifiedPaymentSettlement;
+}
+
+export function grantVerifiedSettlementAccess(input: VerifiedSettlementGrantInput): StakeSettlementGrantResult {
   if (!parseAutoGrantEnabled()) {
     return {
       granted: false,
@@ -124,6 +133,65 @@ export function grantVerifiedStakeSettlementAccess(input: StakeSettlementGrantIn
     };
   }
 
+  const hostPubkey = normalizePubkeyHex(input.hostPubkey);
+  const subjectPubkey = normalizePubkeyHex(input.viewerPubkey);
+  const streamId = normalizeStreamId(input.streamId);
+  if (!hostPubkey || !subjectPubkey || !streamId) {
+    return {
+      granted: false,
+      reason: "invalid_input",
+      entitlement: null
+    };
+  }
+
+  const resourceId = `stream:${hostPubkey}:${streamId}:*`;
+  const actions = parseAutoGrantActions();
+  const sourceRef = buildCanonicalSettlementSourceRef(input.settlement);
+
+  const existing = listAccessEntitlements({
+    hostPubkey,
+    subjectPubkey,
+    resourceId,
+    status: "active",
+    limit: 200
+  }).find((row) => row.source === "purchase_verified" && row.sourceRef === sourceRef && includesAllActions(row.actions, actions));
+
+  if (existing) {
+    return {
+      granted: false,
+      reason: "existing",
+      entitlement: existing
+    };
+  }
+
+  const startsAtSec = deriveStartsAtSec(input.settlement.observedAtMs);
+  const ttlSec = parseAutoGrantTtlSec();
+  const expiresAtSec = ttlSec ? startsAtSec + ttlSec : undefined;
+  const metadata = {
+    streamId,
+    ...buildSettlementMetadata(input.settlement)
+  };
+
+  const entitlement = grantAccessEntitlement({
+    hostPubkey,
+    subjectPubkey,
+    resourceId,
+    actions,
+    source: "purchase_verified",
+    sourceRef,
+    startsAtSec,
+    expiresAtSec,
+    metadata
+  });
+
+  return {
+    granted: true,
+    reason: "granted",
+    entitlement
+  };
+}
+
+export function grantVerifiedStakeSettlementAccess(input: StakeSettlementGrantInput): StakeSettlementGrantResult {
   const hostPubkey = normalizePubkeyHex(input.hostPubkey);
   const subjectPubkey = normalizePubkeyHex(input.viewerPubkey);
   const streamId = normalizeStreamId(input.streamId);
@@ -144,61 +212,43 @@ export function grantVerifiedStakeSettlementAccess(input: StakeSettlementGrantIn
     };
   }
 
-  const resourceId = `stream:${hostPubkey}:${streamId}:*`;
-  const actions = parseAutoGrantActions();
-  const sourceRef = `xmr_stake_session:${normalizeSessionRef(input.sessionToken)}:${normalizeTxRef(input.txid)}`;
-
-  const existing = listAccessEntitlements({
+  return grantVerifiedSettlementAccess({
     hostPubkey,
-    subjectPubkey,
-    resourceId,
-    status: "active",
-    limit: 200
-  }).find((row) => row.source === "purchase_verified" && row.sourceRef === sourceRef && includesAllActions(row.actions, actions));
-
-  if (existing) {
-    return {
-      granted: false,
-      reason: "existing",
-      entitlement: existing
-    };
-  }
-
-  const startsAtSec = deriveStartsAtSec(input.observedAtMs);
-  const ttlSec = parseAutoGrantTtlSec();
-  const expiresAtSec = ttlSec ? startsAtSec + ttlSec : undefined;
-
-  const entitlement = grantAccessEntitlement({
-    hostPubkey,
-    subjectPubkey,
-    resourceId,
-    actions,
-    source: "purchase_verified",
-    sourceRef,
-    startsAtSec,
-    expiresAtSec,
-    metadata: {
+    viewerPubkey: subjectPubkey,
+    streamId,
+    settlement: {
+      version: 1,
       railId: "xmr",
       asset: "xmr",
-      settlementType: "stake_session",
-      sessionToken: normalizeSessionRef(input.sessionToken),
-      streamId,
-      txid: input.txid?.trim() || null,
-      confirmedAtomic: confirmedAtomic.toString(),
-      accountIndex: typeof input.accountIndex === "number" ? Math.trunc(input.accountIndex) : null,
-      addressIndex: typeof input.addressIndex === "number" ? Math.trunc(input.addressIndex) : null
+      settlementKind: "stake_session",
+      settlementRef: `stake_session:${normalizeSessionRef(input.sessionToken)}`,
+      txRef: normalizeTxRef(input.txid),
+      amountAtomic: confirmedAtomic.toString(),
+      confirmed: true,
+      observedAtMs: input.observedAtMs ?? Date.now(),
+      verifier: "host_origin",
+      metadata: {
+        sessionToken: normalizeSessionRef(input.sessionToken),
+        accountIndex: typeof input.accountIndex === "number" ? Math.trunc(input.accountIndex) : null,
+        addressIndex: typeof input.addressIndex === "number" ? Math.trunc(input.addressIndex) : null
+      }
     }
   });
-
-  return {
-    granted: true,
-    reason: "granted",
-    entitlement
-  };
 }
 
 function isStakeSessionEntitlement(row: AccessEntitlement): boolean {
-  return row.source === "purchase_verified" && row.metadata?.settlementType === "stake_session";
+  if (row.source !== "purchase_verified") return false;
+  return row.metadata?.settlementKind === "stake_session" || row.metadata?.settlementType === "stake_session";
+}
+
+function getSettlementMetadataField(row: AccessEntitlement, key: string): unknown {
+  if (row.metadata && key in row.metadata) return row.metadata[key];
+  const nested = row.metadata?.verifiedSettlement;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const metadata = (nested as { metadata?: Record<string, unknown> }).metadata;
+    if (metadata && key in metadata) return metadata[key];
+  }
+  return undefined;
 }
 
 function revokeRows(rows: AccessEntitlement[], reason: string): AccessEntitlement[] {
@@ -240,8 +290,8 @@ export function revokeVerifiedStakeSettlementAccessBySession(input: StakeSettlem
   }
 
   const sessionRef = normalizeSessionRef(input.sessionToken);
-  const sourceRefPrefix = `xmr_stake_session:${sessionRef}:`;
   const resourcePrefix = `stream:${hostPubkey}:${streamId}:`;
+  const canonicalSettlementRef = `stake_session:${sessionRef}`;
 
   const rows = listAccessEntitlements({
     hostPubkey,
@@ -251,8 +301,10 @@ export function revokeVerifiedStakeSettlementAccessBySession(input: StakeSettlem
   }).filter((row) => {
     if (!isStakeSessionEntitlement(row)) return false;
     if (!row.resourceId.startsWith(resourcePrefix)) return false;
-    if (typeof row.sourceRef === "string" && row.sourceRef.startsWith(sourceRefPrefix)) return true;
-    return row.metadata?.sessionToken === sessionRef;
+    if (row.metadata?.settlementRef === canonicalSettlementRef) return true;
+    if (typeof row.sourceRef === "string" && row.sourceRef === `settlement:v1:xmr:${canonicalSettlementRef}`) return true;
+    if (typeof row.sourceRef === "string" && row.sourceRef.startsWith(`xmr_stake_session:${sessionRef}:`)) return true;
+    return getSettlementMetadataField(row, "sessionToken") === sessionRef;
   });
 
   const revoked = revokeRows(rows, input.reason?.trim() || "stake_settlement_refunded");
@@ -289,8 +341,8 @@ export function revokeVerifiedStakeSettlementAccessByAddress(
   }).filter((row) => {
     if (!isStakeSessionEntitlement(row)) return false;
     if (!row.resourceId.startsWith(resourcePrefix)) return false;
-    const rowAccountIndex = parseOptionalInt(row.metadata?.accountIndex);
-    const rowAddressIndex = parseOptionalInt(row.metadata?.addressIndex);
+    const rowAccountIndex = parseOptionalInt(getSettlementMetadataField(row, "accountIndex"));
+    const rowAddressIndex = parseOptionalInt(getSettlementMetadataField(row, "addressIndex"));
     if (rowAccountIndex === null || rowAddressIndex === null) return false;
     return rowAccountIndex === accountIndex && rowAddressIndex === addressIndex;
   });

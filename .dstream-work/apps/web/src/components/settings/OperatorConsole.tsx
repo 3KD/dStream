@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleDot, Copy, ExternalLink, Gauge, Radio, Users } from "lucide-react";
+import { CircleDot, Copy, ExternalLink, Gauge, Users } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";

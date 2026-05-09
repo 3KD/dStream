@@ -667,7 +667,7 @@ export class P2PSwarm {
     expected.received += chunk.byteLength;
     if (expected.received < expected.len) return;
 
-    const { resolve, timer, url } = peer.inflight;
+    const { resolve, timer } = peer.inflight;
     clearTimeout(timer);
     peer.inflight = undefined;
     peer.expectBinary = undefined;

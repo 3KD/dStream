@@ -36,7 +36,8 @@ const runtimePlanes = [
   },
   {
     name: "Payments",
-    details: "Monero wallet-rpc for verified flows; additional asset methods exposed as addresses + wallet URI hints."
+    details:
+      "Monero wallet-rpc and multi-rail payment sessions normalize into the same settlement contract. Viewers can still use wallet apps/extensions for payment initiation, but archive unlocks now flow through payment-session status and verified settlement rather than raw wallet handoff state."
   }
 ];
 
@@ -44,7 +45,7 @@ const protocolLandscape = [
   {
     title: "dStream",
     notes:
-      "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + Monero verified payment backend."
+      "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + canonical verified settlement contract with in-tree multi-rail verification."
   },
   {
     title: "zap.stream",
@@ -77,6 +78,7 @@ const apiSurface = [
 
 const productionGate = [
   "npm run harden:deploy -- .env.production",
+  "npm run smoke:payments",
   "npm run smoke:external:readiness",
   "npm run smoke:prod:runtime",
   "npm run gate:prod -- .env.production"
@@ -109,8 +111,8 @@ export default function DocsPage() {
           <p className="text-xs uppercase tracking-wider text-neutral-500">Technical Documentation</p>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight">dStream Runtime Docs (Production Path)</h1>
           <p className="text-neutral-300 max-w-4xl mx-auto leading-relaxed">
-            Updated reference for the current stack: Nostr identity, WHIP/WHEP/HLS media path, P2P assist policy controls, and wallet-integrated payment
-            flows.
+            Updated reference for the current stack: Nostr identity, WHIP/WHEP/HLS media path, P2P assist policy controls, and payment flows that
+            separate wallet initiation UX from payment-session orchestration and verified settlement truth.
           </p>
         </header>
 
@@ -210,9 +212,11 @@ export default function DocsPage() {
           <h2 className="text-2xl font-bold">Wallet Integration Workflow</h2>
           <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
             <li>Configure payout methods in Broadcast (core fields + advanced payout section).</li>
+            <li>Non-XMR packages default to the built-in local node operator at <code>/api/payment-operator</code>; set a custom package endpoint only when a host-side operator should override that default.</li>
             <li>Set preferred wallet per asset from Settings wallet integration panel.</li>
-            <li>Watchers use copy/URI actions on watch page to pay with native app, extension, or CLI workflow.</li>
-            <li>For XMR verification, viewers request a dedicated subaddress and check on-session status.</li>
+            <li>Watchers start a payment session on watch page, then pay the returned target with native app, extension, or CLI workflow.</li>
+            <li>Unlocks complete only after the payment session resolves into a canonical `VerifiedPaymentSettlement` record.</li>
+            <li>Lightning supports concrete operator-observed sessions now; EVM, Solana, and TRON can auto-complete from returned tx hashes; UTXO, XRPL, Cardano, DOGE, and BCH use the same session contract once their operator/provider backends are configured.</li>
           </ol>
           <div className="flex flex-wrap gap-3 text-sm">
             <Link href="/settings#wallet-integrations" className="px-4 py-2 rounded-full bg-neutral-900 border border-neutral-700 hover:border-neutral-500">

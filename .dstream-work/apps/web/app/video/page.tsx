@@ -1268,7 +1268,6 @@ export default function VideoPage() {
                   >
                     <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                       {stream.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={stream.image}
                           alt={stream.title || "Replay thumbnail"}

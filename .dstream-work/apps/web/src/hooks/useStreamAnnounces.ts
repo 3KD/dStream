@@ -526,6 +526,11 @@ function connectDirectoryFeed() {
     emitSnapshot({ isLoading: true });
   }
 
+  // Mobile browsers and cellular networks are commonly slower or less reliable
+  // with direct relay WebSockets. Hydrate from the server snapshot immediately,
+  // then let relay subscriptions refine the directory as they arrive.
+  void hydrateFromServerSnapshotFallback();
+
   const filters: Filter[] = [
     {
       kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],

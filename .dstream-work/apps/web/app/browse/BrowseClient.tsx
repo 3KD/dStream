@@ -280,6 +280,7 @@ export default function BrowseClient() {
                             streamId={stream.streamId}
                             title={stream.title || "Live stream preview"}
                             fallbackImage={stream.image}
+                            streamingUrl={stream.streaming}
                             enabled={index < 16}
                           />
                           </div>
@@ -374,7 +375,6 @@ export default function BrowseClient() {
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={stream.image}
                               alt={stream.title || "Replay thumbnail"}
@@ -455,7 +455,6 @@ export default function BrowseClient() {
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={stream.image}
                               alt={stream.title || "Offline stream thumbnail"}

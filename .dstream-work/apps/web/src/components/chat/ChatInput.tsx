@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Smile, X } from "lucide-react";
 import dynamic from "next/dynamic";
 

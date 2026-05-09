@@ -49,7 +49,12 @@ test("video packages: purchase grants watch_video and is idempotent by sourceRef
     playlistId: "season1",
     paymentAsset: "btc",
     paymentAmount: "0.0005",
-    durationHours: 24 * 7
+    durationHours: 24 * 7,
+    metadata: {
+      paymentSession: {
+        operatorEndpoint: "https://operator.example/lightning"
+      }
+    }
   });
 
   const sourceRef = "tx:abc123";
@@ -151,6 +156,104 @@ test("video packages: resource id helper + package lookup + purchase listing", a
   assert.equal(purchases[0]?.packageId, created.id);
 });
 
+test("video packages: verified settlement derives canonical source and persists settlement metadata", async () => {
+  const { grantVideoPackagePurchaseAccess, listVideoPackagePurchases, upsertVideoAccessPackage } = await import("./packages");
+
+  const hostPubkey = "d".repeat(64);
+  const viewerPubkey = "e".repeat(64);
+  const pkg = upsertVideoAccessPackage({
+    hostPubkey,
+    streamId: "video-settlement",
+    title: "Verified settlement package",
+    paymentAsset: "btc",
+    paymentRailId: "lightning",
+    paymentAmount: "0.0005",
+    durationHours: 24,
+    metadata: {
+      paymentSession: {
+        operatorEndpoint: "https://operator.example/lightning"
+      }
+    }
+  });
+
+  const grant = grantVideoPackagePurchaseAccess({
+    packageId: pkg.id,
+    viewerPubkey,
+    source: "purchase_verified",
+    verifiedSettlement: {
+      version: 1,
+      railId: "lightning",
+      asset: "btc",
+      settlementKind: "purchase",
+      settlementRef: "invoice:ln-settlement",
+      txRef: "ln-settlement",
+      confirmed: true,
+      observedAtMs: Date.now(),
+      verifier: "external_verifier"
+    }
+  });
+
+  assert.equal(grant.entitlement.sourceRef, "settlement:v1:lightning:invoice:ln-settlement");
+  assert.equal(grant.purchase.settlementRef, "invoice:ln-settlement");
+  assert.equal(grant.purchase.verifiedSettlement?.railId, "lightning");
+
+  const purchases = listVideoPackagePurchases({
+    hostPubkey,
+    viewerPubkey,
+    packageId: pkg.id,
+    limit: 10
+  });
+  assert.equal(purchases[0]?.verifiedSettlement?.settlementRef, "invoice:ln-settlement");
+});
+
+test("video packages: payment targets round-trip through package storage", async () => {
+  const { getVideoAccessPackageById, upsertVideoAccessPackage } = await import("./packages");
+
+  const hostPubkey = "f".repeat(64);
+  const created = upsertVideoAccessPackage({
+    hostPubkey,
+    streamId: "video-targets",
+    title: "Targeted package",
+    paymentAsset: "eth",
+    paymentRailId: "evm",
+    paymentAmount: "0.25",
+    paymentTarget: {
+      version: 1,
+      railId: "evm",
+      asset: "eth",
+      destination: "0x1111111111111111111111111111111111111111",
+      network: "ethereum",
+      label: "Primary treasury",
+      amount: "0.25",
+      amountAtomic: "250000000000000000"
+    },
+    durationHours: 72,
+    metadata: {
+      paymentSession: {
+        operatorEndpoint: "https://operator.example/evm"
+      }
+    }
+  });
+
+  const found = getVideoAccessPackageById(created.id);
+  assert.ok(found);
+  if (!found) return;
+  assert.equal(found.paymentRailId, "evm");
+  assert.deepEqual(found.paymentTarget, {
+    version: 1,
+    railId: "evm",
+    asset: "eth",
+    destination: "0x1111111111111111111111111111111111111111",
+    network: "ethereum",
+    label: "Primary treasury",
+    amount: "0.25",
+    amountAtomic: "250000000000000000",
+    contractAddress: undefined,
+    reference: undefined,
+    metadata: {}
+  });
+});
+
 test("video packages: purchase stats aggregate by package id", async () => {
   const { listVideoPackagePurchaseStats, upsertVideoAccessPackage, grantVideoPackagePurchaseAccess } = await import("./packages");
   const hostPubkey = "7".repeat(64);
@@ -233,6 +336,88 @@ test("video packages: rejects mixed playlist + relative path scope", async () =>
   );
 });
 
+test("video packages: non-xmr paid packages require operator sessions unless legacy fallback is explicitly enabled", async () => {
+  const { upsertVideoAccessPackage } = await import("./packages");
+  const hostPubkey = "a".repeat(64);
+
+  assert.throws(
+    () =>
+      upsertVideoAccessPackage({
+        hostPubkey,
+        streamId: "video-operator-required",
+        title: "Missing operator",
+        paymentAsset: "eth",
+        paymentRailId: "evm",
+        paymentAmount: "0.1",
+        paymentTarget: {
+          version: 1,
+          railId: "evm",
+          asset: "eth",
+          destination: "0x1111111111111111111111111111111111111111",
+          network: "ethereum"
+        },
+        durationHours: 24
+      }),
+    /require a node-operator session endpoint/
+  );
+
+  assert.throws(
+    () =>
+      upsertVideoAccessPackage({
+        hostPubkey,
+        streamId: "video-operator-unsafe-endpoint",
+        title: "Unsafe operator",
+        paymentAsset: "eth",
+        paymentRailId: "evm",
+        paymentAmount: "0.1",
+        paymentTarget: {
+          version: 1,
+          railId: "evm",
+          asset: "eth",
+          destination: "0x1111111111111111111111111111111111111111",
+          network: "ethereum"
+        },
+        durationHours: 24,
+        metadata: {
+          paymentSession: {
+            operatorEndpoint: "https://user:pass@operator.example/evm"
+          }
+        }
+      }),
+    /must not embed credentials/
+  );
+
+  const previous = process.env.DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS;
+  process.env.DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS = "1";
+  try {
+    const legacy = upsertVideoAccessPackage({
+      hostPubkey,
+      streamId: "video-operator-required-dev",
+      title: "Legacy dev fallback",
+      paymentAsset: "eth",
+      paymentRailId: "evm",
+      paymentAmount: "0.1",
+      paymentTarget: {
+        version: 1,
+        railId: "evm",
+        asset: "eth",
+        destination: "0x1111111111111111111111111111111111111111",
+        network: "ethereum"
+      },
+      durationHours: 24,
+      metadata: {
+        paymentSession: {
+          proofMode: "client_tx_ref"
+        }
+      }
+    });
+    assert.equal(legacy.paymentRailId, "evm");
+  } finally {
+    if (previous === undefined) delete process.env.DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS;
+    else process.env.DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS = previous;
+  }
+});
+
 test("video package policy: normalize + metadata defaults", async () => {
   const { getVideoPurchasePolicyFromMetadata, getVideoPurchasePolicyLabel, normalizeVideoPurchasePolicy } = await import(
     "./videoPackagePolicy"
@@ -240,14 +425,15 @@ test("video package policy: normalize + metadata defaults", async () => {
 
   assert.equal(normalizeVideoPurchasePolicy("verified_only"), "verified_only");
   assert.equal(normalizeVideoPurchasePolicy("unverified_ok"), "unverified_ok");
-  assert.equal(normalizeVideoPurchasePolicy(""), "operator_or_verified");
+  assert.equal(normalizeVideoPurchasePolicy(""), "verified_only");
   assert.equal(getVideoPurchasePolicyFromMetadata({ purchasePolicy: "verified_only" }), "verified_only");
-  assert.equal(getVideoPurchasePolicyFromMetadata({}), "operator_or_verified");
-  assert.equal(getVideoPurchasePolicyLabel("operator_or_verified"), "Verified or operator override");
+  assert.equal(getVideoPurchasePolicyFromMetadata({}), "verified_only");
+  assert.equal(getVideoPurchasePolicyLabel("verified_only"), "Verified settlement only");
 });
 
 test("video checkout helpers: verification labels + error normalization", async () => {
   const { formatVideoCheckoutVerificationMode, normalizeVideoPurchaseErrorMessage } = await import("./videoCheckout");
+  assert.equal(formatVideoCheckoutVerificationMode("verified_settlement"), "verified settlement");
   assert.equal(formatVideoCheckoutVerificationMode("stake_verified"), "verified stake settlement");
   assert.equal(formatVideoCheckoutVerificationMode("operator_override"), "host operator confirmation");
   assert.equal(

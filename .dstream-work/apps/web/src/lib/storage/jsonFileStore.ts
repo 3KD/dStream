@@ -34,6 +34,7 @@ function releaseFileLock(path: string): void {
 
 function withFileLock(filePath: string, fn: () => void): void {
   const lock = lockPath(filePath);
+  mkdirSync(dirname(lock), { recursive: true });
   const startedAt = Date.now();
   const timeoutMs = 5000;
   while (!tryAcquireFileLock(lock)) {

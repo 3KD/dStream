@@ -1,14 +1,11 @@
 import Link from "next/link";
-import { BookOpenText, ExternalLink, Heart, Network, ShieldCheck, Sparkles, Download, Monitor, Smartphone, Terminal } from "lucide-react";
+import { BookOpenText, Heart, Network, ShieldCheck, Sparkles, Download, Monitor, Smartphone, Terminal } from "lucide-react";
 import { SupportAddressCopyChip } from "@/components/layout/SupportXmrAddress";
-import { getSupportLinks } from "@/lib/support";
 
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? "").trim();
 const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
 const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
 const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
-const supportLinks = getSupportLinks();
-
 const protocolLinks = [
   { href: "/whitepaper", label: "Whitepaper" },
   { href: "/docs", label: "Documentation" },

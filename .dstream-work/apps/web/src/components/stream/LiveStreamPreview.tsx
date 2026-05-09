@@ -9,6 +9,7 @@ interface LiveStreamPreviewProps {
   streamId: string;
   title: string;
   fallbackImage?: string;
+  streamingUrl?: string | null;
   enabled?: boolean;
 }
 
@@ -23,14 +24,38 @@ const INITIAL_CAPTURE_MAX_MS = 3400;
 const REFRESH_CAPTURE_MIN_MS = 12000;
 const REFRESH_CAPTURE_MAX_MS = 28000;
 
-export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage, enabled = true }: LiveStreamPreviewProps) {
+function shouldProbeLocalHls(streamingUrl: string | null | undefined): boolean {
+  const value = (streamingUrl ?? "").trim();
+  if (!value) return true;
+  if (value.startsWith("/")) return value.includes("/api/hls/") || value.includes("/stream/");
+
+  try {
+    const parsed = new URL(value);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    const isDstreamHost = hostname === "dstream.stream" || hostname.endsWith(".dstream.stream");
+    return isDstreamHost && (pathname.includes("/api/hls/") || pathname.includes("/stream/"));
+  } catch {
+    return false;
+  }
+}
+
+export function LiveStreamPreview({
+  streamPubkey,
+  streamId,
+  title,
+  fallbackImage,
+  streamingUrl,
+  enabled = true
+}: LiveStreamPreviewProps) {
   const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
 
   const hlsPreviewUrl = useMemo(() => {
+    if (!shouldProbeLocalHls(streamingUrl)) return null;
     const originStreamId = makeOriginStreamId(streamPubkey, streamId);
     if (!originStreamId) return null;
     return `/api/hls/${encodeURIComponent(originStreamId)}/index.m3u8`;
-  }, [streamId, streamPubkey]);
+  }, [streamId, streamPubkey, streamingUrl]);
 
   useEffect(() => {
     if (!enabled || !hlsPreviewUrl) return;

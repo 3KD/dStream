@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   ShieldCheck, Unlock, Users, EyeOff, Network,
   Globe, PenTool, Megaphone, Music, Camera,
-  Gamepad, Flag, type LucideIcon
+  Gamepad, type LucideIcon
 } from "lucide-react";
 
 export const WORDS = [

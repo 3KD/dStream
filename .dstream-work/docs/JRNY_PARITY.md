@@ -69,7 +69,7 @@ It maps:
 3) **Payments scope drift inside JRNY**
 - JRNY branding says Monero-first.
 - JRNY PROTOCOL/CONFIG also mention non-Monero receipt namespaces.
-- Decision: **Monero-only for verified settlement** (ADR `0021`), while additional payout rails are supported as unverified address/URI methods.
+- Decision: **one canonical verified settlement contract across rails** (ADR `0031`). Monero wallet-rpc remains the reference verifier, Lightning can allocate zap-bound invoices, EVM/Solana/TRON/UTXO/Cardano can run built-in amount-delta observer sessions, and XRPL can use destination tags or amount deltas. DOGE/BCH require node RPC and Cardano requires Blockfrost/provider envs. Wallet handoff UX can still exist for payment initiation, but it is not the source of truth for unlocks.
 
 4) **WHEP**
 - JRNY README calls out “WHIP/WHEP native”.

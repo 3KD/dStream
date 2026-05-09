@@ -35,6 +35,8 @@ export type StreamVideoMode = "off" | "public" | "paid";
 export type StreamVideoAccessScope = "stream" | "playlist";
 export const STREAM_PAYMENT_ASSETS = ["xmr", "eth", "btc", "usdt", "xrp", "usdc", "sol", "trx", "doge", "bch", "ada", "pepe"] as const;
 export type StreamPaymentAsset = (typeof STREAM_PAYMENT_ASSETS)[number];
+export const PAYMENT_RAIL_IDS = ["xmr", "lightning", "utxo", "evm", "tron", "solana", "xrpl", "cardano"] as const;
+export type PaymentRailId = (typeof PAYMENT_RAIL_IDS)[number];
 
 export interface StreamVideoPolicy {
   mode: StreamVideoMode;
@@ -52,6 +54,187 @@ export interface StreamPaymentMethod {
   label?: string;
   amount?: string;
 }
+
+export interface PaymentSettlementProof {
+  version: 1;
+  railId: PaymentRailId;
+  asset: StreamPaymentAsset;
+  proofType: string;
+  settlementRef?: string;
+  txRef?: string;
+  network?: string;
+  amount?: string;
+  amountAtomic?: string;
+  payload?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentSettlementTarget {
+  version: 1;
+  railId: PaymentRailId;
+  asset: StreamPaymentAsset;
+  destination: string;
+  network?: string;
+  label?: string;
+  reference?: string;
+  contractAddress?: string;
+  amount?: string;
+  amountAtomic?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifiedPaymentSettlement {
+  version: 1;
+  railId: PaymentRailId;
+  asset: StreamPaymentAsset;
+  settlementKind: string;
+  settlementRef: string;
+  txRef?: string;
+  network?: string;
+  amount?: string;
+  amountAtomic?: string;
+  confirmed: boolean;
+  observedAtMs: number;
+  verifier: "host_origin" | "external_verifier" | "operator_override";
+  metadata?: Record<string, unknown>;
+}
+
+export const PAYMENT_SESSION_STATUSES = [
+  "created",
+  "awaiting_payment",
+  "pending_operator",
+  "observed",
+  "verified",
+  "granted",
+  "expired",
+  "failed",
+  "cancelled"
+] as const;
+export type PaymentSessionStatus = (typeof PAYMENT_SESSION_STATUSES)[number];
+
+export const PAYMENT_SESSION_PROOF_MODES = [
+  "none",
+  "operator_observed",
+  "client_tx_ref",
+  "client_settlement_proof"
+] as const;
+export type PaymentSessionProofMode = (typeof PAYMENT_SESSION_PROOF_MODES)[number];
+
+export interface PaymentSessionOperatorDescriptor {
+  authority: "node_operator" | "embedded_reference";
+  transport: "http" | "embedded";
+  label?: string;
+  endpoint?: string;
+}
+
+export interface PaymentSessionTarget {
+  version: 1;
+  railId: PaymentRailId;
+  asset: StreamPaymentAsset;
+  targetType: "address" | "invoice" | "uri";
+  destination: string;
+  network?: string;
+  label?: string;
+  reference?: string;
+  contractAddress?: string;
+  amount?: string;
+  amountAtomic?: string;
+  walletUri?: string;
+  qrValue?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentSessionRecord {
+  version: 1;
+  id: string;
+  packageId: string;
+  hostPubkey: string;
+  streamId: string;
+  viewerPubkey: string;
+  railId: PaymentRailId;
+  asset: StreamPaymentAsset;
+  status: PaymentSessionStatus;
+  proofMode: PaymentSessionProofMode;
+  operator: PaymentSessionOperatorDescriptor;
+  target: PaymentSessionTarget;
+  createdAtMs: number;
+  updatedAtMs: number;
+  expiresAtMs?: number;
+  sourceRef?: string;
+  settlement?: VerifiedPaymentSettlement;
+  entitlementId?: string;
+  purchaseId?: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentSessionPackageDescriptor {
+  id: string;
+  hostPubkey: string;
+  streamId: string;
+  paymentAsset: StreamPaymentAsset;
+  paymentAmount: string;
+  paymentRailId?: PaymentRailId;
+  paymentTarget?: PaymentSettlementTarget;
+}
+
+export interface PaymentSessionViewerDescriptor {
+  pubkey: string;
+}
+
+export interface PaymentOperatorSessionCreateRequest {
+  version: 1;
+  sessionId: string;
+  package: PaymentSessionPackageDescriptor;
+  viewer: PaymentSessionViewerDescriptor;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentOperatorSessionStatusRequest {
+  version: 1;
+  sessionId: string;
+  packageId: string;
+  viewerPubkey: string;
+}
+
+export interface PaymentOperatorSessionObserveRequest extends PaymentOperatorSessionStatusRequest {
+  txRef?: string;
+  settlementProof?: PaymentSettlementProof;
+  paymentProof?: PaymentSettlementProof;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentOperatorSessionSuccessResponse {
+  ok: true;
+  status?: PaymentSessionStatus;
+  proofMode?: PaymentSessionProofMode;
+  operatorLabel?: string;
+  target?: PaymentSessionTarget;
+  expiresAtMs?: number;
+  metadata?: Record<string, unknown>;
+  settlement?: VerifiedPaymentSettlement;
+  error?: string;
+}
+
+export interface PaymentOperatorSessionErrorResponse {
+  ok: false;
+  error: string;
+  status?: PaymentSessionStatus;
+  proofMode?: PaymentSessionProofMode;
+  operatorLabel?: string;
+  expiresAtMs?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PaymentOperatorSessionCreateSuccessResponse extends PaymentOperatorSessionSuccessResponse {
+  target: PaymentSessionTarget;
+}
+
+export type PaymentOperatorSessionCreateResponse =
+  | PaymentOperatorSessionCreateSuccessResponse
+  | PaymentOperatorSessionErrorResponse;
+export type PaymentOperatorSessionStatusResponse = PaymentOperatorSessionSuccessResponse | PaymentOperatorSessionErrorResponse;
+export type PaymentOperatorSessionObserveResponse = PaymentOperatorSessionSuccessResponse | PaymentOperatorSessionErrorResponse;
 
 export interface StreamCaptionTrack {
   lang: string;

@@ -21,6 +21,10 @@ function isBtcLightningNetwork(input: string | null | undefined): boolean {
   return value === "lightning" || value === "ln" || value === "lnurl" || value === "bolt11";
 }
 
+function isTronNetwork(input: string | null | undefined): boolean {
+  return (input ?? "").trim().toLowerCase().includes("tron");
+}
+
 function stripScheme(input: string, scheme: string): string {
   const prefix = `${scheme}:`;
   if (input.slice(0, prefix.length).toLowerCase() !== prefix) return input;
@@ -43,49 +47,49 @@ export const PAYMENT_RAILS: PaymentRailMeta[] = [
   {
     id: "lightning",
     name: "Lightning",
-    description: "Bitcoin Lightning payouts (BOLT11/LNURL/lightning address) via wallet URI.",
+    description: "Bitcoin Lightning rail. Wallet handoff can initiate payment; verifier adapters normalize settlement into the canonical contract.",
     execution: "wallet_uri",
     assets: ["btc"]
   },
   {
     id: "utxo",
     name: "UTXO",
-    description: "UTXO chains routed through wallet URI/open-copy flows.",
+    description: "BTC/DOGE/BCH rail. Wallet handoff is allowed for initiation, but settlement should land in the shared verifier contract.",
     execution: "wallet_uri",
     assets: ["btc", "doge", "bch"]
   },
   {
     id: "evm",
     name: "EVM",
-    description: "EVM assets routed through compatible wallet integrations.",
+    description: "EVM assets route through compatible wallets and verifier adapters that emit canonical settlement records.",
     execution: "wallet_uri",
     assets: ["eth", "usdt", "usdc", "pepe"]
   },
   {
     id: "tron",
     name: "TRON",
-    description: "TRON rail routed via TRON-compatible wallets.",
+    description: "TRON rail with wallet handoff initiation and normalized settlement verification via adapters.",
     execution: "wallet_uri",
-    assets: ["trx"]
+    assets: ["trx", "usdt"]
   },
   {
     id: "solana",
     name: "Solana",
-    description: "Solana SPL/native flows through Solana wallets.",
+    description: "Solana SPL/native flows use wallet handoff for initiation and the shared settlement verifier contract for unlocks.",
     execution: "wallet_uri",
     assets: ["sol"]
   },
   {
     id: "xrpl",
     name: "XRPL",
-    description: "XRP Ledger payments routed with XRP wallet integrations.",
+    description: "XRP Ledger payments route through wallet integrations, then normalize verification into the canonical settlement contract.",
     execution: "wallet_uri",
     assets: ["xrp"]
   },
   {
     id: "cardano",
     name: "Cardano",
-    description: "Cardano address payments through Cardano wallets.",
+    description: "Cardano payments use wallet handoff for initiation and verifier adapters for canonical settlement records.",
     execution: "wallet_uri",
     assets: ["ada"]
   }
@@ -116,6 +120,7 @@ export function getPaymentRailForMethod(method: StreamPaymentMethod): PaymentRai
     }
     return getPaymentRailById("utxo");
   }
+  if (method.asset === "usdt" && isTronNetwork(method.network)) return getPaymentRailById("tron");
   return getPaymentRailForAsset(method.asset);
 }
 

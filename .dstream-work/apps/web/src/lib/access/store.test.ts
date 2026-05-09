@@ -33,6 +33,42 @@ test("access store: grant + revoke entitlement lifecycle", async () => {
   assert.equal(postRevokeActive.length, 0);
 });
 
+test("access store: distinct source refs keep package entitlements separate on the same resource", async () => {
+  const { grantAccessEntitlement, listAccessEntitlements } = await import("./store");
+
+  const hostPubkey = "7".repeat(64);
+  const subjectPubkey = "8".repeat(64);
+  const resourceId = `stream:${hostPubkey}:unit-test:video:playlist:root`;
+
+  const first = grantAccessEntitlement({
+    hostPubkey,
+    subjectPubkey,
+    resourceId,
+    actions: ["watch_video"],
+    source: "purchase_verified",
+    sourceRef: "settlement:v1:lightning:invoice-a",
+    metadata: { packageId: "pkg-a" }
+  });
+  const second = grantAccessEntitlement({
+    hostPubkey,
+    subjectPubkey,
+    resourceId,
+    actions: ["watch_video"],
+    source: "purchase_verified",
+    sourceRef: "settlement:v1:utxo:tx-b",
+    metadata: { packageId: "pkg-b" }
+  });
+
+  assert.notEqual(first.id, second.id);
+
+  const active = listAccessEntitlements({ hostPubkey, subjectPubkey, resourceId, status: "active", limit: 10 });
+  assert.equal(active.length, 2);
+  assert.deepEqual(
+    new Set(active.map((row) => String(row.metadata?.packageId))),
+    new Set(["pkg-a", "pkg-b"])
+  );
+});
+
 test("access store: deny rules list excludes expired entries", async () => {
   const { listAccessDenyRules, upsertAccessDenyRule } = await import("./store");
   const now = Math.floor(Date.now() / 1000);

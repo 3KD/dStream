@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import Link from "next/link";
+import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { nip19 } from "nostr-tools";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
 import { useNostrProfiles } from "@/hooks/useNostrProfiles";
-import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
+import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { hexToBytes, shortenText } from "@/lib/encoding";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TrustAndBlocksManager } from "@/components/settings/TrustAndBlocksManager";
@@ -168,18 +167,6 @@ function parseLocalBackupPayload(input: unknown): {
   };
 }
 
-function walletModeLabel(mode: "native_app" | "browser_extension" | "external_cli") {
-  if (mode === "browser_extension") return "Browser extension";
-  if (mode === "external_cli") return "CLI / RPC";
-  return "Native app";
-}
-
-function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli") {
-  if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
-  if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
-  return "Open the native wallet app and send to the copied address or wallet URI target.";
-}
-
 export default function SettingsPage() {
   const {
     identity,
@@ -226,7 +213,6 @@ export default function SettingsPage() {
   const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  const settings = social.settings;
   const activeSecretHex = useMemo(() => (identity?.kind === "local" ? exportLocalSecret() : null), [exportLocalSecret, identity?.kind]);
   const activeSecretNsec = useMemo(() => {
     if (!activeSecretHex) return null;

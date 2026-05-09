@@ -11,10 +11,12 @@ const eslintConfig = defineConfig([
       // We can tighten this incrementally once behavior is stable.
       "@typescript-eslint/no-explicit-any": "off",
       // Some client-only pages derive state from localStorage/identity; allow the pattern for now.
-      "react-hooks/set-state-in-effect": "off"
+      "react-hooks/set-state-in-effect": "off",
+      // The app renders user/relay/runtime image URLs that are not practical to predeclare for Next Image optimization.
+      "@next/next/no-img-element": "off"
     }
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"])
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/**/*.ts"])
 ]);
 
 export default eslintConfig;

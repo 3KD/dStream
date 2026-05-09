@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EyeOff, Plus, Search, Trash2, Users } from "lucide-react";
-import { Shield, HelpCircle, Network, SearchX } from "lucide-react";
+import { HelpCircle, Network, SearchX } from "lucide-react";
 import { buildGuildEvent, type Guild, type GuildFeaturedStreamRef } from "@dstream/protocol";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useGuilds } from "@/hooks/useGuilds";

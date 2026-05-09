@@ -1,12 +1,14 @@
 import { getVideoAccessPackageById, grantVideoPackagePurchaseAccess } from "@/lib/access/packages";
 import { verifyAccessProof } from "@/lib/access/proof";
-import { hasExternalPurchaseVerifier, verifyExternalPurchase } from "@/lib/access/purchaseVerifier";
+import { verifyPurchaseSettlement } from "@/lib/access/purchaseVerifier";
 import type { VideoCheckoutVerificationMode } from "@/lib/access/videoCheckout";
 import { getVideoPurchasePolicyFromMetadata } from "@/lib/access/videoPackagePolicy";
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
 import { getStakeTotals } from "@/lib/monero/stakeVerify";
 import { getXmrConfirmationsRequired, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { buildCanonicalSettlementRef, buildCanonicalSettlementSourceRef, buildSettlementMetadata } from "@/lib/payments/settlement";
 import { asString, authorizeAccessAdmin, parseBoolean } from "../../_lib";
+import type { VerifiedPaymentSettlement } from "@dstream/protocol";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +37,15 @@ function purchasePolicyError(policy: "operator_or_verified" | "verified_only" | 
   if (policy === "verified_only") return "This package requires verified settlement.";
   if (policy === "unverified_ok") return "Unverified unlocks are disabled on this deployment.";
   return "This package requires verified settlement or host operator confirmation.";
+}
+
+function normalizeSettlementProof(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  try {
+    return JSON.parse(JSON.stringify(input)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -74,7 +85,9 @@ export async function POST(req: Request): Promise<Response> {
   let sourceRef = asString(payload.sourceRef) || undefined;
   let settlementRef = asString(payload.settlementRef) || undefined;
   let actorPubkey: string | null = buyerProof.pubkey;
-  const paymentProof = payload.paymentProof ?? payload.settlementProof ?? null;
+  const paymentProof = normalizeSettlementProof(payload.paymentProof);
+  const settlementProof = normalizeSettlementProof(payload.settlementProof) ?? paymentProof;
+  let verifiedSettlement: VerifiedPaymentSettlement | undefined;
   const metadata =
     payload.metadata && typeof payload.metadata === "object" && !Array.isArray(payload.metadata)
       ? ({ ...payload.metadata } as Record<string, unknown>)
@@ -115,17 +128,39 @@ export async function POST(req: Request): Promise<Response> {
         );
       }
       source = "purchase_verified";
-      sourceRef = sourceRef || `xmr_stake_session:${stakeSessionToken}:${totals.lastTxid ?? "unknown"}`;
-      settlementRef = settlementRef || `xmr_stake_session:${stakeSessionToken}`;
-      metadata.railId = "xmr";
-      metadata.asset = "xmr";
-      metadata.confirmedAtomic = totals.confirmedAtomic;
-      metadata.transferCount = totals.transferCount;
-      metadata.lastTxid = totals.lastTxid;
-      metadata.lastObservedAtMs = totals.lastObservedAtMs;
-      metadata.accountIndex = session.accountIndex;
-      metadata.addressIndex = session.addressIndex;
-      verificationMode = "stake_verified";
+      verifiedSettlement = {
+        version: 1,
+        railId: "xmr",
+        asset: "xmr",
+        settlementKind: "stake_session",
+        settlementRef: buildCanonicalSettlementRef({
+          railId: "xmr",
+          settlementKind: "stake_session",
+          settlementRef: settlementRef || undefined,
+          txRef: stakeSessionToken
+        }),
+        txRef: totals.lastTxid ?? undefined,
+        amountAtomic: totals.confirmedAtomic,
+        confirmed: true,
+        observedAtMs: totals.lastObservedAtMs ?? Date.now(),
+        verifier: "host_origin",
+        metadata: {
+          transferCount: totals.transferCount,
+          accountIndex: session.accountIndex,
+          addressIndex: session.addressIndex,
+          sessionToken: stakeSessionToken
+        }
+      };
+      sourceRef = sourceRef || buildCanonicalSettlementSourceRef(verifiedSettlement);
+      settlementRef = verifiedSettlement.settlementRef;
+      Object.assign(metadata, buildSettlementMetadata(verifiedSettlement), {
+        transferCount: totals.transferCount,
+        lastTxid: totals.lastTxid,
+        lastObservedAtMs: totals.lastObservedAtMs,
+        accountIndex: session.accountIndex,
+        addressIndex: session.addressIndex
+      });
+      verificationMode = "verified_settlement";
       metadata.verificationMode = verificationMode;
     } catch (error: any) {
       return Response.json(
@@ -135,26 +170,32 @@ export async function POST(req: Request): Promise<Response> {
     }
   } else {
     const verifiedByOperator = parseBoolean(payload.verifiedByOperator);
-    const externalVerifierConfigured = hasExternalPurchaseVerifier();
     const canUseOperatorOverride = packagePurchasePolicy === "operator_or_verified";
     const canUseUnverifiedFallback = packagePurchasePolicy === "unverified_ok" && allowUnverifiedPurchases();
 
-    if (externalVerifierConfigured) {
-      const verification = await verifyExternalPurchase({
-        package: pkg,
-        buyerPubkey: buyerProof.pubkey,
-        buyerProofEvent: payload.buyerProofEvent,
-        sourceRef,
-        settlementRef,
-        paymentProof,
-        metadata
-      });
+    const verification = await verifyPurchaseSettlement({
+      package: pkg,
+      buyerPubkey: buyerProof.pubkey,
+      buyerProofEvent: payload.buyerProofEvent,
+      sourceRef,
+      settlementRef,
+      paymentProof,
+      settlementProof,
+      metadata
+    });
+    if (verification.supported) {
       if (verification.verified) {
         source = "purchase_verified";
+        verifiedSettlement = verification.settlement;
         sourceRef = verification.sourceRef || sourceRef;
         settlementRef = verification.settlementRef || settlementRef;
         Object.assign(metadata, verification.metadata ?? {});
-        verificationMode = "external_verified";
+        if (verifiedSettlement) {
+          sourceRef = sourceRef || buildCanonicalSettlementSourceRef(verifiedSettlement);
+          settlementRef = settlementRef || verifiedSettlement.settlementRef;
+          Object.assign(metadata, buildSettlementMetadata(verifiedSettlement));
+        }
+        verificationMode = "verified_settlement";
         metadata.verificationMode = verificationMode;
       } else if (verifiedByOperator && canUseOperatorOverride) {
         const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
@@ -205,6 +246,7 @@ export async function POST(req: Request): Promise<Response> {
       source,
       sourceRef,
       settlementRef,
+      verifiedSettlement,
       metadata
     });
     return Response.json({
@@ -216,11 +258,14 @@ export async function POST(req: Request): Promise<Response> {
         source: result.purchase.source,
         sourceRef: result.purchase.sourceRef,
         status: result.purchase.status,
-        expiresAtSec: result.purchase.expiresAtSec
+        expiresAtSec: result.purchase.expiresAtSec,
+        settlementRef: result.purchase.settlementRef,
+        verifiedSettlement: result.purchase.verifiedSettlement
       },
       checkout: {
         purchasePolicy: packagePurchasePolicy,
-        verificationMode
+        verificationMode,
+        verifiedSettlement
       },
       granted: result.granted,
       actorPubkey

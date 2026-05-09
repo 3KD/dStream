@@ -1,4 +1,5 @@
-import type { NostrEvent, StreamPaymentAsset } from "@dstream/protocol";
+import type { NostrEvent, PaymentSessionRecord, PaymentSettlementTarget, StreamPaymentAsset } from "@dstream/protocol";
+import type { PaymentSettlementProof, VerifiedPaymentSettlement } from "@dstream/protocol";
 import type {
   AccessAction,
   AccessAuditRecord,
@@ -111,6 +112,7 @@ export interface VideoAccessPackage {
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
   paymentRailId?: string;
+  paymentTarget?: PaymentSettlementTarget;
   durationHours: number;
   status: VideoAccessPackageStatus;
   visibility: VideoAccessPackageVisibility;
@@ -144,6 +146,8 @@ export interface VideoPackageViewerUnlock {
   expiresAtSec?: number;
   updatedAtSec: number;
 }
+
+export type VideoPackagePaymentSession = PaymentSessionRecord;
 
 export async function listVideoPlaylistCatalogClient(input: {
   hostPubkey: string;
@@ -870,6 +874,33 @@ export async function buildAccessPurchaseProof(
   });
 }
 
+export async function buildWatchAccessProof(
+  signEvent: ((event: Omit<NostrEvent, "id" | "sig">) => Promise<NostrEvent>) | undefined,
+  pubkey: string | null | undefined,
+  input: { originStreamId: string; ttlSec?: number }
+): Promise<NostrEvent | null> {
+  if (!signEvent || !pubkey) return null;
+  const originStreamId = input.originStreamId.trim();
+  if (!originStreamId) return null;
+  const expiresAtSec = nowSec() + Math.max(60, Math.min(input.ttlSec ?? 900, 3600));
+  const unsigned: Omit<NostrEvent, "id" | "sig"> = {
+    kind: 27235,
+    pubkey,
+    created_at: nowSec(),
+    tags: [
+      ["dstream", "watch_access"],
+      ["stream", originStreamId],
+      ["exp", String(expiresAtSec)]
+    ],
+    content: ""
+  };
+  try {
+    return await signEvent(unsigned);
+  } catch {
+    return null;
+  }
+}
+
 export async function listVideoAccessPackagesClient(input: {
   hostPubkey: string;
   streamId?: string;
@@ -994,6 +1025,7 @@ export async function upsertVideoAccessPackageClient(input: {
   relativePath?: string;
   description?: string;
   paymentRailId?: string;
+  paymentTarget?: PaymentSettlementTarget | Record<string, unknown>;
   status?: VideoAccessPackageStatus;
   visibility?: VideoAccessPackageVisibility;
   metadata?: Record<string, unknown>;
@@ -1014,6 +1046,7 @@ export async function upsertVideoAccessPackageClient(input: {
       relativePath: input.relativePath,
       description: input.description,
       paymentRailId: input.paymentRailId,
+      paymentTarget: input.paymentTarget,
       status: input.status,
       visibility: input.visibility,
       metadata: input.metadata ?? {},
@@ -1067,6 +1100,8 @@ export async function purchaseVideoAccessPackageClient(input: {
   buyerProofEvent: NostrEvent;
   sourceRef?: string;
   settlementRef?: string;
+  paymentProof?: PaymentSettlementProof | Record<string, unknown>;
+  settlementProof?: PaymentSettlementProof | Record<string, unknown>;
   stakeSessionToken?: string;
   operatorProofEvent?: NostrEvent;
   verifiedByOperator?: boolean;
@@ -1074,17 +1109,20 @@ export async function purchaseVideoAccessPackageClient(input: {
 }): Promise<{
   package: VideoAccessPackage;
   entitlement: AccessEntitlement;
-  purchase: {
-    id: string;
-    source: AccessEntitlementSource;
-    sourceRef: string;
-    status: "granted" | "existing";
-    expiresAtSec?: number;
-  };
-  checkout?: {
-    purchasePolicy: VideoPurchasePolicy;
-    verificationMode: VideoCheckoutVerificationMode;
-  };
+    purchase: {
+      id: string;
+      source: AccessEntitlementSource;
+      sourceRef: string;
+      status: "granted" | "existing";
+      expiresAtSec?: number;
+      settlementRef?: string;
+      verifiedSettlement?: VerifiedPaymentSettlement;
+    };
+    checkout?: {
+      purchasePolicy: VideoPurchasePolicy;
+      verificationMode: VideoCheckoutVerificationMode;
+      verifiedSettlement?: VerifiedPaymentSettlement;
+    };
   granted: boolean;
   actorPubkey: string | null;
 }> {
@@ -1096,6 +1134,8 @@ export async function purchaseVideoAccessPackageClient(input: {
       buyerProofEvent: input.buyerProofEvent,
       sourceRef: input.sourceRef,
       settlementRef: input.settlementRef,
+      paymentProof: input.paymentProof ?? undefined,
+      settlementProof: input.settlementProof ?? input.paymentProof ?? undefined,
       stakeSessionToken: input.stakeSessionToken,
       operatorProofEvent: input.operatorProofEvent,
       verifiedByOperator: input.verifiedByOperator,
@@ -1112,10 +1152,13 @@ export async function purchaseVideoAccessPackageClient(input: {
       sourceRef: string;
       status: "granted" | "existing";
       expiresAtSec?: number;
+      settlementRef?: string;
+      verifiedSettlement?: VerifiedPaymentSettlement;
     };
     checkout?: {
       purchasePolicy?: VideoPurchasePolicy;
       verificationMode?: VideoCheckoutVerificationMode;
+      verifiedSettlement?: VerifiedPaymentSettlement;
     };
     granted?: boolean;
     actorPubkey?: string | null;
@@ -1135,11 +1178,168 @@ export async function purchaseVideoAccessPackageClient(input: {
       typeof body.checkout.verificationMode === "string"
         ? {
             purchasePolicy: body.checkout.purchasePolicy,
-            verificationMode: body.checkout.verificationMode
+            verificationMode: body.checkout.verificationMode,
+            verifiedSettlement: body.checkout.verifiedSettlement
           }
         : undefined,
     granted: body.granted !== false,
     actorPubkey: typeof body.actorPubkey === "string" ? body.actorPubkey : null
+  };
+}
+
+export async function createVideoPackagePaymentSessionClient(input: {
+  packageId: string;
+  sessionId?: string;
+  buyerProofEvent: NostrEvent;
+  metadata?: Record<string, unknown>;
+}): Promise<{
+  package: VideoAccessPackage;
+  session: VideoPackagePaymentSession;
+}> {
+  const response = await fetch("/api/access/video-packages/session/create", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      packageId: input.packageId,
+      sessionId: input.sessionId,
+      buyerProofEvent: input.buyerProofEvent,
+      metadata: input.metadata ?? {}
+    }),
+    cache: "no-store"
+  });
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{
+    package?: VideoAccessPackage;
+    session?: VideoPackagePaymentSession;
+  }> | null;
+  if (!response.ok || !body?.ok || !body.package || !body.session) {
+    throw new Error(asErrorMessage(body, "Failed to create payment session."));
+  }
+  return {
+    package: body.package,
+    session: body.session
+  };
+}
+
+export async function getVideoPackagePaymentSessionStatusClient(input: {
+  sessionId: string;
+}): Promise<{
+  package: VideoAccessPackage | null;
+  session: VideoPackagePaymentSession;
+}> {
+  const response = await fetch("/api/access/video-packages/session/status", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      sessionId: input.sessionId
+    }),
+    cache: "no-store"
+  });
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{
+    package?: VideoAccessPackage | null;
+    session?: VideoPackagePaymentSession;
+  }> | null;
+  if (!response.ok || !body?.ok || !body.session) {
+    throw new Error(asErrorMessage(body, "Failed to refresh payment session."));
+  }
+  return {
+    package: body.package ?? null,
+    session: body.session
+  };
+}
+
+export async function observeVideoPackagePaymentSessionClient(input: {
+  sessionId: string;
+  buyerProofEvent: NostrEvent;
+  txRef?: string;
+  settlementProof?: PaymentSettlementProof | Record<string, unknown>;
+  paymentProof?: PaymentSettlementProof | Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}): Promise<{
+  package: VideoAccessPackage;
+  session: VideoPackagePaymentSession;
+}> {
+  const response = await fetch("/api/access/video-packages/session/observe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      sessionId: input.sessionId,
+      buyerProofEvent: input.buyerProofEvent,
+      txRef: input.txRef,
+      settlementProof: input.settlementProof ?? undefined,
+      paymentProof: input.paymentProof ?? undefined,
+      metadata: input.metadata ?? {}
+    }),
+    cache: "no-store"
+  });
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{
+    package?: VideoAccessPackage;
+    session?: VideoPackagePaymentSession;
+  }> | null;
+  if (!response.ok || !body?.ok || !body.package || !body.session) {
+    throw new Error(asErrorMessage(body, "Failed to update payment session."));
+  }
+  return {
+    package: body.package,
+    session: body.session
+  };
+}
+
+export async function issuePlaybackAccessClient(input: {
+  streamPubkey: string;
+  streamId: string;
+  viewerProofEvent: NostrEvent;
+  originStreamId?: string;
+  announceEvent?: NostrEvent;
+}): Promise<{
+  token: string;
+  expiresAtSec: number;
+  originStreamId: string;
+  privateStream: boolean;
+  privateVideo: boolean;
+  videoVisibility: "public" | "private";
+  reasonCode: string;
+  entitlementId: string | null;
+}> {
+  const response = await fetch("/api/playback-access/issue", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      streamPubkey: input.streamPubkey,
+      streamId: input.streamId,
+      originStreamId: input.originStreamId,
+      viewerProofEvent: input.viewerProofEvent,
+      announceEvent: input.announceEvent
+    }),
+    cache: "no-store"
+  });
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{
+    token?: string;
+    expiresAtSec?: number;
+    originStreamId?: string;
+    privateStream?: boolean;
+    privateVideo?: boolean;
+    videoVisibility?: "public" | "private";
+    reasonCode?: string;
+    entitlementId?: string | null;
+  }> | null;
+  if (
+    !response.ok ||
+    !body?.ok ||
+    typeof body.token !== "string" ||
+    typeof body.expiresAtSec !== "number" ||
+    typeof body.originStreamId !== "string"
+  ) {
+    throw new Error(asErrorMessage(body, "Failed to issue playback access token."));
+  }
+  return {
+    token: body.token,
+    expiresAtSec: body.expiresAtSec,
+    originStreamId: body.originStreamId,
+    privateStream: body.privateStream === true,
+    privateVideo: body.privateVideo === true,
+    videoVisibility: body.videoVisibility === "private" ? "private" : "public",
+    reasonCode: typeof body.reasonCode === "string" ? body.reasonCode : "allow_public",
+    entitlementId: typeof body.entitlementId === "string" ? body.entitlementId : null
   };
 }
 

@@ -2,19 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LOOKBACK_DAYS = 45;
-const MIN_LOOKBACK_DAYS = 1;
-const MAX_LOOKBACK_DAYS = 120;
 const DEFAULT_LIMIT = 360;
 const MIN_LIMIT = 40;
 const MAX_LIMIT = 600;
-const QUERY_TIMEOUT_MS = 20_000;
+const QUERY_TIMEOUT_MS = 6_000;
 const DISCOVERY_POLICY_LOOKBACK_SEC = 14 * 86400;
 const DISCOVERY_POLICY_LIMIT = 2000;
+const STREAM_PROBE_LIMIT = 80;
+const STREAM_PROBE_CONCURRENCY = 10;
+const STREAM_PROBE_TIMEOUT_MS = 1_500;
+const STREAM_PROBE_CACHE_MS = 5 * 60_000;
 
 // ---------------------------------------------------------------------------
 // Background cache: relay queries run in the background on a 60s interval.
@@ -30,9 +33,83 @@ interface CachedSnapshot {
 
 let cached: CachedSnapshot | null = null;
 let refreshInFlight = false;
+const streamProbeCache = new Map<string, { checkedAtMs: number; playable: boolean }>();
 
 /** Read cache without TS narrowing (module-level var changes between awaits). */
 function getCached(): CachedSnapshot | null { return cached; }
+
+function streamSnapshotKey(stream: StreamAnnounce): string {
+  return makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId);
+}
+
+function shouldProbeStream(stream: StreamAnnounce): boolean {
+  if (stream.status !== "live") return false;
+  const url = stream.streaming?.trim();
+  if (!url) return false;
+  if (!/^https?:\/\//i.test(url)) return false;
+  return isLikelyLivePlayableMediaUrl(url);
+}
+
+function isDefinitelyDeadStatus(status: number): boolean {
+  return status === 404 || status === 410;
+}
+
+async function probeFetchStatus(url: string, method: "HEAD" | "GET"): Promise<"playable" | "dead" | "unknown"> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), STREAM_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method,
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: method === "GET" ? { Range: "bytes=0-2047" } : undefined
+    });
+    if (response.ok || response.status === 206) return "playable";
+    if (isDefinitelyDeadStatus(response.status)) return "dead";
+    return "unknown";
+  } catch {
+    return "unknown";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function probeStreamPlayable(url: string): Promise<boolean> {
+  const normalized = url.trim();
+  const nowMs = Date.now();
+  const cachedResult = streamProbeCache.get(normalized);
+  if (cachedResult && nowMs - cachedResult.checkedAtMs < STREAM_PROBE_CACHE_MS) {
+    return cachedResult.playable;
+  }
+
+  const head = await probeFetchStatus(normalized, "HEAD");
+  const playable =
+    head === "playable" ? true :
+    head === "dead" ? false :
+    (await probeFetchStatus(normalized, "GET")) !== "dead";
+
+  streamProbeCache.set(normalized, { checkedAtMs: nowMs, playable });
+  return playable;
+}
+
+async function filterDefinitelyDeadLiveStreams(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
+  const probeCandidates = streams.filter(shouldProbeStream).slice(0, STREAM_PROBE_LIMIT);
+  if (probeCandidates.length === 0) return streams;
+
+  const playableByKey = new Map<string, boolean>();
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(STREAM_PROBE_CONCURRENCY, probeCandidates.length) }, async () => {
+    while (nextIndex < probeCandidates.length) {
+      const stream = probeCandidates[nextIndex++];
+      if (!stream?.streaming) continue;
+      playableByKey.set(streamSnapshotKey(stream), await probeStreamPlayable(stream.streaming));
+    }
+  });
+  await Promise.all(workers);
+
+  return streams.filter((stream) => playableByKey.get(streamSnapshotKey(stream)) !== false);
+}
 
 /** Query all relays and rebuild the cached snapshot. */
 async function refreshCache(): Promise<void> {
@@ -116,19 +193,20 @@ async function refreshCache(): Promise<void> {
       }
     }
 
-    const streams = Array.from(byStreamKey.values())
+    const streams = (await filterDefinitelyDeadLiveStreams(Array.from(byStreamKey.values())
       .filter((stream) => {
         if (!stream.discoverable) return false;
         
         // Final sanity check for playable stream validity
         if (!stream.streaming) return false;
+        if (!isLikelyLivePlayableMediaUrl(stream.streaming)) return false;
         const pubkeyPolicy = hiddenPubkeys.get(stream.pubkey.toLowerCase());
         if (pubkeyPolicy?.hidden) return false;
-        const streamPolicy = hiddenStreams.get(makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId));
+        const streamPolicy = hiddenStreams.get(streamSnapshotKey(stream));
         if (streamPolicy?.hidden) return false;
         return true;
       })
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort((a, b) => b.createdAt - a.createdAt)))
       .slice(0, DEFAULT_LIMIT);
 
     cached = { streams, queriedAt: nowSec, relays };

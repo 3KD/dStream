@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Node is already initialized and secured." }, { status: 403 });
     }
 
-    const { domain, xmrAddress, email } = await req.json();
+    const { domain, xmrAddress } = await req.json();
 
     // Generate highly secure entropy for the node
     const sessionSecret = crypto.randomBytes(32).toString('hex');
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         exampleContent = await fs.readFile(p, 'utf-8');
         foundPath = p;
         break;
-      } catch (err) {
+      } catch {
         // Continue to next path
       }
     }
@@ -80,7 +80,7 @@ DSTREAM_XMR_SESSION_SECRET=__SESSION_SECRET__
         const outPath = foundPath.replace('.example', '');
         await fs.writeFile(outPath, newEnvContent, 'utf-8');
         autoApplied = true;
-      } catch (err) {
+      } catch {
         console.warn("Could not auto-write .env.production (Docker filesystem isolation). Failsafe enabled.");
       }
     }

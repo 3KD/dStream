@@ -128,8 +128,9 @@ export default function DonatePage() {
           <h2 className="text-2xl font-bold">Wallet Plugin Guidance</h2>
           <ul className="list-disc pl-5 space-y-2">
             <li>Set preferred wallet per asset in Settings → Wallet Integrations.</li>
-            <li>Use watch-page wallet URI actions for compatible assets and wallet apps.</li>
+            <li>Use watch-page wallet handoff actions for compatible assets and wallet apps.</li>
             <li>Use copy-address mode for CLI/external signing flows.</li>
+            <li>For verified unlock flows, treat the wallet action as payment initiation only; settlement proof is what the verifier consumes.</li>
           </ul>
           <div className="pt-2 flex flex-wrap gap-3">
             <Link href="/settings#wallet-integrations" className="text-blue-400 hover:text-blue-300">

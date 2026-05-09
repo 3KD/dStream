@@ -2,13 +2,14 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, Database, Download, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
+import { VideoPackageUnlockPanel } from "@/components/watch/VideoPackageUnlockPanel";
 import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
 import { useStreamIntegrity } from "@/hooks/useStreamIntegrity";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
@@ -18,6 +19,7 @@ import { useNostrProfile } from "@/hooks/useNostrProfiles";
 import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
+import { buildWatchAccessProof, issuePlaybackAccessClient } from "@/lib/access/client";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
@@ -285,6 +287,10 @@ export default function WatchPage() {
   const [videoUnlocked, setVideoUnlocked] = useState(false);
   const [videoUnlockExpiresAtMs, setVideoUnlockExpiresAtMs] = useState<number | null>(null);
   const [videoAccessToken, setVideoAccessToken] = useState<string | null>(null);
+  const [privateVideoAccessToken, setPrivateVideoAccessToken] = useState<string | null>(null);
+  const [privateVideoAccessExpiresAtMs, setPrivateVideoAccessExpiresAtMs] = useState<number | null>(null);
+  const [privateVideoAccessBusy, setPrivateVideoAccessBusy] = useState(false);
+  const [privateVideoAccessError, setPrivateVideoAccessError] = useState<string | null>(null);
   const [videoUnlockSession, setVideoUnlockSession] = useState<{ session: string; address: string } | null>(null);
   const [videoUnlockQr, setVideoUnlockQr] = useState<string | null>(null);
   const [videoUnlockCopyStatus, setVideoUnlockCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -296,7 +302,7 @@ export default function WatchPage() {
     confirmed: boolean | null;
     observedAtMs: number | null;
   } | null>(null);
-  const [videoNowMs, setVideoNowMs] = useState(() => Date.now());
+  const [videoNowMs, setVideoNowMs] = useState(0);
 
   const stakeSatisfied = useMemo(() => {
     if (!stakeRequiredAtomic) return true;
@@ -336,16 +342,9 @@ export default function WatchPage() {
 
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
-  const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>(() => detectWatchLayoutMode());
+  const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>("portrait");
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
-  const [scrollY, setScrollY] = useState(0);
   const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -405,7 +404,7 @@ export default function WatchPage() {
       alive = false;
       swarm.stop();
     };
-  }, [p2pAllowed, p2pEnabled, pubkey, relays, signalIdentity, social.updateSettings, streamId]);
+  }, [p2pAllowed, p2pEnabled, pubkey, relays, signalIdentity, social, streamId]);
 
   useEffect(() => {
     if (!p2pEnabled || !p2pAllowed || !p2pSwarm) return;
@@ -415,7 +414,7 @@ export default function WatchPage() {
       desired = desired.filter((pk) => social.isTrusted(pk));
     }
     p2pSwarm.setDesiredPeers(desired);
-  }, [p2pAllowed, p2pEnabled, p2pSwarm, signalIdentity?.pubkey, social.isBlocked, social.isTrusted, social.settings.p2pPeerMode, viewerPubkeys]);
+  }, [p2pAllowed, p2pEnabled, p2pSwarm, signalIdentity?.pubkey, social, viewerPubkeys]);
 
   useEffect(() => {
     if (!p2pEnabled || !p2pAllowed || !p2pSwarm) return;
@@ -491,9 +490,10 @@ export default function WatchPage() {
     renditionMasterUrl
   ]);
   const playbackStreamUrl = useMemo(() => {
+    if (privateVideoAccessToken) return withQueryParam(streamUrl, "access", privateVideoAccessToken);
     if (!videoPaidRequiresUnlock || !videoAccessToken) return streamUrl;
     return withQueryParam(streamUrl, "vat", videoAccessToken);
-  }, [streamUrl, videoAccessToken, videoPaidRequiresUnlock]);
+  }, [privateVideoAccessToken, streamUrl, videoAccessToken, videoPaidRequiresUnlock]);
 
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;
@@ -1185,9 +1185,89 @@ export default function WatchPage() {
 
   useEffect(() => {
     if (!videoPaidRequiresUnlock && !videoUnlockExpiresAtMs && !videoUnlockSession?.session) return;
+    setVideoNowMs(Date.now());
     const interval = setInterval(() => setVideoNowMs(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [videoPaidRequiresUnlock, videoUnlockExpiresAtMs, videoUnlockSession?.session]);
+
+  const privateVideoRequiresPlaybackAccess = useMemo(() => {
+    if (!announce || announce.status !== "ended") return false;
+    if (announce.videoArchiveEnabled !== true) return false;
+    return announce.videoVisibility === "private";
+  }, [announce]);
+
+  const requestPrivateVideoPlaybackAccess = useCallback(
+    async (opts?: { silent?: boolean }): Promise<boolean> => {
+      if (!privateVideoRequiresPlaybackAccess || !pubkey || !streamId || !originStreamId) return false;
+      if (!identity?.pubkey) {
+        if (!opts?.silent) setPrivateVideoAccessError("Connect a Nostr identity to access this private archive.");
+        setPrivateVideoAccessToken(null);
+        setPrivateVideoAccessExpiresAtMs(null);
+        return false;
+      }
+      setPrivateVideoAccessBusy(true);
+      if (!opts?.silent) setPrivateVideoAccessError(null);
+      try {
+        const viewerProofEvent = await buildWatchAccessProof(signEvent, identity.pubkey, {
+          originStreamId
+        });
+        if (!viewerProofEvent) throw new Error("Failed to sign the archive playback proof.");
+        const issued = await issuePlaybackAccessClient({
+          streamPubkey: pubkey,
+          streamId,
+          originStreamId,
+          viewerProofEvent
+        });
+        setPrivateVideoAccessToken(issued.token);
+        setPrivateVideoAccessExpiresAtMs(issued.expiresAtSec * 1000);
+        setPrivateVideoAccessError(null);
+        return true;
+      } catch (error: any) {
+        setPrivateVideoAccessToken(null);
+        setPrivateVideoAccessExpiresAtMs(null);
+        if (!opts?.silent) {
+          setPrivateVideoAccessError(error?.message ?? "Failed to issue private archive playback access.");
+        }
+        return false;
+      } finally {
+        setPrivateVideoAccessBusy(false);
+      }
+    },
+    [identity?.pubkey, originStreamId, privateVideoRequiresPlaybackAccess, pubkey, signEvent, streamId]
+  );
+
+  useEffect(() => {
+    if (!privateVideoRequiresPlaybackAccess || !identity?.pubkey) {
+      setPrivateVideoAccessToken(null);
+      setPrivateVideoAccessExpiresAtMs(null);
+      setPrivateVideoAccessError(null);
+      return;
+    }
+    if (privateVideoAccessToken && privateVideoAccessExpiresAtMs && privateVideoAccessExpiresAtMs - Date.now() > 5 * 60 * 1000) {
+      return;
+    }
+    void requestPrivateVideoPlaybackAccess({ silent: true });
+  }, [
+    identity?.pubkey,
+    privateVideoAccessExpiresAtMs,
+    privateVideoAccessToken,
+    privateVideoRequiresPlaybackAccess,
+    requestPrivateVideoPlaybackAccess
+  ]);
+
+  useEffect(() => {
+    if (!privateVideoRequiresPlaybackAccess || !privateVideoAccessToken || !privateVideoAccessExpiresAtMs) return;
+    const refreshInMs = Math.max(0, privateVideoAccessExpiresAtMs - Date.now() - 2 * 60 * 1000);
+    const timer = window.setTimeout(() => {
+      void requestPrivateVideoPlaybackAccess({ silent: true });
+    }, refreshInMs);
+    return () => window.clearTimeout(timer);
+  }, [
+    privateVideoAccessExpiresAtMs,
+    privateVideoAccessToken,
+    privateVideoRequiresPlaybackAccess,
+    requestPrivateVideoPlaybackAccess
+  ]);
 
   const copyVideoUnlockAddress = useCallback(async () => {
     setVideoUnlockCopyStatus("idle");
@@ -1352,6 +1432,10 @@ export default function WatchPage() {
     setVideoUnlockError(null);
     setVideoUnlockStatus(null);
     setVideoAccessToken(null);
+    setPrivateVideoAccessToken(null);
+    setPrivateVideoAccessExpiresAtMs(null);
+    setPrivateVideoAccessBusy(false);
+    setPrivateVideoAccessError(null);
   }, [pubkey, streamId]);
 
   const makeNip98AuthHeader = useCallback(
@@ -1569,7 +1653,7 @@ export default function WatchPage() {
     if (stakeSatisfied) return;
     if (!p2pEnabled) return;
     social.updateSettings({ p2pAssistEnabled: false });
-  }, [p2pEnabled, social.updateSettings, stakeRequiredAtomic, stakeSatisfied]);
+  }, [p2pEnabled, social, stakeRequiredAtomic, stakeSatisfied]);
 
   const showP2PPanel = !!(
     p2pEnabled &&
@@ -1577,22 +1661,6 @@ export default function WatchPage() {
     p2pStats &&
     (p2pStats.peersConnected > 0 || p2pStats.bytesFromPeers > 0 || p2pStats.bytesToPeers > 0)
   );
-
-  const p2pHitRatePct = useMemo(() => {
-    if (!p2pStats) return null;
-    const requests = Math.max(0, Math.trunc(p2pStats.requestsToPeers));
-    if (requests <= 0) return null;
-    const hits = Math.max(0, Math.trunc(p2pStats.hitsFromPeers));
-    return Math.max(0, Math.min(100, Math.round((hits / requests) * 100)));
-  }, [p2pStats]);
-  const p2pContributionPct = useMemo(() => {
-    if (!p2pStats) return null;
-    const incoming = Math.max(0, Math.trunc(p2pStats.bytesFromPeers));
-    const outgoing = Math.max(0, Math.trunc(p2pStats.bytesToPeers));
-    const total = incoming + outgoing;
-    if (total <= 0) return null;
-    return Math.max(0, Math.min(100, Math.round((outgoing / total) * 100)));
-  }, [p2pStats]);
 
   const globalPlayerProps = useMemo(() => ({
     src: playbackStreamUrl,
@@ -1643,11 +1711,14 @@ export default function WatchPage() {
     social,
     mobilePortraitLayout,
     announce?.title,
+    postE2E,
     pubkey,
     streamId
   ]);
 
   const showVideoUnlockGate = videoPaidRequiresUnlock && !videoUnlocked;
+  const showPrivateArchiveGate = privateVideoRequiresPlaybackAccess && !privateVideoAccessToken;
+  const showArchiveAccessGate = showPrivateArchiveGate || showVideoUnlockGate;
   const videoAccessExpiryLabel = useMemo(() => {
     if (!videoUnlockExpiresAtMs) return null;
     return new Date(videoUnlockExpiresAtMs).toLocaleString();
@@ -1677,6 +1748,7 @@ export default function WatchPage() {
       streamPubkey={pubkey ?? ""}
       streamId={streamId}
       viewerCount={effectiveViewerCount}
+      paymentMethods={paymentMethods}
       onMessageCountChange={(count) => {
         if (!e2e || e2eSentRef.current.chat) return;
         if (count <= 0) return;
@@ -1713,8 +1785,21 @@ export default function WatchPage() {
           }`}
         >
           <div className={desktopWatchLayout || mobileLandscapeLayout ? "min-w-0 flex flex-col gap-6" : "flex flex-col gap-4"}>
-            {showVideoUnlockGate ? (
-              <div className="rounded-2xl border border-amber-700/40 bg-amber-950/15 p-5 space-y-4">
+            {showArchiveAccessGate ? (
+              <div className="space-y-4">
+                {showPrivateArchiveGate && pubkey && originStreamId ? (
+                  <VideoPackageUnlockPanel
+                    hostPubkey={pubkey}
+                    streamId={streamId}
+                    originStreamId={originStreamId}
+                    accessError={privateVideoAccessError}
+                    accessBusy={privateVideoAccessBusy}
+                    onPlaybackAccessRequested={() => requestPrivateVideoPlaybackAccess()}
+                  />
+                ) : null}
+
+                {showVideoUnlockGate ? (
+                  <div className="rounded-2xl border border-amber-700/40 bg-amber-950/15 p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <MoneroLogo className="w-5 h-5 text-orange-400" />
@@ -1762,7 +1847,7 @@ export default function WatchPage() {
                   <div className="text-[11px] text-neutral-500">Auto-checking unlock status every 12 seconds.</div>
                 )}
 
-                {!videoUnlockSession ? (
+                    {!videoUnlockSession ? (
                   <button
                     type="button"
                     onClick={() => void startVideoUnlockSession()}
@@ -1771,7 +1856,7 @@ export default function WatchPage() {
                   >
                     {videoUnlockBusy === "creating" ? "Creating…" : "Get unlock address"}
                   </button>
-                ) : (
+                    ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-start">
                     <div className="space-y-2">
                       <div className="text-xs text-neutral-500">Payment subaddress</div>
@@ -1813,7 +1898,9 @@ export default function WatchPage() {
                       </div>
                     )}
                   </div>
-                )}
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div
@@ -2335,7 +2422,7 @@ export default function WatchPage() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs font-semibold text-neutral-200">{rail.name}</div>
                         <div className="text-[11px] text-neutral-500">
-                          {rail.execution === "verified_backend" ? "verified backend" : "wallet URI / copy"}
+                          {rail.execution === "verified_backend" ? "verified backend" : "wallet handoff"}
                         </div>
                       </div>
 

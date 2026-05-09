@@ -136,10 +136,6 @@ function isLocalOnlyHost(hostname: string): boolean {
   return false;
 }
 
-function isMixedContentRisk(parsed: URL): boolean {
-  return parsed.protocol === "http:" && !isLocalOnlyHost(parsed.hostname);
-}
-
 export function isLikelyPublicPlaybackUrl(input: string | null | undefined): boolean {
   if (!isHttpLikeMediaUrl(input)) return false;
   const value = input.trim();

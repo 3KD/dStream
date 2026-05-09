@@ -55,9 +55,9 @@ const PAYMENT_AMOUNT_MAX_DECIMALS: Record<StreamPaymentAsset, number> = {
   xmr: 12,
   eth: 18,
   btc: 8,
-  usdt: 8,
+  usdt: 6,
   xrp: 6,
-  usdc: 8,
+  usdc: 6,
   sol: 9,
   trx: 6,
   doge: 8,
@@ -80,6 +80,16 @@ function isBtcLightningNetwork(input: string | undefined): boolean {
 function isBtcLightningPayload(input: string): boolean {
   if (!input) return false;
   return BTC_LIGHTNING_INVOICE_RE.test(input) || BTC_LIGHTNING_LNURL_RE.test(input) || BTC_LIGHTNING_ADDRESS_RE.test(input);
+}
+
+function isTronNetwork(input: string | undefined): boolean {
+  const value = (input ?? "").trim().toLowerCase();
+  return value.includes("tron");
+}
+
+function isSolanaNetwork(input: string | undefined): boolean {
+  const value = (input ?? "").trim().toLowerCase();
+  return value === "solana" || value === "mainnet-beta" || value === "devnet" || value === "testnet";
 }
 
 function normalizeIntegerAmount(inputRaw: string): string | null {
@@ -132,9 +142,13 @@ function isValidPaymentAddress(asset: StreamPaymentAsset, addressRaw: string, ne
     case "xmr":
       return /^[48][1-9A-HJ-NP-Za-km-z]{94,105}$/.test(address);
     case "eth":
-    case "usdt":
-    case "usdc":
     case "pepe":
+      return /^0x[a-fA-F0-9]{40}$/.test(address);
+    case "usdt":
+      if (isTronNetwork(networkRaw)) return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+      return /^0x[a-fA-F0-9]{40}$/.test(address);
+    case "usdc":
+      if (isSolanaNetwork(networkRaw)) return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
       return /^0x[a-fA-F0-9]{40}$/.test(address);
     case "btc": {
       const lightningPayload = stripScheme(address, "lightning").trim();

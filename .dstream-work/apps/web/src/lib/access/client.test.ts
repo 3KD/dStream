@@ -6,9 +6,11 @@ import {
   buildAccessProof,
   buildAccessPurchaseProof,
   buildAccessViewerProof,
+  buildWatchAccessProof,
   deleteVideoCatalogEntryClient,
   disableVideoAccessPackageClient,
   grantAccessEntitlementClient,
+  issuePlaybackAccessClient,
   listAccessAuditClient,
   listAccessDenyRulesClient,
   listAccessEntitlementsClient,
@@ -110,6 +112,18 @@ const sampleVideoCatalogEntry = {
   updatedAtSec: now
 };
 
+const sampleVerifiedSettlement = {
+  version: 1,
+  railId: "lightning",
+  asset: "btc",
+  settlementKind: "purchase",
+  settlementRef: "invoice:ln-1",
+  txRef: "ln-1",
+  confirmed: true,
+  observedAtMs: now * 1000,
+  verifier: "external_verifier" as const
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
@@ -140,13 +154,23 @@ test("access client: proof builders produce expected tags", async () => {
   assert.equal(viewerProof.tags.some((tag) => tag[0] === "dstream" && tag[1] === "access_viewer"), true);
   assert.equal(viewerProof.tags.some((tag) => tag[0] === "host" && tag[1] === sampleHost), true);
 
+  const watchProof = await buildWatchAccessProof(signer, sampleViewer, {
+    originStreamId: `${sampleHost}--stream-1`,
+    ttlSec: 300
+  });
+  assert.ok(watchProof);
+  if (!watchProof) return;
+  assert.equal(watchProof.tags.some((tag) => tag[0] === "dstream" && tag[1] === "watch_access"), true);
+  assert.equal(watchProof.tags.some((tag) => tag[0] === "stream" && tag[1] === `${sampleHost}--stream-1`), true);
+
   const genericProof = await buildAccessProof(undefined, sampleHost, { scope: "access_admin" });
   assert.equal(genericProof, null);
 });
 
 test("access client: API wrappers parse success responses", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  let purchaseRequestBody: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
     if (url.startsWith(`/api/video/catalog/${encodeURIComponent(sampleHost)}/`)) {
       if (url.endsWith("/entries/process")) {
@@ -247,6 +271,7 @@ test("access client: API wrappers parse success responses", async () => {
       return jsonResponse({ ok: true, package: { ...samplePackage, status: "disabled" }, actorPubkey: sampleHost });
     }
     if (url === "/api/access/video-packages/purchase") {
+      purchaseRequestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       return jsonResponse({
         ok: true,
         package: samplePackage,
@@ -256,11 +281,14 @@ test("access client: API wrappers parse success responses", async () => {
           source: "purchase_verified",
           sourceRef: "ref-1",
           status: "granted",
-          expiresAtSec: now + 3600
+          expiresAtSec: now + 3600,
+          settlementRef: sampleVerifiedSettlement.settlementRef,
+          verifiedSettlement: sampleVerifiedSettlement
         },
         checkout: {
-          purchasePolicy: "operator_or_verified",
-          verificationMode: "external_verified"
+          purchasePolicy: "verified_only",
+          verificationMode: "verified_settlement",
+          verifiedSettlement: sampleVerifiedSettlement
         },
         granted: true,
         actorPubkey: sampleViewer
@@ -296,6 +324,19 @@ test("access client: API wrappers parse success responses", async () => {
           }
         },
         count: 1
+      });
+    }
+    if (url === "/api/playback-access/issue") {
+      return jsonResponse({
+        ok: true,
+        token: "playback-token-1",
+        expiresAtSec: now + 900,
+        originStreamId: `${sampleHost}--stream-1`,
+        privateStream: false,
+        privateVideo: true,
+        videoVisibility: "private",
+        reasonCode: "allow_paid",
+        entitlementId: "ent-1"
       });
     }
     if (url === "/api/access/entitlements/list") {
@@ -390,11 +431,21 @@ test("access client: API wrappers parse success responses", async () => {
 
     const purchase = await purchaseVideoAccessPackageClient({
       packageId: "pkg-1",
-      buyerProofEvent: sampleProofEvent
+      buyerProofEvent: sampleProofEvent,
+      paymentProof: { version: 1, railId: "lightning", asset: "btc", proofType: "bolt11", settlementRef: "invoice:ln-1" }
     });
     assert.equal(purchase.granted, true);
-    assert.equal(purchase.checkout?.purchasePolicy, "operator_or_verified");
-    assert.equal(purchase.checkout?.verificationMode, "external_verified");
+    assert.equal(purchase.checkout?.purchasePolicy, "verified_only");
+    assert.equal(purchase.checkout?.verificationMode, "verified_settlement");
+    assert.equal(purchase.purchase.verifiedSettlement?.settlementRef, "invoice:ln-1");
+    const purchasePaymentProof = purchaseRequestBody
+      ? (purchaseRequestBody["paymentProof"] as { proofType?: string } | undefined)
+      : undefined;
+    const purchaseSettlementProof = purchaseRequestBody
+      ? (purchaseRequestBody["settlementProof"] as { proofType?: string } | undefined)
+      : undefined;
+    assert.equal(purchasePaymentProof?.proofType, "bolt11");
+    assert.equal(purchaseSettlementProof?.proofType, "bolt11");
 
     const viewerStatus = await listVideoPackageViewerStatusClient({
       hostPubkey: sampleHost,
@@ -403,6 +454,16 @@ test("access client: API wrappers parse success responses", async () => {
     });
     assert.equal(viewerStatus.unlocks.length, 1);
     assert.equal(viewerStatus.byPackageId["pkg-1"]?.packageId, "pkg-1");
+
+    const playbackAccess = await issuePlaybackAccessClient({
+      streamPubkey: sampleHost,
+      streamId: "stream-1",
+      originStreamId: `${sampleHost}--stream-1`,
+      viewerProofEvent: sampleProofEvent
+    });
+    assert.equal(playbackAccess.token, "playback-token-1");
+    assert.equal(playbackAccess.privateVideo, true);
+    assert.equal(playbackAccess.entitlementId, "ent-1");
 
     const entitlements = await listAccessEntitlementsClient({
       hostPubkey: sampleHost,

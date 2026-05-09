@@ -187,6 +187,20 @@ function parseProfiles(raw) {
   });
 }
 
+function readRpcPair(baseName) {
+  return {
+    url: readEnv(`${baseName}_URL`).trim(),
+    user: readEnv(`${baseName}_USER`).trim(),
+    pass: readEnv(`${baseName}_PASS`).trim()
+  };
+}
+
+function envFlagEnabled(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value) return false;
+  return value !== "0" && value !== "false" && value !== "no" && value !== "off";
+}
+
 function checkProdRules(options = {}) {
   const strictExternal = options.strictExternal === true;
   const errors = [];
@@ -383,6 +397,53 @@ function checkProdRules(options = {}) {
     }
   }
 
+  const evmRpcNames = [
+    "DSTREAM_ACCESS_EVM_RPC_URL",
+    "DSTREAM_ACCESS_EVM_RPC_ETHEREUM",
+    "DSTREAM_ACCESS_EVM_RPC_POLYGON",
+    "DSTREAM_ACCESS_EVM_RPC_BSC",
+    "DSTREAM_ACCESS_EVM_RPC_OPTIMISM",
+    "DSTREAM_ACCESS_EVM_RPC_ARBITRUM",
+    "DSTREAM_ACCESS_EVM_RPC_BASE"
+  ];
+  if (strictExternal && !evmRpcNames.some((name) => !!readEnv(name).trim())) {
+    warnings.push("No explicit EVM verifier RPC configured; production will fall back to public endpoints.");
+  }
+
+  if (strictExternal && !readEnv("DSTREAM_ACCESS_SOLANA_RPC_URL").trim()) {
+    warnings.push("No explicit Solana verifier RPC configured; production will fall back to the public cluster endpoint.");
+  }
+  if (strictExternal && !readEnv("DSTREAM_ACCESS_TRON_RPC_URL").trim()) {
+    warnings.push("No explicit TRON verifier RPC configured; production will fall back to TronGrid.");
+  }
+  if (strictExternal && !readEnv("DSTREAM_ACCESS_XRPL_RPC_URL").trim()) {
+    warnings.push("No explicit XRPL verifier RPC configured; production will fall back to the public XRPL server.");
+  }
+
+  const cardanoUrl = readEnv("DSTREAM_ACCESS_CARDANO_BLOCKFROST_URL").trim();
+  const cardanoProjectId = readEnv("DSTREAM_ACCESS_CARDANO_BLOCKFROST_PROJECT_ID").trim();
+  if ((cardanoUrl && !cardanoProjectId) || (!cardanoUrl && cardanoProjectId)) {
+    errors.push("Cardano verification requires both DSTREAM_ACCESS_CARDANO_BLOCKFROST_URL and DSTREAM_ACCESS_CARDANO_BLOCKFROST_PROJECT_ID.");
+  } else if (strictExternal && !cardanoUrl) {
+    warnings.push("Cardano verified purchases remain unavailable until Blockfrost credentials are configured.");
+  }
+
+  for (const baseName of ["DSTREAM_ACCESS_BTC_RPC", "DSTREAM_ACCESS_DOGE_RPC", "DSTREAM_ACCESS_BCH_RPC"]) {
+    const { url, user, pass } = readRpcPair(baseName);
+    if (!url) {
+      if (strictExternal && baseName !== "DSTREAM_ACCESS_BTC_RPC") {
+        warnings.push(`${baseName}_URL is unset; ${baseName.includes("DOGE") ? "DOGE" : "BCH"} verified purchases remain unavailable.`);
+      }
+      continue;
+    }
+    if (!isHttpUrl(url)) {
+      errors.push(`${baseName}_URL must be a valid http(s) URL when set.`);
+    }
+    if ((user && !pass) || (!user && pass)) {
+      errors.push(`${baseName}_USER and ${baseName}_PASS must be set together when using authenticated node RPC.`);
+    }
+  }
+
   const nip05Policy = readEnv("NEXT_PUBLIC_NIP05_POLICY").trim().toLowerCase();
   if (!nip05Policy) {
     warnings.push("NEXT_PUBLIC_NIP05_POLICY is unset; default policy will be used.");
@@ -397,6 +458,26 @@ function checkProdRules(options = {}) {
     errors.push("DSTREAM_XMR_SESSION_SECRET should be at least 32 characters.");
   } else if (/replace|example|change-before-public-deploy|changeme/i.test(sessionSecret)) {
     errors.push("DSTREAM_XMR_SESSION_SECRET appears to be a placeholder; set a high-entropy production secret.");
+  }
+
+  const paymentOperatorToken = readEnv("DSTREAM_PAYMENT_OPERATOR_BEARER_TOKEN").trim();
+  if (!paymentOperatorToken) {
+    errors.push("DSTREAM_PAYMENT_OPERATOR_BEARER_TOKEN is required in production.");
+  } else if (paymentOperatorToken.length < 32) {
+    errors.push("DSTREAM_PAYMENT_OPERATOR_BEARER_TOKEN should be at least 32 characters.");
+  } else if (/replace|example|change-before-public-deploy|changeme/i.test(paymentOperatorToken)) {
+    errors.push("DSTREAM_PAYMENT_OPERATOR_BEARER_TOKEN appears to be a placeholder; set a high-entropy production token.");
+  }
+
+  const paymentOperatorStorePath = readEnv("DSTREAM_PAYMENT_OPERATOR_STORE_PATH").trim();
+  if (strictExternal && !paymentOperatorStorePath) {
+    warnings.push("DSTREAM_PAYMENT_OPERATOR_STORE_PATH is unset; defaulting to /var/lib/dstream/payment-operator-sessions.json. Confirm this path is on persistent storage.");
+  }
+  if (strictExternal && paymentOperatorStorePath && /^\/tmp(?:\/|$)/.test(paymentOperatorStorePath)) {
+    errors.push("Deploy mode requires DSTREAM_PAYMENT_OPERATOR_STORE_PATH to be persistent, not under /tmp.");
+  }
+  if (strictExternal && envFlagEnabled(readEnv("DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS"))) {
+    errors.push("Deploy mode forbids DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS=1.");
   }
 
   if (strictExternal) {

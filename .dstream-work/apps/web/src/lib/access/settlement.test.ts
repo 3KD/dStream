@@ -52,6 +52,54 @@ test("stake settlement auto-grant: private live access allowed after verified se
   assert.equal(typeof decision.entitlementId, "string");
 });
 
+test("verified settlement auto-grant: non-xmr rails use the same entitlement contract", async () => {
+  const { grantVerifiedSettlementAccess } = await import("./settlement");
+  const { evaluateAccess } = await import("./evaluator");
+
+  const hostPubkey = "d".repeat(64);
+  const viewerPubkey = "e".repeat(64);
+  const streamId = "lightning-access-stream";
+  const liveResourceId = `stream:${hostPubkey}:${streamId}:live`;
+
+  const result = grantVerifiedSettlementAccess({
+    hostPubkey,
+    viewerPubkey,
+    streamId,
+    settlement: {
+      version: 1,
+      railId: "lightning",
+      asset: "btc",
+      settlementKind: "purchase",
+      settlementRef: "invoice:ln-verified",
+      txRef: "ln-verified",
+      confirmed: true,
+      observedAtMs: Date.now(),
+      verifier: "external_verifier"
+    }
+  });
+
+  assert.equal(result.granted, true);
+  assert.equal(result.reason, "granted");
+  assert.equal(result.entitlement?.sourceRef, "settlement:v1:lightning:invoice:ln-verified");
+
+  const decision = evaluateAccess({
+    hostPubkey,
+    subjectPubkey: viewerPubkey,
+    resourceId: liveResourceId,
+    action: "watch_live",
+    announce: {
+      privateStream: true,
+      privateVideo: false,
+      videoArchiveEnabled: true,
+      videoVisibility: "public",
+      viewerAllowPubkeys: []
+    }
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.reasonCode, "allow_paid");
+});
+
 test("stake settlement auto-grant: repeated settlement check is idempotent", async () => {
   const { grantVerifiedStakeSettlementAccess } = await import("./settlement");
   const { listAccessEntitlements } = await import("./store");

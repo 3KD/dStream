@@ -2,6 +2,7 @@
 
 import { OperatorConsole } from "@/components/settings/OperatorConsole";
 import { PaymentDefaults } from "@/components/settings/PaymentDefaults";
+import { PaymentOperatorReadinessPanel } from "@/components/settings/PaymentOperatorReadinessPanel";
 import { WalletIntegrationsInfo } from "@/components/settings/WalletIntegrationsInfo";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { SettingsNav } from "@/components/settings/SettingsNav";
@@ -22,6 +23,7 @@ export default function SettingsMonetizationPage() {
 
         <div className="space-y-6">
           <PaymentDefaults />
+          <PaymentOperatorReadinessPanel />
           <WalletIntegrationsInfo />
           <OperatorConsole mode="monetization" chrome="embedded" />
         </div>

@@ -295,3 +295,21 @@ Exit criteria:
 - Capability smoke passes for configured target profile.
 - Escrow-v3 smoke passes end-to-end (prepare/make/exchange/import/sign/submit).
 - Docs/status/traceability reflect the same escrow trust boundary language.
+
+## Phase 15 — Payment Rail Completion (Operator-First Uniformity)
+
+Goal: make every paid-access rail converge toward the current XMR operator model instead of leaving non-XMR rails as a mix of wallet-handoff patterns.
+
+See `docs/PAYMENT_RAIL_COMPLETION_QUEUE.md` for the concrete rail order, automation grades, deliverables, and per-rail definition of done.
+
+Deliverables:
+
+- `Batch A`: Lightning reaches operator-observed normal-path completion.
+- `Batch B`: EVM / Solana / TRON close sessions automatically from wallet-returned proofs while preserving one canonical operator/session contract.
+- `Batch C`: UTXO / XRPL / Cardano gain real operator allocation + watcher logic so manual proof entry is no longer the normal path.
+
+Exit criteria:
+
+- Each rail family has a concrete smoke proving `create session -> allocate target -> observe settlement -> grant access`.
+- Non-XMR production paths remain operator-first by default.
+- Docs/status/traceability reflect the same rail-by-rail reality.

@@ -18,6 +18,9 @@ Current implementation already has:
 - short-lived playback token issuance (`POST /api/playback-access/issue`)
 - private stream / private Video checks from signed stream announce + allowlist
 - Monero verified backend settlement flows (`/api/xmr/*`)
+- external purchase verification hook for non-XMR rails (`/api/access/video-packages/purchase` + verifier adapter)
+- package payment-session lifecycle (`/api/access/video-packages/session/*`) so node operators can allocate or observe package-specific payment targets before the entitlement grant path runs
+- Monero package payment sessions now allocate a unique wallet-rpc subaddress per purchase session and grant access only after confirmed observation on that subaddress
 
 This contract layers a persistent entitlement model under that token issuance path.
 
@@ -142,6 +145,27 @@ create table payment_settlements (
 create unique index uq_payment_settlements_ref
   on payment_settlements(rail_id, tx_ref)
   where tx_ref is not null;
+
+create table payment_sessions (
+  id uuid primary key,
+  package_id uuid not null,
+  host_pubkey char(64) not null,
+  subject_pubkey char(64) not null,
+  rail_id text not null,
+  asset text not null,
+  status text not null, -- created | awaiting_payment | pending_operator | verified | granted | expired | failed
+  proof_mode text not null, -- operator_observed | client_tx_ref | client_settlement_proof | none
+  operator jsonb not null,
+  target jsonb not null,
+  settlement_ref text null,
+  entitlement_id uuid null,
+  purchase_id uuid null,
+  error text null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  expires_at timestamptz null
+);
 ```
 
 ## Token Contract
@@ -311,23 +335,36 @@ A rail adapter must emit a settlement record, then grant entitlement:
 
 Current state:
 
-- Monero: verified backend settlement available now.
+- Monero: verified backend settlement available in-tree now.
+- Lightning: signed NIP-57 zap receipts can now verify package purchases in-tree when the receipt request is explicitly bound to the package and session.
 - Monero stake session verify route now supports automatic verified entitlement grants (`purchase_verified`) when confirmed stake is observed.
+- Monero package session verify path now uses the same wallet-rpc subaddress operator pattern as tips/stake: allocate unique subaddress, observe confirmed incoming transfer, normalize to `VerifiedPaymentSettlement`, then grant access.
 - Monero refund/slash routes now revoke matching stake-session entitlements automatically.
-- Lightning and other assets: wallet URI/copy flows; no backend verification yet.
+- Non-XMR rails use the same contract through verifier/operator functions: the buyer wallet may initiate payment, but the grant path consumes only a normalized `VerifiedPaymentSettlement`.
+- In-tree verifier coverage now includes Lightning zap receipts, EVM native/ERC-20 transfers, Solana native transfers, TRON native/TRC-20 transfers, XRPL payments, BTC outputs, DOGE/BCH node-RPC outputs, and Cardano Blockfrost UTXOs.
+- DOGE, BCH, and Cardano require explicit node/provider configuration; BTC/EVM/Solana/TRON/XRPL have public/default fallback endpoints but production deployments should configure their own providers.
+- Wallet/app/CLI handoff is payment initiation UX, not entitlement truth.
+- Payment sessions now sit in front of paid archive grants: dStream creates the session, the node operator or embedded reference flow resolves settlement, and entitlement grant only happens once the session resolves into a verified settlement.
+- Node operators can expose `/sessions/create`, `/sessions/status`, and `/sessions/observe` while keeping custody and rail-specific execution outside the central dStream server.
+- The app now exposes that same operator contract in-tree at `/api/payment-operator/sessions/*`; non-XMR paid packages default to that built-in operator from the package settings UI unless a host supplies a custom operator endpoint.
+- The built-in operator now supports XMR wallet-rpc subaddresses, Lightning zap-invoice sessions, amount-delta observer sessions for EVM/Solana/TRON/UTXO/Cardano, and XRPL destination-tag or amount-delta sessions.
+- Operator readiness is exposed at `/api/payment-operator/readiness` and surfaced in `/settings/monetization`; live provider/node reachability is covered by `npm run smoke:payments:live`.
+- `docs/PAYMENT_OPERATOR_API.md` defines the canonical HTTP payloads for those session endpoints so every rail can plug into the same operator contract.
 
 So paid gating should currently be:
 
-- **strict mode**: only Monero-verified purchases can auto-grant.
-- **compat mode**: non-verified rails can grant manual/provisional entitlement.
+- **verified mode**: any rail can auto-grant if it produces a valid `VerifiedPaymentSettlement`.
+- **operator override mode**: host can explicitly confirm a purchase when policy allows it.
+- **legacy compat mode**: unverified fallback remains opt-in and explicitly labeled as legacy.
+  It is now gated behind `DSTREAM_ACCESS_ALLOW_LEGACY_PAYMENT_SESSION_FALLBACKS=1` for non-XMR archive packages.
 
 ## Rollout Plan (Safe)
 
 1. Introduce evaluator + tables (no behavior change).
 2. Make `POST /api/playback-access/issue` call evaluator.
 3. Add admin grant/revoke/list UI in Settings. ✅
-4. Attach Monero verified settlement to automatic grants.
-5. Add other rail verifiers (Lightning/UTXO/EVM) per rail ADRs.
+4. Attach verified settlement records to automatic grants.
+5. Harden remaining provider-backed verifier edges, live-provider deployment certification, and optional external verifier hooks against the canonical settlement contract.
 
 ## Backward Compatibility
 

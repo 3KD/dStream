@@ -35,9 +35,11 @@ export function useStableStreams<T extends StreamLike>(
   const dataRef = useRef<Map<string, T>>(new Map());
   const removalTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingRemovalKeys = useRef<Set<string>>(new Set());
+  const [stableStreams, setStableStreams] = useState<T[]>([]);
 
-  const [, setVersion] = useState(0);
-  const rerender = useCallback(() => setVersion((n) => n + 1), []);
+  const syncStableStreams = useCallback(() => {
+    setStableStreams(orderRef.current.map((key) => dataRef.current.get(key)).filter((s): s is T => s !== undefined));
+  }, []);
 
   useEffect(() => {
     const currentKeys = new Set(streams.map(keyFn));
@@ -87,27 +89,25 @@ export function useStableStreams<T extends StreamLike>(
             dataRef.current.delete(key);
             removalTimers.current.delete(key);
             pendingRemovalKeys.current.delete(key);
-            rerender();
+            syncStableStreams();
           }, removalDelayMs)
         );
         changed = true;
       }
     }
 
-    if (changed) rerender();
-  }, [streams, removalDelayMs, rerender, keyFn]);
+    if (changed) syncStableStreams();
+  }, [streams, removalDelayMs, syncStableStreams, keyFn]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
+    const timers = removalTimers.current;
     return () => {
-      for (const timer of removalTimers.current.values()) {
+      for (const timer of timers.values()) {
         clearTimeout(timer);
       }
     };
   }, []);
 
-  // Build output from stable order
-  return orderRef.current
-    .map((key) => dataRef.current.get(key))
-    .filter((s): s is T => s !== undefined);
+  return stableStreams;
 }

@@ -15,6 +15,7 @@ import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/
 import { useNostrProfile, useNostrProfiles } from "@/hooks/useNostrProfiles";
 import { useEmotes } from "@/hooks/useEmotes";
 import { getNip05Policy } from "@/lib/config";
+import type { StreamPaymentMethod } from "@dstream/protocol";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
@@ -41,6 +42,7 @@ export function ChatBox({
   onClearWindowRequestHandled,
   onMessageCountChange,
   headerRightSlot,
+  paymentMethods,
   className
 }: {
   streamPubkey: string;
@@ -53,6 +55,7 @@ export function ChatBox({
   onClearWindowRequestHandled?: (ok: boolean) => void;
   onMessageCountChange?: (count: number) => void;
   headerRightSlot?: ReactNode;
+  paymentMethods?: StreamPaymentMethod[];
   className?: string;
 }) {
   const { identity, signEvent } = useIdentity();
@@ -70,7 +73,7 @@ export function ChatBox({
   const [reportTarget, setReportTarget] = useState<ChatReportTarget | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
-  const [reportNotice, setReportNotice] = useState<string | null>(null);
+  const [reportNotice] = useState<string | null>(null);
   const [localChatClearedAt, setLocalChatClearedAt] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
   const [composerDraftVersion, setComposerDraftVersion] = useState(0);
@@ -471,7 +474,7 @@ export function ChatBox({
             type="button"
             onClick={() => setTipDialogOpen(true)}
             className="flex items-center justify-center gap-1.5 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 hover:text-orange-400 text-neutral-300 rounded-lg text-xs font-bold transition-all"
-            title="Support Creator (Lightning/XMR)"
+            title="Support Creator"
           >
             <Bitcoin className="w-3.5 h-3.5 text-orange-500" /> Support / Tip
           </button>
@@ -618,6 +621,7 @@ export function ChatBox({
         open={tipDialogOpen} 
         streamPubkey={streamPubkey} 
         streamId={streamId} 
+        paymentMethods={paymentMethods}
         onClose={() => setTipDialogOpen(false)} 
       />
     </div>

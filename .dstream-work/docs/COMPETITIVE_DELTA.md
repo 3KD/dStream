@@ -52,8 +52,8 @@ It is intentionally technical and implementation-oriented (not marketing copy).
 | Broadcaster ingest | WHIP proxy + origin path model | External/manual hosting model centered on RTMP/HLS |
 | Viewer-to-viewer rebroadcast | Implemented FCFS active/standby queue + assist policy controls | Not observed as first-class feature |
 | Host economics policy | `host_only` vs `p2p_economy`, rebroadcast threshold, waiver logic | Not observed with equivalent queue/economy controls |
-| Payments rails | Multi-asset addresses + wallet links; **Monero verified backend** | Lightning/Zaps are primary |
-| Verified settlement backend | XMR tip/stake/escrow-v3 server flows | Zap/Lightning ecosystem flows |
+| Payments rails | Multi-asset wallet handoff + canonical verified settlement contract (Monero reference verifier, plus in-tree Lightning/EVM/Solana/TRON/XRPL/BTC verification) | Lightning/Zaps are primary |
+| Verified settlement backend | XMR tip/stake/escrow-v3 server flows + shared settlement record contract for paid access | Zap/Lightning ecosystem flows |
 | Moderation model | App-surface moderation + report queue + operator controls | Existing Nostr ecosystem moderation patterns |
 | Deployment hardening | Built-in preflight + runtime smoke + production gate scripts | Not a direct apples-to-apples operator gate set in product repo |
 
@@ -67,4 +67,3 @@ It is intentionally technical and implementation-oriented (not marketing copy).
 
 - zap.stream evolves quickly; conclusions are “as inspected” on 2026-02-19.
 - This matrix compares surfaced behavior and repository evidence, not private infrastructure details.
-

@@ -4,8 +4,6 @@ const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://nos.lol",
   "wss://relay.primal.net",
   "wss://nostr.wine",
-  "wss://relay.nostr.band",
-  "wss://relay.snort.social",
   "wss://nostr.mom",
   "wss://offchain.pub",
   "wss://purplepag.es",

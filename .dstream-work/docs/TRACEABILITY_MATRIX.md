@@ -1,6 +1,6 @@
 # dStream Rebuild — Requirements Traceability Matrix (RTM)
 
-Last updated: 2026-02-12
+Last updated: 2026-04-26
 
 This RTM exists so we don’t repeat “we thought it was done / we thought it was planned”.
 
@@ -121,7 +121,7 @@ This is intentionally **heading-level** (JRNY has 200+ atomic checkboxes); detai
 | Payments - Monero | 7 | ✅ | Verified tipping + wallet RPC implemented (receipts optional via dashboard). |
 | Payments - Escrow | 8, 14 | ✅⚠️ | Stake gating + refund/slash settlement + multisig coordination are implemented; model remains non-contractual (not on-chain trustless escrow). |
 | Payments - Tipping UI | 7 | ✅ | Tip address + verified subaddress (QR + check) shipped. |
-| Payments - Other Methods | 7 | ✅⚠️ | Additional payout rails are implemented (address + wallet URI/copy flows). Verified settlement remains Monero-only (ADR `0021`). |
+| Payments - Other Methods | 7, 15 | ✅⚠️ | Additional payout rails are implemented with wallet handoff UX, and paid access now normalizes verified settlements across rails through one contract (ADR `0031`). Monero wallet-rpc is the reference-complete rail; Lightning has zap-invoice operator sessions; EVM/Solana/TRON/UTXO/Cardano have built-in amount-delta observer sessions; XRPL has destination-tag or amount-delta sessions. The remaining warning is production hardening and live-provider certification, not missing settlement-contract plumbing. See `docs/PAYMENT_RAIL_COMPLETION_QUEUE.md`. Route-level verified purchase smoke is covered by `npm run smoke:payments`; configured provider reachability is covered by `npm run smoke:payments:live`. |
 | Analytics | 9 | ✅ | Implemented at `/analytics` using real presence + Monero verification telemetry. |
 | Presence | 2 | ✅ | Implemented (kind `30312`). |
 | Nostr - Events | 1 | ✅ | Publish/subscribe/sign supported. |
@@ -135,3 +135,14 @@ This is intentionally **heading-level** (JRNY has 200+ atomic checkboxes); detai
 ## D) Completion rule (so “done” means done)
 
 The rebuild is only “completed” when every row in **A** is ✅ and the test bar in `docs/FEATURE_FREEZE.md` is satisfied.
+
+## E) Payment rail completion queue
+
+This repo now has an explicit payment-uniformity program in `docs/PAYMENT_RAIL_COMPLETION_QUEUE.md`.
+
+Use that document when the question is:
+
+- which rails are actually XMR-grade today,
+- which rails are operator-observed through weaker amount/reference scoping,
+- which rails still need host-operator hardening or live-provider certification,
+- and what the next implementation order is.

@@ -174,7 +174,7 @@ export function ProfileMetadataEditor() {
     setDirty(false);
     setStatus("idle");
     setError(null);
-  }, [identity?.pubkey, profileRecord?.profile]);
+  }, [identity, profileRecord?.profile]);
 
   if (!identity) {
     return (

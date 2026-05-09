@@ -7,6 +7,8 @@ export interface ParsedZapRequest {
   pubkey: string;
   streamATag: string | null;
   eventId: string | null;
+  packageId: string | null;
+  sessionId: string | null;
   amountMsat: number | null;
   comment: string;
 }
@@ -58,30 +60,37 @@ function parseZapRequestFromDescription(descriptionRaw: string | null | undefine
   const description = (descriptionRaw ?? "").trim();
   if (!description) return null;
   try {
-    const parsed = JSON.parse(description);
-    if (!parsed || typeof parsed !== "object") return null;
-    const kind = (parsed as any).kind;
-    if (kind !== NIP57_ZAP_REQUEST_KIND) return null;
-    const pubkey = String((parsed as any).pubkey ?? "").trim().toLowerCase();
-    if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) return null;
-    const tags = Array.isArray((parsed as any).tags) ? ((parsed as any).tags as unknown[]) : [];
-    let streamATag: string | null = null;
-    let eventId: string | null = null;
-    let amountMsat: number | null = null;
-    for (const tag of tags) {
-      if (!Array.isArray(tag) || tag.length < 2) continue;
-      const name = String(tag[0] ?? "");
-      const value = String(tag[1] ?? "").trim();
-      if (!name || !value) continue;
-      if (name === "a" && !streamATag) streamATag = value;
-      if (name === "e" && !eventId) eventId = value;
-      if (name === "amount" && amountMsat === null) amountMsat = parseAmountMsat(value);
-    }
-    const comment = String((parsed as any).content ?? "");
-    return { pubkey, streamATag, eventId, amountMsat, comment };
+    return parseZapRequestEvent(JSON.parse(description));
   } catch {
     return null;
   }
+}
+
+export function parseZapRequestEvent(event: any): ParsedZapRequest | null {
+  if (!event || typeof event !== "object") return null;
+  const kind = (event as any).kind;
+  if (kind !== NIP57_ZAP_REQUEST_KIND) return null;
+  const pubkey = String((event as any).pubkey ?? "").trim().toLowerCase();
+  if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) return null;
+  const tags = Array.isArray((event as any).tags) ? ((event as any).tags as unknown[]) : [];
+  let streamATag: string | null = null;
+  let eventId: string | null = null;
+  let packageId: string | null = null;
+  let sessionId: string | null = null;
+  let amountMsat: number | null = null;
+  for (const tag of tags) {
+    if (!Array.isArray(tag) || tag.length < 2) continue;
+    const name = String(tag[0] ?? "");
+    const value = String(tag[1] ?? "").trim();
+    if (!name || !value) continue;
+    if (name === "a" && !streamATag) streamATag = value;
+    if (name === "e" && !eventId) eventId = value;
+    if (name === "pkg" && !packageId) packageId = value;
+    if ((name === "ps" || name === "session") && !sessionId) sessionId = value;
+    if (name === "amount" && amountMsat === null) amountMsat = parseAmountMsat(value);
+  }
+  const comment = String((event as any).content ?? "");
+  return { pubkey, streamATag, eventId, packageId, sessionId, amountMsat, comment };
 }
 
 function extractTagValue(tags: unknown, name: string): string | null {
@@ -145,6 +154,8 @@ export function buildZapRequestUnsigned(input: {
   amountSats: number;
   relays: string[];
   comment?: string;
+  packageId?: string;
+  sessionId?: string;
 }) {
   const amountMsat = Math.max(1, Math.floor(input.amountSats)) * 1000;
   const relayValues = Array.from(
@@ -163,6 +174,8 @@ export function buildZapRequestUnsigned(input: {
     tags: [
       ["p", input.recipientPubkey],
       ["a", makeATag(input.recipientPubkey, input.streamId)],
+      ...(input.packageId?.trim() ? ([["pkg", input.packageId.trim()]] as string[][]) : []),
+      ...(input.sessionId?.trim() ? ([["ps", input.sessionId.trim()]] as string[][]) : []),
       ["amount", String(amountMsat)],
       ["relays", ...relayValues]
     ]

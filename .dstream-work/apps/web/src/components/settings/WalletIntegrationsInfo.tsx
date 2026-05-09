@@ -9,9 +9,9 @@ export function walletModeLabel(mode: "native_app" | "browser_extension" | "exte
 }
 
 export function walletModeHint(mode: "native_app" | "browser_extension" | "external_cli") {
-  if (mode === "browser_extension") return "Use browser plugin confirmation when opening wallet URI from Watch page.";
-  if (mode === "external_cli") return "Use local CLI/RPC workflow; copy address from Watch page and submit externally.";
-  return "Open the native wallet app and send to the copied address or wallet URI target.";
+  if (mode === "browser_extension") return "Use browser wallet confirmation to initiate settlement and emit proof back into the verifier flow.";
+  if (mode === "external_cli") return "Use local CLI/RPC workflow to create settlement, then submit proof through the same verifier contract.";
+  return "Open the native wallet app to initiate payment; verified unlocks depend on the settlement proof, not the app handoff alone.";
 }
 
 export function WalletIntegrationsInfo() {
@@ -32,13 +32,14 @@ export function WalletIntegrationsInfo() {
 
       <div className="text-sm text-neutral-300 space-y-2">
         <p>
-          This panel displays supported wallet behaviors. dStream never stores private keys; it only prepares addresses, URI links,
-          and preferred-wallet hints.
+          This panel displays supported wallet behaviors. dStream never stores private keys; it prepares wallet handoff details and preferred-wallet
+          hints, while verified unlocks depend on settlement proofs and rail verifiers.
         </p>
         <ol className="list-decimal pl-5 text-xs text-neutral-400 space-y-1">
           <li>Set preferred wallet per asset under Payment Defaults.</li>
           <li>Configure payout methods in Broadcast (core + advanced panel).</li>
-          <li>On watch page, viewers use Copy / Wallet URI / Preferred wallet links for settlement.</li>
+          <li>On watch page, viewers initiate payment with Copy / wallet handoff / preferred wallet links.</li>
+          <li>Paid unlocks should only complete after the corresponding rail verifier produces a canonical settlement record.</li>
         </ol>
       </div>
 
@@ -74,7 +75,8 @@ export function WalletIntegrationsInfo() {
       </div>
 
       <div className="text-xs text-neutral-500">
-        Prefer a CLI wallet workflow? Set preferred wallet to Monero CLI / Bitcoin Core, then use Copy on watch page to pay from your terminal wallet.
+        Prefer a CLI wallet workflow? Set preferred wallet to Monero CLI / Bitcoin Core, initiate payment from your terminal wallet, then feed the
+        transaction proof back into the same settlement verifier contract.
       </div>
     </section>
   );

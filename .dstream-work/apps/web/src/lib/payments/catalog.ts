@@ -301,6 +301,15 @@ function isBtcLightningPayload(input: string): boolean {
   return BTC_LIGHTNING_INVOICE_RE.test(input) || BTC_LIGHTNING_LNURL_RE.test(input) || BTC_LIGHTNING_ADDRESS_RE.test(input);
 }
 
+function isTronNetwork(input: string | null | undefined): boolean {
+  return (input ?? "").trim().toLowerCase().includes("tron");
+}
+
+function isSolanaNetwork(input: string | null | undefined): boolean {
+  const value = (input ?? "").trim().toLowerCase();
+  return value === "solana" || value === "mainnet-beta" || value === "devnet" || value === "testnet";
+}
+
 function withQuery(base: string, params: Record<string, string | null | undefined>): string {
   const query = Object.entries(params)
     .filter(([, value]) => !!value)
@@ -344,9 +353,13 @@ export function buildPaymentUri(method: StreamPaymentMethod): string | null {
       return `solana:${address}`;
     case "trx":
       return `tron:${address}`;
-    case "eth":
     case "usdt":
+      if (isTronNetwork(method.network)) return `tron:${address}`;
+      return withQuery(`ethereum:${address}`, { chain: method.network, label: method.label });
     case "usdc":
+      if (isSolanaNetwork(method.network)) return `solana:${address}`;
+      return withQuery(`ethereum:${address}`, { chain: method.network, label: method.label });
+    case "eth":
     case "pepe":
       return withQuery(`ethereum:${address}`, { chain: method.network, label: method.label });
     default:

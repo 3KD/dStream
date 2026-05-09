@@ -1,5 +1,3 @@
-import type { NextRequest } from "next/server";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -11,7 +9,7 @@ function normalizeOrigin(input: string | undefined, fallback: string): string {
 
 const MANIFEST_ORIGIN = normalizeOrigin(process.env.DSTREAM_MANIFEST_ORIGIN, "http://manifest:3001");
 
-export async function GET(_req: NextRequest): Promise<Response> {
+export async function GET(): Promise<Response> {
   try {
     const upstream = await fetch(`${MANIFEST_ORIGIN}/latest`, { cache: "no-store" });
     if (!upstream.ok) return new Response("manifest not available", { status: 404 });

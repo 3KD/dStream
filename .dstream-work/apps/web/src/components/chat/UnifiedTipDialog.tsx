@@ -1,36 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { TipDialog as MoneroTipDialog } from "@/components/monero/TipDialog";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
+import { PAYMENT_ASSET_META, buildPaymentUri } from "@/lib/payments/catalog";
+import { paymentMethodsFromProfile } from "@/lib/payments/profileMethods";
+import { groupPaymentMethodsByRail } from "@/lib/payments/rails";
+import type { StreamPaymentMethod } from "@dstream/protocol";
 
 interface UnifiedTipDialogProps {
   open: boolean;
   streamPubkey: string;
   streamId: string;
   broadcasterName?: string;
+  paymentMethods?: StreamPaymentMethod[];
   onClose: () => void;
 }
 
-export function UnifiedTipDialog({ open, streamPubkey, streamId, broadcasterName, onClose }: UnifiedTipDialogProps) {
-  const profileRecord = useNostrProfile(streamPubkey);
-  const profile = profileRecord?.profile;
-  const lud16 = profile?.lud16 || profile?.lud06;
-  const btc = profile?.btc;
-  const eth = profile?.eth;
-  const trx = profile?.trx;
-  const xmr = profile?.xmr;
-  const sol = profile?.sol;
-  const ada = profile?.ada;
-  const doge = profile?.doge;
-  const ltc = profile?.ltc;
-  const ton = profile?.ton;
-  const xrp = profile?.xrp;
-  const dot = profile?.dot;
-  
-  const hasAnyAddress = !!(lud16 || btc || eth || trx || xmr || sol || ada || doge || ltc || ton || xrp || dot);
+function paymentMethodKey(method: StreamPaymentMethod, index: number): string {
+  return `${method.asset}|${method.network ?? ""}|${method.address}|${index}`;
+}
 
+export function UnifiedTipDialog({
+  open,
+  streamPubkey,
+  streamId,
+  broadcasterName,
+  paymentMethods,
+  onClose
+}: UnifiedTipDialogProps) {
+  const profileRecord = useNostrProfile(streamPubkey);
   const [showMonero, setShowMonero] = useState(false);
+  const [copyStateByKey, setCopyStateByKey] = useState<Record<string, "idle" | "copied" | "error">>({});
+
+  const resolvedPaymentMethods = useMemo(
+    () => paymentMethods ?? paymentMethodsFromProfile(profileRecord?.profile),
+    [paymentMethods, profileRecord?.profile]
+  );
+  const publicXmrMethods = useMemo(
+    () => resolvedPaymentMethods.filter((method) => method.asset === "xmr"),
+    [resolvedPaymentMethods]
+  );
+  const paymentRailGroups = useMemo(
+    () => groupPaymentMethodsByRail(resolvedPaymentMethods.filter((method) => method.asset !== "xmr")),
+    [resolvedPaymentMethods]
+  );
+
+  const copyPaymentAddress = useCallback(async (key: string, address: string) => {
+    setCopyStateByKey((prev) => ({ ...prev, [key]: "idle" }));
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
+      await navigator.clipboard.writeText(address);
+      setCopyStateByKey((prev) => ({ ...prev, [key]: "copied" }));
+      setTimeout(() => {
+        setCopyStateByKey((prev) => ({ ...prev, [key]: "idle" }));
+      }, 1200);
+    } catch {
+      setCopyStateByKey((prev) => ({ ...prev, [key]: "error" }));
+      setTimeout(() => {
+        setCopyStateByKey((prev) => ({ ...prev, [key]: "idle" }));
+      }, 1800);
+    }
+  }, []);
 
   if (showMonero) {
     return (
@@ -52,161 +83,150 @@ export function UnifiedTipDialog({ open, streamPubkey, streamId, broadcasterName
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm flex flex-col rounded-3xl border border-neutral-800 bg-neutral-950 shadow-2xl overflow-hidden max-h-[85vh]">
-        
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 flex-shrink-0">
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950 shadow-2xl">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900/50 px-5 py-4">
           <div>
-            <h3 className="text-sm font-bold text-neutral-100 flex items-center gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-neutral-100">
               <span className="text-yellow-500">💎</span> Support Creator
             </h3>
-            {broadcasterName && (
-              <p className="text-xs text-neutral-400 mt-0.5">To {broadcasterName}</p>
-            )}
+            {broadcasterName ? <p className="mt-0.5 text-xs text-neutral-400">To {broadcasterName}</p> : null}
           </div>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400 transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <button onClick={onClose} className="rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-800">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 flex flex-col items-center flex-1 overflow-y-auto space-y-6">
-          
-          {hasAnyAddress ? (
-            <div className="flex flex-col items-center text-center w-full space-y-4">
-              
-              {lud16 && (
-                <div className="w-full bg-neutral-900/40 border border-neutral-800 rounded-2xl p-4">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-500">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                      </svg>
+        <div className="flex flex-1 flex-col items-center overflow-y-auto p-6">
+          {resolvedPaymentMethods.length > 0 ? (
+            <div className="w-full space-y-4">
+              {publicXmrMethods.map((method, index) => {
+                const methodKey = paymentMethodKey(method, index);
+                const walletUri = buildPaymentUri(method);
+                return (
+                  <div key={methodKey} className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 text-left">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-white">Monero</div>
+                        <div className="text-xs text-neutral-500">{method.label?.trim() || "Public payout address"}</div>
+                      </div>
+                      <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-orange-300">
+                        XMR
+                      </span>
                     </div>
-                    <h4 className="text-sm font-bold text-white">Lightning Zap</h4>
+                    <div className="mt-3 break-all rounded-xl border border-neutral-800 bg-black/40 px-3 py-2 font-mono text-[11px] text-neutral-300">
+                      {method.address}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {walletUri ? (
+                        <a
+                          href={walletUri}
+                          className="min-w-[9rem] flex-1 rounded-xl bg-orange-500 px-3 py-2 text-center text-sm font-semibold text-orange-950 transition-colors hover:bg-orange-400"
+                        >
+                          Open Wallet
+                        </a>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void copyPaymentAddress(methodKey, method.address)}
+                        className="min-w-[7rem] flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
+                      >
+                        {copyStateByKey[methodKey] === "copied"
+                          ? "Copied"
+                          : copyStateByKey[methodKey] === "error"
+                            ? "Copy failed"
+                            : "Copy"}
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <a 
-                      href={`lightning:${lud16}`}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-bold rounded-xl transition-colors text-sm"
-                    >
-                      Open Wallet Extension
-                    </a>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(lud16)}
-                      className="w-full py-2 bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-neutral-300 font-mono rounded-xl text-xs transition-colors truncate px-3"
-                      title="Copy Address"
-                    >
-                      {lud16}
-                    </button>
+                );
+              })}
+
+              {paymentRailGroups.map(({ rail, methods }) => (
+                <div key={rail.id} className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 text-left">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-white">{rail.name}</div>
+                      <div className="text-xs text-neutral-500">{rail.description}</div>
+                    </div>
+                    <span className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                      {rail.execution === "verified_backend" ? "verified" : "handoff"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {methods.map((method, index) => {
+                      const methodKey = paymentMethodKey(method, index);
+                      const walletUri = buildPaymentUri(method);
+                      const assetMeta = PAYMENT_ASSET_META[method.asset];
+                      const descriptor = [method.label, method.network, method.amount ? `${method.amount} ${assetMeta.symbol}` : null]
+                        .filter(Boolean)
+                        .join(" · ");
+                      return (
+                        <div key={methodKey} className="rounded-xl border border-neutral-800 bg-black/30 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-neutral-100">{assetMeta.name}</div>
+                              <div className="text-xs text-neutral-500">{descriptor || "Wallet rail"}</div>
+                            </div>
+                            <span className="rounded-full border border-neutral-700 bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-300">
+                              {assetMeta.symbol}
+                            </span>
+                          </div>
+                          <div className="mt-2 break-all rounded-lg border border-neutral-800 bg-neutral-950/70 px-3 py-2 font-mono text-[11px] text-neutral-300">
+                            {method.address}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {walletUri ? (
+                              <a
+                                href={walletUri}
+                                className="min-w-[9rem] flex-1 rounded-xl bg-neutral-200 px-3 py-2 text-center text-sm font-semibold text-neutral-950 transition-colors hover:bg-white"
+                              >
+                                Open Wallet
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void copyPaymentAddress(methodKey, method.address)}
+                              className="min-w-[7rem] flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:bg-neutral-800"
+                            >
+                              {copyStateByKey[methodKey] === "copied"
+                                ? "Copied"
+                                : copyStateByKey[methodKey] === "error"
+                                  ? "Copy failed"
+                                  : "Copy"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
-
-              {btc && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-500 ml-1">Bitcoin (BTC)</span>
-                  <button onClick={() => navigator.clipboard.writeText(btc)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-orange-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{btc}</button>
-                </div>
-              )}
-
-              {eth && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-purple-400 ml-1">EVM Wrapper (Ethereum, BNB, MATIC, Base)</span>
-                  <button onClick={() => navigator.clipboard.writeText(eth)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-purple-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{eth}</button>
-                </div>
-              )}
-
-              {sol && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 ml-1">Solana (SOL)</span>
-                  <button onClick={() => navigator.clipboard.writeText(sol)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-emerald-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{sol}</button>
-                </div>
-              )}
-
-              {doge && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500 ml-1">Dogecoin (DOGE)</span>
-                  <button onClick={() => navigator.clipboard.writeText(doge)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-amber-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{doge}</button>
-                </div>
-              )}
-
-              {ltc && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-stone-300 ml-1">Litecoin (LTC)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ltc)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-stone-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ltc}</button>
-                </div>
-              )}
-              
-              {ton && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500 ml-1">Toncoin (TON)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ton)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-blue-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ton}</button>
-                </div>
-              )}
-
-              {ada && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-cyan-400 ml-1">Cardano (ADA)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ada)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-cyan-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ada}</button>
-                </div>
-              )}
-
-              {xrp && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 ml-1">Ripple (XRP)</span>
-                  <button onClick={() => navigator.clipboard.writeText(xrp)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-slate-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{xrp}</button>
-                </div>
-              )}
-
-              {dot && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-pink-500 ml-1">Polkadot (DOT)</span>
-                  <button onClick={() => navigator.clipboard.writeText(dot)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-pink-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{dot}</button>
-                </div>
-              )}
-
-              {trx && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-500 ml-1">TRON (TRX)</span>
-                  <button onClick={() => navigator.clipboard.writeText(trx)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-red-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{trx}</button>
-                </div>
-              )}
-
-              {xmr && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-500 ml-1">Monero (XMR) Native</span>
-                  <button onClick={() => navigator.clipboard.writeText(xmr)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-orange-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{xmr}</button>
-                </div>
-              )}
-
+              ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center text-center w-full text-neutral-500 py-4">
-              <svg className="w-10 h-10 mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex w-full flex-col items-center py-4 text-center text-neutral-500">
+              <svg className="mb-3 h-10 w-10 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm">This creator does not have any public wallet addresses configured on their Nostr profile.</p>
+              <p className="text-sm">This creator does not have any supported payment rails configured for this surface.</p>
             </div>
           )}
 
-          <div className="w-full h-px bg-neutral-800/60" />
+          <div className="my-6 h-px w-full bg-neutral-800/60" />
 
-          <div className="flex flex-col items-center text-center w-full pb-2">
-            <p className="text-xs text-neutral-500 mb-3 max-w-[260px]">
-              Or generate a temporary dStream escrow address for absolute privacy.
+          <div className="flex w-full flex-col items-center pb-2 text-center">
+            <p className="mb-3 max-w-[260px] text-xs text-neutral-500">
+              Or generate a temporary dStream escrow address that never exposes your public payout address.
             </p>
             <button
               onClick={() => setShowMonero(true)}
-              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold rounded-full text-xs flex items-center gap-2 border border-neutral-700 transition-colors"
+              className="flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-800 px-4 py-2 text-xs font-semibold text-neutral-300 transition-colors hover:bg-neutral-700"
             >
-              <span className="text-orange-500 font-black">XMR</span> Private Proxy
+              <span className="font-black text-orange-500">XMR</span> Private Proxy
             </button>
           </div>
-
         </div>
       </div>
     </div>
