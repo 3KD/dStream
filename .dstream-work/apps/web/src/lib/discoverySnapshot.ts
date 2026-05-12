@@ -44,3 +44,12 @@ export function normalizeSnapshotStreamList(
     normalizeSnapshotStreamAvailability(stream, definitelyDeadLiveKeys.has(streamSnapshotKey(stream)))
   );
 }
+
+export function sortSnapshotStreamsForResponse(streams: StreamAnnounce[]): StreamAnnounce[] {
+  return streams.slice().sort((a, b) => {
+    const aLive = a.status === "live";
+    const bLive = b.status === "live";
+    if (aLive !== bLive) return aLive ? -1 : 1;
+    return b.createdAt - a.createdAt;
+  });
+}

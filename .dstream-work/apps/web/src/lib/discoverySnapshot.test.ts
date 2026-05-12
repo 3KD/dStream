@@ -5,6 +5,7 @@ import {
   normalizeSnapshotStreamAvailability,
   normalizeSnapshotStreamList,
   shouldIncludeSnapshotStream,
+  sortSnapshotStreamsForResponse,
   streamSnapshotKey
 } from "./discoverySnapshot";
 
@@ -61,4 +62,18 @@ test("snapshot excludes non-discoverable and moderated announcements", () => {
   assert.equal(shouldIncludeSnapshotStream(buildAnnounce({ discoverable: false })), false);
   assert.equal(shouldIncludeSnapshotStream(hiddenPubkeyStream, hiddenPubkeys), false);
   assert.equal(shouldIncludeSnapshotStream(hiddenStream, new Map(), hiddenStreams), false);
+});
+
+test("snapshot response sort preserves older live streams ahead of newer offline entries", () => {
+  const newerEnded = buildAnnounce({ streamId: "newer-ended", status: "ended", createdAt: 1_800_000_000 });
+  const olderLive = buildAnnounce({
+    streamId: "older-live",
+    status: "live",
+    createdAt: 1_700_000_000,
+    streaming: "https://example.com/hls/live.m3u8"
+  });
+
+  const sorted = sortSnapshotStreamsForResponse([newerEnded, olderLive]);
+  assert.equal(sorted[0]?.streamId, "older-live");
+  assert.equal(sorted[1]?.streamId, "newer-ended");
 });

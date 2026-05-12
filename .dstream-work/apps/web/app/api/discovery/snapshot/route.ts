@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
-import { normalizeSnapshotStreamList, shouldIncludeSnapshotStream, streamSnapshotKey } from "@/lib/discoverySnapshot";
+import { normalizeSnapshotStreamList, shouldIncludeSnapshotStream, sortSnapshotStreamsForResponse, streamSnapshotKey } from "@/lib/discoverySnapshot";
 import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 
 export const runtime = "nodejs";
@@ -197,8 +197,7 @@ async function refreshCache(): Promise<void> {
         shouldIncludeSnapshotStream(stream, hiddenPubkeys, hiddenStreams)
       )
     );
-    const streams = (await demoteDefinitelyDeadLiveStreams(publicStreams))
-      .sort((a, b) => b.createdAt - a.createdAt)
+    const streams = sortSnapshotStreamsForResponse(await demoteDefinitelyDeadLiveStreams(publicStreams))
       .slice(0, DEFAULT_LIMIT);
 
     cached = { streams, queriedAt: nowSec, relays };
