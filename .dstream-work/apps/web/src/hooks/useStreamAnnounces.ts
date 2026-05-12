@@ -456,7 +456,11 @@ function mergeFallbackStreams(streams: StreamAnnounce[]) {
       parsed.status === "live" &&
       existingStream &&
       existingStream.status !== "live";
-    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverPromotion) continue;
+    const serverDemotion =
+      parsed.status !== "live" &&
+      existingStream &&
+      existingStream.status === "live";
+    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverPromotion && !serverDemotion) continue;
     streamDirectoryStore.seen.set(streamKey, Math.max(prevCreatedAt ?? 0, parsed.createdAt));
     if (!streamDirectoryStore.orderMeta.has(streamKey)) {
       streamDirectoryStore.orderMeta.set(streamKey, {

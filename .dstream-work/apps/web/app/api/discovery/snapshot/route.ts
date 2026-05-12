@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import { normalizeSnapshotStreamList, shouldIncludeSnapshotStream, streamSnapshotKey } from "@/lib/discoverySnapshot";
 import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 
 export const runtime = "nodejs";
@@ -37,10 +38,6 @@ const streamProbeCache = new Map<string, { checkedAtMs: number; playable: boolea
 
 /** Read cache without TS narrowing (module-level var changes between awaits). */
 function getCached(): CachedSnapshot | null { return cached; }
-
-function streamSnapshotKey(stream: StreamAnnounce): string {
-  return makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId);
-}
 
 function shouldProbeStream(stream: StreamAnnounce): boolean {
   if (stream.status !== "live") return false;
@@ -93,22 +90,24 @@ async function probeStreamPlayable(url: string): Promise<boolean> {
   return playable;
 }
 
-async function filterDefinitelyDeadLiveStreams(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
+async function demoteDefinitelyDeadLiveStreams(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
   const probeCandidates = streams.filter(shouldProbeStream).slice(0, STREAM_PROBE_LIMIT);
   if (probeCandidates.length === 0) return streams;
 
-  const playableByKey = new Map<string, boolean>();
+  const definitelyDeadLiveKeys = new Set<string>();
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(STREAM_PROBE_CONCURRENCY, probeCandidates.length) }, async () => {
     while (nextIndex < probeCandidates.length) {
       const stream = probeCandidates[nextIndex++];
       if (!stream?.streaming) continue;
-      playableByKey.set(streamSnapshotKey(stream), await probeStreamPlayable(stream.streaming));
+      if (!(await probeStreamPlayable(stream.streaming))) {
+        definitelyDeadLiveKeys.add(streamSnapshotKey(stream));
+      }
     }
   });
   await Promise.all(workers);
 
-  return streams.filter((stream) => playableByKey.get(streamSnapshotKey(stream)) !== false);
+  return normalizeSnapshotStreamList(streams, definitelyDeadLiveKeys);
 }
 
 /** Query all relays and rebuild the cached snapshot. */
@@ -193,20 +192,13 @@ async function refreshCache(): Promise<void> {
       }
     }
 
-    const streams = (await filterDefinitelyDeadLiveStreams(Array.from(byStreamKey.values())
-      .filter((stream) => {
-        if (!stream.discoverable) return false;
-        
-        // Final sanity check for playable stream validity
-        if (!stream.streaming) return false;
-        if (!isLikelyLivePlayableMediaUrl(stream.streaming)) return false;
-        const pubkeyPolicy = hiddenPubkeys.get(stream.pubkey.toLowerCase());
-        if (pubkeyPolicy?.hidden) return false;
-        const streamPolicy = hiddenStreams.get(streamSnapshotKey(stream));
-        if (streamPolicy?.hidden) return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt - a.createdAt)))
+    const publicStreams = normalizeSnapshotStreamList(
+      Array.from(byStreamKey.values()).filter((stream) =>
+        shouldIncludeSnapshotStream(stream, hiddenPubkeys, hiddenStreams)
+      )
+    );
+    const streams = (await demoteDefinitelyDeadLiveStreams(publicStreams))
+      .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, DEFAULT_LIMIT);
 
     cached = { streams, queriedAt: nowSec, relays };

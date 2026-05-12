@@ -20,7 +20,7 @@
     "test:profile": "node --test --import tsx apps/web/src/lib/profile.test.ts",
     "test:payments": "node --test --import tsx apps/web/src/lib/payments/payments.test.ts apps/web/src/lib/payments/profileMethods.test.ts",
     "test:access": "node --test --import tsx apps/web/src/lib/access/purchaseVerifier.test.ts apps/web/src/lib/access/onchainPurchaseVerifier.test.ts apps/web/src/lib/access/paymentOperator.test.ts apps/web/src/lib/access/paymentSessionConfig.test.ts apps/web/src/lib/access/paymentSessions.test.ts apps/web/src/lib/access/client.test.ts apps/web/src/lib/access/packages.test.ts apps/web/src/lib/access/settlement.test.ts",
-    "test:vod": "node --test --import tsx apps/web/src/lib/videoPolicy.test.ts",
+    "test:vod": "node --test --import tsx apps/web/src/lib/videoPolicy.test.ts apps/web/src/lib/discoverySnapshot.test.ts",
     "test:mobile:permissions": "node --test --import tsx apps/web/src/lib/mediaPermissions.test.ts",
     "test:whep": "node --test --import tsx apps/web/src/lib/whep-fallback.test.ts apps/web/src/lib/webrtc.test.ts",
     "test:playback": "node --test --import tsx apps/web/src/lib/playback-access.test.ts apps/web/src/lib/bandwidthTracker.test.ts",

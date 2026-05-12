@@ -7,7 +7,8 @@ const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://nostr.mom",
   "wss://offchain.pub",
   "wss://purplepag.es",
-  "wss://relay.nostr.wirednet.jp"
+  "wss://relay.nostr.wirednet.jp",
+  "wss://nostr-pub.wellorder.net"
 ];
 const DEFAULT_NIP05_POLICY = "badge";
 export const NOSTR_RELAY_OVERRIDE_STORAGE_KEY = "dstream_nostr_relays_override_v1";
