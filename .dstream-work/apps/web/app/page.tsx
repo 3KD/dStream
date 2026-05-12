@@ -19,6 +19,10 @@ function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: st
   return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
 }
 
+function isPlaybackUnavailable(stream: unknown): boolean {
+  return (stream as { playbackHealth?: unknown } | null)?.playbackHealth === "unavailable";
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
@@ -155,6 +159,7 @@ export default function HomePage() {
                 const pubkeyLabel = npub
                   ? shortenText(npub, { head: 14, tail: 8 })
                   : shortenText(stream.pubkey, { head: 14, tail: 8 });
+                const playbackUnavailable = isPlaybackUnavailable(stream);
 
                 return (
                   <Link
@@ -180,9 +185,16 @@ export default function HomePage() {
                             </div>
                           )}
 
-                      <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                        Live
+                      <div className={`absolute top-2 left-2 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                        playbackUnavailable ? "bg-amber-600" : "bg-red-600"
+                      }`}>
+                        {playbackUnavailable ? "Live signal" : "Live"}
                       </div>
+                      {playbackUnavailable && (
+                        <div className="absolute top-2 right-2 bg-neutral-950/80 border border-amber-500/50 text-amber-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
+                          Playback issue
+                        </div>
+                      )}
                     </div>
                     <div className="p-4">
                       <h3 className="font-bold text-lg line-clamp-1">{stream.title || "Untitled Stream"}</h3>

@@ -17,7 +17,7 @@ interface UseStreamAnnouncesOptions {
 }
 
 const LIVE_STALE_SEC = 6 * 60 * 60;
-const LIVE_HINT_GRACE_DEFAULT_SEC = 45 * 24 * 60 * 60;
+const LIVE_HINT_GRACE_DEFAULT_SEC = 90 * 24 * 60 * 60;
 const LIVE_HINT_GRACE_SEC = (() => {
   const raw = Number(process.env.NEXT_PUBLIC_STREAM_LIVE_HINT_GRACE_SEC ?? "");
   if (!Number.isFinite(raw)) return LIVE_HINT_GRACE_DEFAULT_SEC;
@@ -26,9 +26,9 @@ const LIVE_HINT_GRACE_SEC = (() => {
   return parsed;
 })();
 const LIVE_PRUNE_INTERVAL_MS = 15_000;
-const STREAM_ANNOUNCE_LOOKBACK_ALL_SEC = 45 * 24 * 60 * 60;
-const STREAM_ANNOUNCE_MIN_LIMIT_ALL = 320;
-const STREAM_CACHE_MAX_ITEMS = 360;
+const STREAM_ANNOUNCE_LOOKBACK_ALL_SEC = 90 * 24 * 60 * 60;
+const STREAM_ANNOUNCE_MIN_LIMIT_ALL = 600;
+const STREAM_CACHE_MAX_ITEMS = 600;
 const STREAM_CACHE_REFRESH_MS = 90_000;
 const STREAM_DISCOVERY_TIMEOUT_MS = 4_000;
 const STREAM_DISCOVERY_SERVER_FALLBACK_COOLDOWN_MS = 60 * 1000;
@@ -207,13 +207,6 @@ function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number
     if (hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) return stream;
     // Stale with no live URL — mark ended
     return { ...stream, status: "ended" };
-  }
-
-  // Promote "ended" to "live" ONLY when event has a live URL AND was announced
-  // within the hint grace window. This prevents oscillation for very old events
-  // that would immediately get demoted on the next prune cycle.
-  if (stream.status === "ended" && hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) {
-    return { ...stream, status: "live" };
   }
 
   return stream;
@@ -486,7 +479,7 @@ async function hydrateFromServerSnapshotFallback() {
   streamDirectoryStore.fallbackLastAtMs = nowMs;
   streamDirectoryStore.fallbackInFlight = (async () => {
     try {
-      const response = await fetch("/api/discovery/snapshot?days=45&limit=360", {
+      const response = await fetch("/api/discovery/snapshot?days=90&limit=600", {
         method: "GET",
         cache: "no-store"
       });

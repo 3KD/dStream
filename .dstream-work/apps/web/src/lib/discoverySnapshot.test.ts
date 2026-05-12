@@ -43,14 +43,25 @@ test("snapshot demotes live announcements with missing playback URL", () => {
   assert.equal(normalized.status, "ended");
 });
 
-test("snapshot demotes definitely dead live streams instead of dropping them", () => {
+test("snapshot preserves definitely dead live signals with playback health instead of hiding them", () => {
   const stream = buildAnnounce({
     status: "live",
     streaming: "https://example.com/hls/live.m3u8"
   });
   const normalized = normalizeSnapshotStreamList([stream], new Set([streamSnapshotKey(stream)]));
   assert.equal(normalized.length, 1);
-  assert.equal(normalized[0]?.status, "ended");
+  assert.equal(normalized[0]?.status, "live");
+  assert.equal(normalized[0]?.playbackHealth, "unavailable");
+  assert.equal(normalized[0]?.playbackHealthReason, "playback_probe_failed");
+});
+
+test("snapshot promotes verifier-backed ended playback candidates to live", () => {
+  const stream = buildAnnounce({
+    status: "ended",
+    streaming: "https://example.com/hls/live.m3u8"
+  });
+  const normalized = normalizeSnapshotStreamList([stream], new Set(), new Set([streamSnapshotKey(stream)]));
+  assert.equal(normalized[0]?.status, "live");
 });
 
 test("snapshot excludes non-discoverable and moderated announcements", () => {
@@ -75,5 +86,19 @@ test("snapshot response sort preserves older live streams ahead of newer offline
 
   const sorted = sortSnapshotStreamsForResponse([newerEnded, olderLive]);
   assert.equal(sorted[0]?.streamId, "older-live");
+  assert.equal(sorted[1]?.streamId, "newer-ended");
+});
+
+test("snapshot response sort keeps potential live playback hints ahead of ordinary ended entries", () => {
+  const newerEnded = buildAnnounce({ streamId: "newer-ended", status: "ended", createdAt: 1_800_000_000 });
+  const olderPotentialLive = buildAnnounce({
+    streamId: "older-potential-live",
+    status: "ended",
+    createdAt: 1_700_000_000,
+    streaming: "https://example.com/stream/live/index.m3u8"
+  });
+
+  const sorted = sortSnapshotStreamsForResponse([newerEnded, olderPotentialLive]);
+  assert.equal(sorted[0]?.streamId, "older-potential-live");
   assert.equal(sorted[1]?.streamId, "newer-ended");
 });

@@ -3,15 +3,15 @@ import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
 import { normalizeSnapshotStreamList, shouldIncludeSnapshotStream, sortSnapshotStreamsForResponse, streamSnapshotKey } from "@/lib/discoverySnapshot";
-import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
+import { isLikelyHlsUrl, isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LOOKBACK_DAYS = 45;
-const DEFAULT_LIMIT = 360;
+const DEFAULT_LOOKBACK_DAYS = 90;
+const DEFAULT_LIMIT = 600;
 const MIN_LIMIT = 40;
-const MAX_LIMIT = 600;
+const MAX_LIMIT = 1000;
 const QUERY_TIMEOUT_MS = 6_000;
 const DISCOVERY_POLICY_LOOKBACK_SEC = 14 * 86400;
 const DISCOVERY_POLICY_LIMIT = 2000;
@@ -19,6 +19,7 @@ const STREAM_PROBE_LIMIT = 80;
 const STREAM_PROBE_CONCURRENCY = 10;
 const STREAM_PROBE_TIMEOUT_MS = 1_500;
 const STREAM_PROBE_CACHE_MS = 5 * 60_000;
+const ENDED_PLAYBACK_PROMOTION_LOOKBACK_DAYS = 45;
 
 // ---------------------------------------------------------------------------
 // Background cache: relay queries run in the background on a 60s interval.
@@ -34,13 +35,23 @@ interface CachedSnapshot {
 
 let cached: CachedSnapshot | null = null;
 let refreshInFlight = false;
-const streamProbeCache = new Map<string, { checkedAtMs: number; playable: boolean }>();
+interface StreamProbeResult {
+  playable: boolean;
+  liveLike: boolean;
+}
+
+interface ProbeFetchResult {
+  state: "playable" | "dead" | "unknown";
+  liveLike: boolean;
+}
+
+const streamProbeCache = new Map<string, { checkedAtMs: number; result: StreamProbeResult }>();
 
 /** Read cache without TS narrowing (module-level var changes between awaits). */
 function getCached(): CachedSnapshot | null { return cached; }
 
 function shouldProbeStream(stream: StreamAnnounce): boolean {
-  if (stream.status !== "live") return false;
+  if (stream.status !== "live" && stream.status !== "ended") return false;
   const url = stream.streaming?.trim();
   if (!url) return false;
   if (!/^https?:\/\//i.test(url)) return false;
@@ -51,7 +62,18 @@ function isDefinitelyDeadStatus(status: number): boolean {
   return status === 404 || status === 410;
 }
 
-async function probeFetchStatus(url: string, method: "HEAD" | "GET"): Promise<"playable" | "dead" | "unknown"> {
+function normalizeProbeUrl(url: string): string {
+  return url.trim();
+}
+
+function isLiveLikeHlsManifest(body: string): boolean {
+  const trimmed = body.trimStart();
+  if (!trimmed.startsWith("#EXTM3U")) return false;
+  if (/#EXT-X-ENDLIST\b/i.test(body)) return false;
+  return /#EXT-X-(MEDIA-SEQUENCE|TARGETDURATION|STREAM-INF)\b/i.test(body) || /#EXTINF\b/i.test(body);
+}
+
+async function probeFetchStatus(url: string, method: "HEAD" | "GET"): Promise<ProbeFetchResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), STREAM_PROBE_TIMEOUT_MS);
   try {
@@ -62,52 +84,88 @@ async function probeFetchStatus(url: string, method: "HEAD" | "GET"): Promise<"p
       signal: controller.signal,
       headers: method === "GET" ? { Range: "bytes=0-2047" } : undefined
     });
-    if (response.ok || response.status === 206) return "playable";
-    if (isDefinitelyDeadStatus(response.status)) return "dead";
-    return "unknown";
-  } catch {
-    return "unknown";
+    if (isDefinitelyDeadStatus(response.status)) return { state: "dead", liveLike: false };
+    if (!(response.ok || response.status === 206)) return { state: "unknown", liveLike: false };
+    if (method === "GET" && isLikelyHlsUrl(url)) {
+      const body = await response.text();
+      const trimmed = body.trimStart();
+      if (!trimmed.startsWith("#EXTM3U")) return { state: "dead", liveLike: false };
+      return { state: "playable", liveLike: isLiveLikeHlsManifest(body) };
+    }
+    return { state: "playable", liveLike: false };
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name !== "AbortError") {
+      console.warn("[snapshot] stream probe failed:", error.message);
+    }
+    return { state: "unknown", liveLike: false };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function probeStreamPlayable(url: string): Promise<boolean> {
-  const normalized = url.trim();
+async function probeStreamPlayback(url: string): Promise<StreamProbeResult> {
+  const normalized = normalizeProbeUrl(url);
   const nowMs = Date.now();
   const cachedResult = streamProbeCache.get(normalized);
   if (cachedResult && nowMs - cachedResult.checkedAtMs < STREAM_PROBE_CACHE_MS) {
-    return cachedResult.playable;
+    return cachedResult.result;
   }
 
-  const head = await probeFetchStatus(normalized, "HEAD");
-  const playable =
-    head === "playable" ? true :
-    head === "dead" ? false :
-    (await probeFetchStatus(normalized, "GET")) !== "dead";
+  const first = isLikelyHlsUrl(normalized) ? await probeFetchStatus(normalized, "GET") : await probeFetchStatus(normalized, "HEAD");
+  const fallback = first.state === "unknown" ? await probeFetchStatus(normalized, "GET") : first;
+  const result = {
+    playable: fallback.state !== "dead",
+    liveLike: fallback.liveLike
+  };
 
-  streamProbeCache.set(normalized, { checkedAtMs: nowMs, playable });
-  return playable;
+  streamProbeCache.set(normalized, { checkedAtMs: nowMs, result });
+  return result;
 }
 
-async function demoteDefinitelyDeadLiveStreams(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
-  const probeCandidates = streams.filter(shouldProbeStream).slice(0, STREAM_PROBE_LIMIT);
+async function annotateDefinitelyDeadLiveStreams(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
+  const endedPromotionCutoff = Math.floor(Date.now() / 1000) - ENDED_PLAYBACK_PROMOTION_LOOKBACK_DAYS * 86400;
+  const liveCandidates = streams.filter((stream) => stream.status === "live" && shouldProbeStream(stream));
+  const endedCandidatesByUrl = new Map<string, StreamAnnounce>();
+
+  for (const stream of streams) {
+    if (stream.status !== "ended" || stream.createdAt < endedPromotionCutoff || !shouldProbeStream(stream)) continue;
+    const url = normalizeProbeUrl(stream.streaming ?? "");
+    const existing = endedCandidatesByUrl.get(url);
+    if (!existing || stream.createdAt > existing.createdAt) {
+      endedCandidatesByUrl.set(url, stream);
+    }
+  }
+
+  const probeCandidates = [...liveCandidates, ...endedCandidatesByUrl.values()]
+    .sort((a, b) => {
+      const aLive = a.status === "live";
+      const bLive = b.status === "live";
+      if (aLive !== bLive) return aLive ? -1 : 1;
+      return b.createdAt - a.createdAt;
+    })
+    .slice(0, STREAM_PROBE_LIMIT);
   if (probeCandidates.length === 0) return streams;
 
   const definitelyDeadLiveKeys = new Set<string>();
+  const verifiedLivePlaybackKeys = new Set<string>();
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(STREAM_PROBE_CONCURRENCY, probeCandidates.length) }, async () => {
     while (nextIndex < probeCandidates.length) {
       const stream = probeCandidates[nextIndex++];
       if (!stream?.streaming) continue;
-      if (!(await probeStreamPlayable(stream.streaming))) {
+      const probe = await probeStreamPlayback(stream.streaming);
+      if (stream.status === "live" && !probe.playable) {
         definitelyDeadLiveKeys.add(streamSnapshotKey(stream));
+        continue;
+      }
+      if (stream.status === "ended" && probe.liveLike) {
+        verifiedLivePlaybackKeys.add(streamSnapshotKey(stream));
       }
     }
   });
   await Promise.all(workers);
 
-  return normalizeSnapshotStreamList(streams, definitelyDeadLiveKeys);
+  return normalizeSnapshotStreamList(streams, definitelyDeadLiveKeys, verifiedLivePlaybackKeys);
 }
 
 /** Query all relays and rebuild the cached snapshot. */
@@ -129,7 +187,7 @@ async function refreshCache(): Promise<void> {
   const streamFilter: Filter = {
     kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],
     since: sinceSec,
-    limit: Math.max(DEFAULT_LIMIT * 2, 200)
+    limit: Math.max(DEFAULT_LIMIT * 3, 1200)
   };
   const policyFilter: Filter | null =
     operatorPubkeys.length > 0
@@ -197,7 +255,7 @@ async function refreshCache(): Promise<void> {
         shouldIncludeSnapshotStream(stream, hiddenPubkeys, hiddenStreams)
       )
     );
-    const streams = sortSnapshotStreamsForResponse(await demoteDefinitelyDeadLiveStreams(publicStreams))
+    const streams = sortSnapshotStreamsForResponse(await annotateDefinitelyDeadLiveStreams(publicStreams))
       .slice(0, DEFAULT_LIMIT);
 
     cached = { streams, queriedAt: nowSec, relays };

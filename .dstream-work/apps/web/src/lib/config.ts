@@ -3,10 +3,16 @@ const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://relay.damus.io",
   "wss://nos.lol",
   "wss://relay.primal.net",
+  "wss://relay.snort.social",
   "wss://nostr.wine",
   "wss://nostr.mom",
   "wss://offchain.pub",
   "wss://purplepag.es",
+  "wss://relay.nostr.band",
+  "wss://relayable.org",
+  "wss://nostr.fmt.wiz.biz",
+  "wss://relay.nostr.net",
+  "wss://www.nostr.ltd",
   "wss://relay.nostr.wirednet.jp",
   "wss://nostr-pub.wellorder.net"
 ];

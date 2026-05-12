@@ -22,6 +22,10 @@ function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: st
   return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
 }
 
+function isPlaybackUnavailable(stream: unknown): boolean {
+  return (stream as { playbackHealth?: unknown } | null)?.playbackHealth === "unavailable";
+}
+
 function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: string } | null {
   const raw = (value ?? "").trim();
   if (!raw) return null;
@@ -264,6 +268,7 @@ export default function BrowseClient() {
                     const pubkeyLabel = npub
                       ? shortenText(npub, { head: 14, tail: 8 })
                       : shortenText(stream.pubkey, { head: 14, tail: 8 });
+                    const playbackUnavailable = isPlaybackUnavailable(stream);
                     const favorite =
                       social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId);
 
@@ -290,12 +295,23 @@ export default function BrowseClient() {
                               <span className="text-[10px] text-neutral-400 font-medium leading-tight line-clamp-2">{stream.contentWarningReason}</span>
                             </div>
                           )}
-                          <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                            Live
+                          <div className={`absolute top-2 left-2 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                            playbackUnavailable ? "bg-amber-600" : "bg-red-600"
+                          }`}>
+                            {playbackUnavailable ? "Live signal" : "Live"}
                           </div>
-                          {stream.stakeAmountAtomic && stream.stakeAmountAtomic !== "0" && (
-                            <div className="absolute top-2 right-2 bg-neutral-950/70 border border-neutral-700 text-neutral-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                              Stake
+                          {(playbackUnavailable || (stream.stakeAmountAtomic && stream.stakeAmountAtomic !== "0")) && (
+                            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                              {playbackUnavailable && (
+                                <div className="bg-neutral-950/80 border border-amber-500/50 text-amber-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
+                                  Playback issue
+                                </div>
+                              )}
+                              {stream.stakeAmountAtomic && stream.stakeAmountAtomic !== "0" && (
+                                <div className="bg-neutral-950/70 border border-neutral-700 text-neutral-200 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
+                                  Stake
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
