@@ -26,6 +26,10 @@ function isPlaybackUnavailable(stream: unknown): boolean {
   return (stream as { playbackHealth?: unknown } | null)?.playbackHealth === "unavailable";
 }
 
+function sortPlaybackIssuesLast<T>(streams: T[]): T[] {
+  return streams.slice().sort((a, b) => Number(isPlaybackUnavailable(a)) - Number(isPlaybackUnavailable(b)));
+}
+
 function parseGuildQuery(value: string | null): { pubkeyParam: string; guildId: string } | null {
   const raw = (value ?? "").trim();
   if (!raw) return null;
@@ -101,8 +105,10 @@ export default function BrowseClient() {
     const favoriteFiltered = favoritesOnly
       ? base.filter((stream) => social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId))
       : base;
-    if (!curatedOnly) return favoriteFiltered;
-    return favoriteFiltered.filter((stream) => curatedKeys.has(makeStreamKey(stream.pubkey, stream.streamId)));
+    const filtered = curatedOnly
+      ? favoriteFiltered.filter((stream) => curatedKeys.has(makeStreamKey(stream.pubkey, stream.streamId)))
+      : favoriteFiltered;
+    return sortPlaybackIssuesLast(filtered);
   }, [curatedKeys, curatedOnly, favoritesOnly, liveStreams, social]);
 
   const visibleVideoStreams = useMemo(() => {
