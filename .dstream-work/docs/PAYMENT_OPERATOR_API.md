@@ -171,6 +171,7 @@ Remote operators should implement the same behavior or a stronger rail-native eq
 - Operator setup/readiness UI: `/settings/monetization` calls `GET /api/payment-operator/readiness` and shows each rail's health/config/readiness state.
 - Route-level session smoke: `npm run smoke:payments` exercises mocked operator/session flows for XMR, Lightning, EVM, Solana, TRON, UTXO, XRPL, Cardano, viewer unlock readback, and private archive playback-token issuance.
 - Live provider/node smoke: `npm run smoke:payments:live` probes only configured live providers/nodes. Unconfigured rails are skipped. Set `ENV_FILE=.env.production` to load a production env file, and set `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1` when at least one live provider must be reachable.
+- Wallet QA readiness: `npm run smoke:wallets:qa` reports the rail-by-rail wallet certification matrix, missing provider/node env, and funded-wallet pass criteria. Set `WALLET_QA_REQUIRE_ALL=1` for a strict all-rail production gate.
 - Viewer unlock UX: active package sessions render a status timeline for session creation, target allocation, wallet/proof submission, operator verification, and access grant/failure.
 
 ## Rules

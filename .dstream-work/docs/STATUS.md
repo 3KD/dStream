@@ -16,6 +16,7 @@ Last updated: 2026-04-26
   - `npm run smoke:integrity:firefox` (Firefox): same flow + generated MediaMTX config
   - `npm run smoke:payments`: route-level payment-session smoke for XMR wallet-rpc subaddress settlement, Lightning operator settlement, EVM/Solana/TRON/UTXO/XRPL/Cardano operator sessions, viewer unlock readback, and private archive playback-token issuance
   - `npm run smoke:payments:live`: configured-provider smoke for XMR wallet-rpc, optional Lightning health, UTXO nodes, EVM, Solana, TRON, XRPL, and Cardano providers; unconfigured rails are skipped unless `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1`
+  - `npm run smoke:wallets:qa`: rail-wide wallet certification readiness for XMR, Lightning, EVM, Solana, TRON, BTC, DOGE, BCH, XRPL, and Cardano, including missing env and funded-wallet pass criteria
   - `npm run smoke:escrow`: stake session + wallet inject + viewer refund + broadcaster slash settlement (mock wallet mode; prints `SKIP` on real-wallet stacks)
   - `npm run smoke:escrow:v3`: multisig coordination session (prepare/make/exchange/import/sign/submit in mock mode; real-wallet mode validates up to exchange/import with automatic multisig-experimental enablement)
   - `npm run smoke:wallet`: wallet interoperability smoke (tip subaddress allocation + detection/confirmation polling; supports external wallets)
@@ -47,6 +48,7 @@ Last updated: 2026-04-26
 - ✅ The node-operator HTTP boundary is explicit and versioned in `docs/PAYMENT_OPERATOR_API.md`, with built-in same-origin operator routes at `/api/payment-operator/sessions/*`, readiness reporting at `/api/payment-operator/readiness`, and route-level smoke coverage for XMR, Lightning, EVM, Solana, TRON, UTXO, XRPL, and Cardano session flows.
 - ✅ Non-XMR paid archive packages are operator-first by default in the package settings UI: saves auto-wire the built-in local operator when no custom endpoint is supplied, `operator_observed` is enforced for those rails, and legacy client-proof fallback stays behind an explicit dev flag.
 - ✅ Operator setup/readiness UI and viewer unlock timeline are now part of the app: `/settings/monetization` shows health/config/readiness per rail, and the watch unlock panel shows session creation, target allocation, wallet/proof, verifier, and access grant/failure steps.
+- ✅ Wallet QA is explicit across rails: `docs/WALLET_CERTIFICATION.md` defines the funded-wallet pass standard, and `npm run smoke:wallets:qa` reports concrete readiness for XMR, Lightning, EVM, Solana, TRON, UTXO, XRPL, and Cardano wallet certification.
 - ✅ The payment productionization queue in `docs/PAYMENT_RAIL_COMPLETION_QUEUE.md` is complete: readiness UI, live provider smoke, viewer timeline, docs cleanup, operator security hardening, buyer wallet UX polish, and lint warning cleanup are all done.
 - ✅ Escrow trust boundary remains explicit: current model is multisig coordination + origin-enforced settlement, not on-chain contract escrow
 - ✅ Mobile store-release automation shipped: Fastlane lanes + signing/env checks + scripted release commands for TestFlight/App Store and Play internal/production (`docs/MOBILE_STORE_DEPLOY.md`)
