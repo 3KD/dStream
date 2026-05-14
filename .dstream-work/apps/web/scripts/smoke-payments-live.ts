@@ -211,10 +211,18 @@ async function main(): Promise<void> {
   const ok = results.filter((result) => result.status === "ok");
   const skipped = results.filter((result) => result.status === "skip");
   const requireConfigured = env("PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED") === "1";
+  const requireAll = env("PAYMENT_LIVE_SMOKE_REQUIRE_ALL") === "1";
 
-  console.log(failed.length ? "smoke:payments:live failed" : "smoke:payments:live passed");
+  const allSkipped = ok.length === 0 && failed.length === 0 && skipped.length === results.length;
+  console.log(failed.length ? "smoke:payments:live failed" : allSkipped ? "smoke:payments:live no configured probes" : "smoke:payments:live passed");
   for (const result of results) {
     console.log(`  ${result.status.padEnd(4)} ${result.rail}: ${result.message}`);
+  }
+
+  if (requireAll && skipped.length) {
+    console.error(`smoke:payments:live requires every rail configured and reachable; skipped: ${skipped.map((result) => result.rail).join(", ")}`);
+    process.exitCode = 1;
+    return;
   }
 
   if (requireConfigured && ok.length === 0) {

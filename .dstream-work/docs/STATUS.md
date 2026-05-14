@@ -15,8 +15,9 @@ Last updated: 2026-04-26
   - `npm run smoke:integrity` (Safari): same flow + manifest verification + tamper marker
   - `npm run smoke:integrity:firefox` (Firefox): same flow + generated MediaMTX config
   - `npm run smoke:payments`: route-level payment-session smoke for XMR wallet-rpc subaddress settlement, Lightning operator settlement, EVM/Solana/TRON/UTXO/XRPL/Cardano operator sessions, viewer unlock readback, and private archive playback-token issuance
-  - `npm run smoke:payments:live`: configured-provider smoke for XMR wallet-rpc, optional Lightning health, UTXO nodes, EVM, Solana, TRON, XRPL, and Cardano providers; unconfigured rails are skipped unless `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1`
+  - `npm run smoke:payments:live`: configured-provider smoke for XMR wallet-rpc, optional Lightning health, UTXO nodes, EVM, Solana, TRON, XRPL, and Cardano providers; unconfigured rails are reported as skipped, all-skipped runs report `no configured probes`, and strict production runs can fail with `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1` or `PAYMENT_LIVE_SMOKE_REQUIRE_ALL=1`
   - `npm run smoke:wallets:qa`: rail-wide wallet certification readiness for XMR, Lightning, EVM, Solana, TRON, BTC, DOGE, BCH, XRPL, and Cardano, including missing env and funded-wallet pass criteria
+  - `npm run gate:wallets:prod`: strict production wallet/payment gate requiring every live provider/node probe and every wallet QA rail to be ready
   - `npm run smoke:escrow`: stake session + wallet inject + viewer refund + broadcaster slash settlement (mock wallet mode; prints `SKIP` on real-wallet stacks)
   - `npm run smoke:escrow:v3`: multisig coordination session (prepare/make/exchange/import/sign/submit in mock mode; real-wallet mode validates up to exchange/import with automatic multisig-experimental enablement)
   - `npm run smoke:wallet`: wallet interoperability smoke (tip subaddress allocation + detection/confirmation polling; supports external wallets)

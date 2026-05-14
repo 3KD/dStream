@@ -28,6 +28,7 @@
     "smoke:payments": "tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/smoke-payments.ts",
     "smoke:payments:live": "tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/smoke-payments-live.ts",
     "smoke:wallets:qa": "tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/wallet-qa-readiness.ts",
+    "gate:wallets:prod": "PAYMENT_LIVE_SMOKE_REQUIRE_ALL=1 npm run smoke:payments:live && WALLET_QA_REQUIRE_ALL=1 npm run smoke:wallets:qa",
     "check": "npm run typecheck && npm test && npm run smoke:payments && npm run smoke:wallets:qa && npm run lint && npm run build",
     "infra:up": "docker compose -f infra/stream/docker-compose.yml up -d",
     "infra:up:test": "docker compose -f infra/stream/docker-compose.yml --profile test up -d",

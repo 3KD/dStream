@@ -170,8 +170,8 @@ Remote operators should implement the same behavior or a stronger rail-native eq
 
 - Operator setup/readiness UI: `/settings/monetization` calls `GET /api/payment-operator/readiness` and shows each rail's health/config/readiness state.
 - Route-level session smoke: `npm run smoke:payments` exercises mocked operator/session flows for XMR, Lightning, EVM, Solana, TRON, UTXO, XRPL, Cardano, viewer unlock readback, and private archive playback-token issuance.
-- Live provider/node smoke: `npm run smoke:payments:live` probes only configured live providers/nodes. Unconfigured rails are skipped. Set `ENV_FILE=.env.production` to load a production env file, and set `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1` when at least one live provider must be reachable.
-- Wallet QA readiness: `npm run smoke:wallets:qa` reports the rail-by-rail wallet certification matrix, missing provider/node env, and funded-wallet pass criteria. Set `WALLET_QA_REQUIRE_ALL=1` for a strict all-rail production gate.
+- Live provider/node smoke: `npm run smoke:payments:live` probes only configured live providers/nodes. Unconfigured rails are skipped and an all-skipped run reports `no configured probes`, not a proof pass. Set `ENV_FILE=.env.production` to load a production env file, `PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1` when at least one live provider must be reachable, or `PAYMENT_LIVE_SMOKE_REQUIRE_ALL=1` when every rail must be configured and reachable.
+- Wallet QA readiness: `npm run smoke:wallets:qa` reports the rail-by-rail wallet certification matrix, missing provider/node env, and funded-wallet pass criteria. Run `ENV_FILE=.env.production npm run gate:wallets:prod` for the strict production gate: every live provider/node probe must be reachable and every wallet QA rail must be ready.
 - Viewer unlock UX: active package sessions render a status timeline for session creation, target allocation, wallet/proof submission, operator verification, and access grant/failure.
 
 ## Rules

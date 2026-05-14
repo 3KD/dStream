@@ -23,6 +23,8 @@ ENV_FILE=.env.production npm run smoke:wallets:qa
 WALLET_QA_REQUIRE_READY=1 ENV_FILE=.env.production npm run smoke:wallets:qa
 WALLET_QA_REQUIRE_ALL=1 ENV_FILE=.env.production npm run smoke:wallets:qa
 PAYMENT_LIVE_SMOKE_REQUIRE_CONFIGURED=1 ENV_FILE=.env.production npm run smoke:payments:live
+PAYMENT_LIVE_SMOKE_REQUIRE_ALL=1 ENV_FILE=.env.production npm run smoke:payments:live
+ENV_FILE=.env.production npm run gate:wallets:prod
 ```
 
 Use `--json` when a deployment runner needs machine-readable output:
