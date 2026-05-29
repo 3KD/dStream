@@ -65,6 +65,7 @@ function isLikelyInternalStreamId(input: string): boolean {
   if (/^[0-9a-f]{64}--.+/.test(value)) return true;
   if (/^[0-9a-f]{64}$/.test(value)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) return true;
+  if (/^[a-z0-9][a-z0-9_-]{0,127}$/.test(value)) return true;
   return false;
 }
 
@@ -1816,14 +1817,14 @@ export default function WatchPage() {
                 )}
               </div>
             ) : (
-              <div
-                data-testid="watch-player-panel"
-                className={`${
-                  mobilePortraitLayout
-                    ? "order-1"
-                    : "h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]"
-                }`}
-              >
+	              <div
+	                data-testid="watch-player-panel"
+	                className={`${
+	                  mobilePortraitLayout
+	                    ? "order-0"
+	                    : "h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]"
+	                }`}
+	              >
                 {streamUrl ? (
                   <>
                     <GlobalPlayerSlot
@@ -2093,8 +2094,8 @@ export default function WatchPage() {
               </div>
             )}
 
-            {stakeRequiredAtomic && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+	            {stakeRequiredAtomic && (
+	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <MoneroLogo className="w-5 h-5 text-orange-400" />
@@ -2226,8 +2227,8 @@ export default function WatchPage() {
               </div>
             )}
 
-            {announce?.xmr && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+	            {announce?.xmr && (
+	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <MoneroLogo className="w-5 h-5 text-orange-400" />
@@ -2322,8 +2323,8 @@ export default function WatchPage() {
               </div>
             )}
 
-            {paymentRailGroups.length > 0 && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4">
+	            {paymentRailGroups.length > 0 && (
+	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Wallet Actions</div>
                   <div className="text-xs text-neutral-500">Native app / extension / CLI</div>
@@ -2443,8 +2444,8 @@ export default function WatchPage() {
               </div>
             )}
 
-            {hasLightningZap && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3">
+	            {hasLightningZap && (
+	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">NIP-57 Zaps</div>
                   <div className="text-xs text-neutral-500">

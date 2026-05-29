@@ -96,7 +96,7 @@ export function IdentityButton() {
   }, []);
 
   if (isLoading) {
-    return <div className="h-8 w-24 rounded-full bg-neutral-800 animate-pulse" />;
+    return <div className="h-8 w-8 rounded-lg bg-neutral-800 animate-pulse sm:w-24 sm:rounded-full" />;
   }
 
   const handleConnectExt = async () => {
@@ -137,18 +137,18 @@ export function IdentityButton() {
         type="button"
         onClick={toggleOpen}
         aria-expanded={isOpen}
-        className="flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-full px-3 py-1.5 text-xs sm:text-sm transition-colors whitespace-nowrap leading-none"
+        className="flex h-8 w-8 items-center justify-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-0 text-xs leading-none transition-colors hover:bg-neutral-800 sm:h-auto sm:w-auto sm:rounded-full sm:px-3 sm:py-1.5 sm:text-sm"
       >
         <KeyRound className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300" />
         {identity ? (
           <>
             {displayName ? (
-              <span className={`max-w-[10rem] truncate font-semibold ${isLive ? "text-emerald-300" : "text-blue-300"}`}>{displayName}</span>
+              <span className={`hidden max-w-[10rem] truncate font-semibold sm:inline ${isLive ? "text-emerald-300" : "text-blue-300"}`}>{displayName}</span>
             ) : null}
-            <span className="font-mono text-neutral-200">{shortenText(npub ?? identity.pubkey, { head: 14, tail: 8 })}</span>
+            <span className="hidden font-mono text-neutral-200 sm:inline">{shortenText(npub ?? identity.pubkey, { head: 14, tail: 8 })}</span>
           </>
         ) : (
-          <span className="text-neutral-300">Identity</span>
+          <span className="hidden text-neutral-300 sm:inline">Identity</span>
         )}
       </button>
 

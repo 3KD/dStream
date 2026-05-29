@@ -51,6 +51,21 @@ interface PersistedPlaybackState {
 }
 
 type PlaybackMode = "hls" | "whep" | "direct";
+type WebKitPresentationMode = "inline" | "picture-in-picture" | "fullscreen";
+type PictureInPictureVideo = HTMLVideoElement & {
+  disablePictureInPicture?: boolean;
+  requestPictureInPicture?: () => Promise<void>;
+  webkitSetPresentationMode?: (mode: WebKitPresentationMode) => void;
+  webkitPresentationMode?: WebKitPresentationMode;
+};
+type PictureInPictureDocument = Document & {
+  pictureInPictureElement?: Element | null;
+  pictureInPictureEnabled?: boolean;
+  exitPictureInPicture?: () => Promise<void>;
+};
+type AudioSessionLike = {
+  type?: string;
+};
 
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -114,12 +129,36 @@ function isLikelyMobilePlaybackDevice(): boolean {
   return false;
 }
 
+function isLikelyIosPlaybackDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent ?? "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS can identify as desktop Safari while still using iOS media APIs.
+  if (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
+
 function isLikelySafariBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent ?? "";
   if (!/Safari/i.test(ua)) return false;
   if (/Chrome|Chromium|CriOS|FxiOS|Firefox|Edg|OPR|SamsungBrowser|Android/i.test(ua)) return false;
   return true;
+}
+
+function shouldPreferNativeHlsPlayback(): boolean {
+  return isLikelySafariBrowser() || isLikelyIosPlaybackDevice() || isLikelyMobilePlaybackDevice();
+}
+
+function configureAudioSessionForPlayback(): void {
+  if (typeof navigator === "undefined") return;
+  const audioSession = (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession;
+  if (!audioSession) return;
+  try {
+    audioSession.type = "playback";
+  } catch {
+    // ignore unsupported or read-only implementations
+  }
 }
 
 function isExternalPlaybackUrl(value: string): boolean {
@@ -202,7 +241,7 @@ export function Player({
 
   useEffect(() => {
     setIsMobilePlayback(isLikelyMobilePlaybackDevice());
-    setPreferNativeHls(isLikelySafariBrowser());
+    setPreferNativeHls(shouldPreferNativeHlsPlayback());
   }, []);
 
   const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
@@ -219,6 +258,7 @@ export function Player({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
+  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
   const [timelineStart, setTimelineStart] = useState(0);
   const [timelineEnd, setTimelineEnd] = useState(0);
   const [timelinePosition, setTimelinePosition] = useState(0);
@@ -251,11 +291,14 @@ export function Player({
 
   useEffect(() => {
     setBackgroundPlayEnabled(readBackgroundPlayPreference());
+    setBackgroundPlayPreferenceLoaded(true);
   }, []);
 
   useEffect(() => {
+    if (!backgroundPlayPreferenceLoaded) return;
+    if (backgroundPlayEnabledOverride !== undefined) return;
     writeBackgroundPlayPreference(backgroundPlayEnabled);
-  }, [backgroundPlayEnabled]);
+  }, [backgroundPlayEnabled, backgroundPlayEnabledOverride, backgroundPlayPreferenceLoaded]);
 
   const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
 
@@ -388,6 +431,11 @@ export function Player({
   }, [error, isPlaying]);
 
   useEffect(() => {
+    if (!effectiveBackgroundPlayEnabled) return;
+    configureAudioSessionForPlayback();
+  }, [effectiveBackgroundPlayEnabled]);
+
+  useEffect(() => {
     if (typeof document === "undefined" || !effectiveBackgroundPlayEnabled) return;
     const video = videoRef.current;
     if (!video) return;
@@ -405,11 +453,21 @@ export function Player({
       if (resumeTimer) clearTimeout(resumeTimer);
       resumeTimer = setTimeout(keepPlaybackAlive, 120);
     };
+    const onPageHidden = () => {
+      if (video.ended) return;
+      void video.play().catch(() => {
+        // ignore browser policy failures
+      });
+    };
     document.addEventListener("visibilitychange", keepPlaybackAlive);
+    window.addEventListener("pagehide", onPageHidden);
+    document.addEventListener("freeze", onPageHidden as EventListener);
     video.addEventListener("pause", onPause);
     return () => {
       if (resumeTimer) clearTimeout(resumeTimer);
       document.removeEventListener("visibilitychange", keepPlaybackAlive);
+      window.removeEventListener("pagehide", onPageHidden);
+      document.removeEventListener("freeze", onPageHidden as EventListener);
       video.removeEventListener("pause", onPause);
     };
   }, [effectiveBackgroundPlayEnabled]);
@@ -502,13 +560,20 @@ export function Player({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const pipVideo = video as PictureInPictureVideo;
+    const syncWebkitPip = () => {
+      setIsPip(pipVideo.webkitPresentationMode === "picture-in-picture");
+    };
     const onEnter = () => setIsPip(true);
     const onLeave = () => setIsPip(false);
     video.addEventListener("enterpictureinpicture", onEnter as any);
     video.addEventListener("leavepictureinpicture", onLeave as any);
+    video.addEventListener("webkitpresentationmodechanged", syncWebkitPip as any);
+    syncWebkitPip();
     return () => {
       video.removeEventListener("enterpictureinpicture", onEnter as any);
       video.removeEventListener("leavepictureinpicture", onLeave as any);
+      video.removeEventListener("webkitpresentationmodechanged", syncWebkitPip as any);
     };
   }, []);
 
@@ -705,19 +770,59 @@ export function Player({
       return true;
     };
 
-    const startHls = (hlsSource: string): boolean => {
+    const startHls = (hlsSource: string, options: { skipNative?: boolean } = {}): boolean => {
       let mediaRecoveryAttempts = 0;
       setPlaybackMode("hls");
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
       // unless integrity verification is enabled (we need byte access).
-      if (!integrityEnabled && preferNativeHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-        const onLoaded = () => {
+      if (!integrityEnabled && preferNativeHls && !options.skipNative && video.canPlayType("application/vnd.apple.mpegurl")) {
+        let nativeStartTimer: ReturnType<typeof setTimeout> | null = null;
+        let nativeSettled = false;
+        const cleanupNativeListeners = () => {
+          if (nativeStartTimer) {
+            clearTimeout(nativeStartTimer);
+            nativeStartTimer = null;
+          }
+          video.removeEventListener("loadedmetadata", onNativeReady);
+          video.removeEventListener("canplay", onNativeReady);
+          video.removeEventListener("playing", onNativeReady);
+          video.removeEventListener("error", onNativeError);
+        };
+        const switchNativeToCompatibility = (reason: string): boolean => {
+          if (cancelled || nativeSettled || !Hls.isSupported()) return false;
+          nativeSettled = true;
+          cleanupNativeListeners();
+          setNote(reason);
+          setError(null);
+          setStatus("Loading…");
+          setNeedsClick(false);
+          try {
+            video.pause();
+            video.removeAttribute("src");
+            video.load();
+          } catch {
+            // ignore
+          }
+          startHls(hlsSource, { skipNative: true });
+          return true;
+        };
+        const onNativeReady = () => {
+          if (nativeSettled) return;
+          nativeSettled = true;
+          if (nativeStartTimer) {
+            clearTimeout(nativeStartTimer);
+            nativeStartTimer = null;
+          }
           applyPersistedSeek();
           setStatus("Ready");
+          setNeedsClick(false);
           sendReady();
         };
         const onNativeError = () => {
+          if (switchNativeToCompatibility("Native HLS unavailable. Switched to compatibility playback.")) return;
+          if (!nativeSettled) nativeSettled = true;
+          cleanupNativeListeners();
           if (
             tryHlsBackup("Primary stream unavailable (trying backup stream path).", () => {
               try {
@@ -732,16 +837,48 @@ export function Player({
           }
           setError("Unable to load stream.");
         };
-        video.addEventListener("loadedmetadata", onLoaded);
+        video.addEventListener("loadedmetadata", onNativeReady);
+        video.addEventListener("canplay", onNativeReady);
+        video.addEventListener("playing", onNativeReady);
         video.addEventListener("error", onNativeError);
+        nativeStartTimer = setTimeout(() => {
+          if (cancelled || nativeSettled) return;
+          if (video.readyState >= 2 || video.currentTime > 0 || !video.paused) {
+            onNativeReady();
+            return;
+          }
+          if (switchNativeToCompatibility("Native HLS did not start. Switched to compatibility playback.")) return;
+          if (
+            tryHlsBackup("Primary stream did not start (trying backup stream path).", () => {
+              cleanupNativeListeners();
+              nativeSettled = true;
+              try {
+                video.pause();
+                video.removeAttribute("src");
+              } catch {
+                // ignore
+              }
+            })
+          ) {
+            return;
+          }
+          nativeSettled = true;
+          cleanupNativeListeners();
+          setStatus("Click to play");
+          setNeedsClick(true);
+        }, 6500);
         video.src = hlsSource;
         void video.play().catch(() => {
+          if (cancelled || nativeSettled) return;
+          if (Hls.isSupported()) {
+            setStatus("Loading…");
+            return;
+          }
           setStatus("Click to play");
           setNeedsClick(true);
         });
         removeNativeListener = () => {
-          video.removeEventListener("loadedmetadata", onLoaded);
-          video.removeEventListener("error", onNativeError);
+          cleanupNativeListeners();
         };
         return true;
       }
@@ -994,7 +1131,12 @@ export function Player({
     whepSrc
   ]);
 
-  const canTogglePip = typeof document !== "undefined" && "pictureInPictureEnabled" in document;
+  const currentPipVideo = videoRef.current as PictureInPictureVideo | null;
+  const canTogglePip =
+    typeof document !== "undefined" &&
+    (!!(document as PictureInPictureDocument).pictureInPictureEnabled ||
+      typeof currentPipVideo?.requestPictureInPicture === "function" ||
+      typeof currentPipVideo?.webkitSetPresentationMode === "function");
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1064,18 +1206,63 @@ export function Player({
     return note;
   }, [note]);
 
-  const togglePip = async () => {
-    const video = videoRef.current;
-    if (!video) return;
+  const requestPictureInPictureFromGesture = async () => {
+    const video = videoRef.current as PictureInPictureVideo | null;
+    if (!video || typeof document === "undefined") return false;
+    const pipDoc = document as PictureInPictureDocument;
     try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else if ((document as any).pictureInPictureEnabled && !(video as any).disablePictureInPicture) {
-        await (video as any).requestPictureInPicture();
+      if (pipDoc.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture") {
+        setIsPip(true);
+        return true;
+      }
+      if (
+        pipDoc.pictureInPictureEnabled &&
+        !video.disablePictureInPicture &&
+        typeof video.requestPictureInPicture === "function"
+      ) {
+        await video.requestPictureInPicture();
+        setIsPip(true);
+        return true;
+      }
+      if (typeof video.webkitSetPresentationMode === "function") {
+        video.webkitSetPresentationMode("picture-in-picture");
+        const active = (video as { webkitPresentationMode?: string }).webkitPresentationMode === "picture-in-picture";
+        setIsPip(active);
+        return active;
+      }
+    } catch {
+      // ignore unsupported or policy-blocked PiP requests
+    }
+    return false;
+  };
+
+  const exitPictureInPictureMode = async () => {
+    const video = videoRef.current as PictureInPictureVideo | null;
+    if (!video || typeof document === "undefined") return false;
+    const pipDoc = document as PictureInPictureDocument;
+    try {
+      if (pipDoc.pictureInPictureElement && typeof pipDoc.exitPictureInPicture === "function") {
+        await pipDoc.exitPictureInPicture();
+        setIsPip(false);
+        return true;
+      }
+      if (video.webkitPresentationMode === "picture-in-picture" && typeof video.webkitSetPresentationMode === "function") {
+        video.webkitSetPresentationMode("inline");
+        setIsPip(false);
+        return true;
       }
     } catch {
       // ignore
     }
+    return false;
+  };
+
+  const togglePip = async () => {
+    if (isPip) {
+      await exitPictureInPictureMode();
+      return;
+    }
+    await requestPictureInPictureFromGesture();
   };
 
   const toggleFullscreen = async () => {
@@ -1119,6 +1306,31 @@ export function Player({
     } catch {
       // ignore
     }
+  };
+
+  const enableBackgroundPlayFromGesture = () => {
+    const video = videoRef.current;
+    setBackgroundPlayEnabled(true);
+    configureAudioSessionForPlayback();
+    if (!video) return;
+
+    setNeedsClick(false);
+    unmuteFromGesture();
+    void video.play().catch(() => {
+      setStatus("Click to play");
+      setNeedsClick(true);
+    });
+    if (isMobilePlayback) {
+      void requestPictureInPictureFromGesture();
+    }
+  };
+
+  const toggleBackgroundPlay = () => {
+    if (effectiveBackgroundPlayEnabled) {
+      setBackgroundPlayEnabled(false);
+      return;
+    }
+    enableBackgroundPlayFromGesture();
   };
 
   const togglePlayPause = () => {
@@ -1187,12 +1399,26 @@ export function Player({
     const currentlyMuted = video.muted || volume === 0;
     const currentlyPaused = video.paused || video.ended;
 
-    // 1. If the video needs intervention (muted, paused, or requires click)
-    // Any interaction immediately unmutes and plays.
     if (needsClick || currentlyMuted || currentlyPaused) {
-      unmuteFromGesture();
+      const shouldUnmuteAfterPlay = currentlyMuted || needsClick;
       setNeedsClick(false);
-      void video.play().catch(() => {
+      if (shouldUnmuteAfterPlay) unmuteFromGesture();
+      const playPromise = currentlyPaused || needsClick ? video.play() : Promise.resolve();
+      void playPromise.catch(() => {
+        if (shouldUnmuteAfterPlay) {
+          setVolume(0);
+          try {
+            video.muted = true;
+            video.volume = 0;
+          } catch {
+            // ignore
+          }
+          void video.play().catch(() => {
+            setStatus("Click to play");
+            setNeedsClick(true);
+          });
+          return;
+        }
         setStatus("Click to play");
         setNeedsClick(true);
       });
@@ -1449,7 +1675,7 @@ export function Player({
 
                 <button
                   type="button"
-                  onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                  onClick={toggleBackgroundPlay}
                   className={`flex px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
                     effectiveBackgroundPlayEnabled
                       ? "bg-white/10 border-white/20 text-white"

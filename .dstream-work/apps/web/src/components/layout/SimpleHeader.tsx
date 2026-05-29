@@ -27,7 +27,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
   const [searchText, setSearchText] = useState("");
   const showHeaderSearch = true;
   const navClassName =
-    "inline-flex items-center rounded-lg border border-neutral-800/90 bg-neutral-900/40 px-2.5 py-1 text-xs sm:text-sm text-neutral-300 hover:border-neutral-700 hover:text-white transition-colors whitespace-nowrap leading-none";
+    "inline-flex shrink-0 items-center rounded-lg border border-neutral-800/90 bg-neutral-900/40 px-2 py-1 text-[11px] text-neutral-300 hover:border-neutral-700 hover:text-white transition-colors whitespace-nowrap leading-none sm:px-2.5 sm:text-sm";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -52,16 +52,16 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
   };
 
   return (
-    <header className="relative isolate border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md z-[80] px-3 py-2 sm:px-4 sm:py-2.5 lg:px-6">
+    <header className="relative isolate z-[80] border-b border-neutral-800 bg-neutral-950/90 px-3 py-2 backdrop-blur-md sm:px-4 sm:py-2.5 lg:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link href="/" className="flex items-center group min-w-0 shrink-0">
+          <Link href="/" className="group flex min-w-0 shrink-0 items-center">
             <img
               src="/logo_trimmed.png"
               alt="dStream Logo"
-              className="h-8 sm:h-10 md:h-11 w-auto object-contain relative z-10 transition-transform group-hover:scale-105 shrink-0 -mr-[0.1em]"
+              className="relative z-10 h-7 w-auto shrink-0 object-contain -mr-[0.1em] transition-transform group-hover:scale-105 sm:h-10 md:h-11"
             />
-            <span className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-none bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 bg-clip-text text-transparent relative z-0 whitespace-nowrap">
+            <span className="relative z-0 whitespace-nowrap bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 bg-clip-text text-xl font-black leading-none tracking-tight text-transparent sm:text-3xl md:text-4xl">
               Stream
             </span>
           </Link>
@@ -87,7 +87,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
               (isSearchOpen ? (
                 <form
                   onSubmit={submitSearch}
-                  className="flex h-8 w-44 items-center rounded-lg border border-neutral-700 bg-neutral-900/90 px-2 text-neutral-200 sm:h-9 sm:w-56 md:w-64"
+                  className="flex h-8 w-[min(11rem,calc(100vw-8.75rem))] items-center rounded-lg border border-neutral-700 bg-neutral-900/90 px-2 text-neutral-200 sm:h-9 sm:w-56 md:w-64"
                 >
                   <Search className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
                   <input
@@ -115,7 +115,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
                 <button
                   type="button"
                   onClick={() => setIsSearchOpen(true)}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-200 sm:w-9 sm:h-9"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 hover:bg-neutral-800 sm:h-9 sm:w-9"
                   aria-label="Open search"
                 >
                   <Search className="w-3.5 h-3.5" />

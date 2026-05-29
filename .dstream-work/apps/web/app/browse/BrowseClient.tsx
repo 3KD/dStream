@@ -152,11 +152,11 @@ export default function BrowseClient() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main id="video" className="max-w-[1800px] mx-auto p-8 space-y-8">
+      <main id="video" className="mx-auto max-w-[1800px] space-y-6 px-3 py-5 sm:p-6 lg:p-8">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-bold">Browse</h1>
-            <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-bold sm:text-2xl">Browse</h1>
+            <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&>*]:shrink-0 [&::-webkit-scrollbar]:hidden">
               <button
                 type="button"
                 onClick={() => setBrowseTab("browse")}
@@ -194,14 +194,14 @@ export default function BrowseClient() {
                 Video
               </Link>
               <Link
-                className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
+                className="hidden text-xs items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300 sm:inline-flex"
                 href="/"
               >
                 Home
               </Link>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&>*]:shrink-0 [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
               onClick={() => setCuratedOnly((current) => !current)}
@@ -232,9 +232,13 @@ export default function BrowseClient() {
         {curatedInfo}
 
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="aspect-video bg-neutral-900 rounded-xl animate-pulse" />
+              <div key={i} className="space-y-3 rounded-lg border border-neutral-900 bg-neutral-900/40 p-2 sm:rounded-xl">
+                <div className="aspect-video rounded-md bg-neutral-900 animate-pulse" />
+                <div className="h-4 w-3/4 rounded bg-neutral-900 animate-pulse" />
+                <div className="h-3 w-1/2 rounded bg-neutral-900 animate-pulse" />
+              </div>
             ))}
           </div>
         ) : visibleLiveStreams.length === 0 && visibleVideoStreams.length === 0 && visibleOfflineStreams.length === 0 ? (
@@ -256,7 +260,7 @@ export default function BrowseClient() {
                   No live streams match current filters.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                   {visibleLiveStreams.map((stream, index) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
@@ -271,7 +275,7 @@ export default function BrowseClient() {
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
                         key={`live:${streamCanonicalId(stream)}`}
-                        className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
+                        className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
                         <div className="aspect-video bg-neutral-800 flex items-center justify-center relative overflow-hidden">
                           <div className={`w-full h-full ${stream.contentWarningReason ? 'blur-xl grayscale' : ''}`}>
@@ -298,9 +302,9 @@ export default function BrowseClient() {
                             </div>
                           )}
                         </div>
-                        <div className="p-4 space-y-1">
+                        <div className="space-y-1 p-3 sm:p-4">
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className="font-bold text-base line-clamp-1 min-w-0">{stream.title || "Untitled Stream"}</h3>
+                            <h3 className="min-w-0 line-clamp-2 text-sm font-bold leading-snug sm:line-clamp-1 sm:text-base">{stream.title || "Untitled Stream"}</h3>
                             <button
                               type="button"
                               onClick={(event) => {
@@ -308,7 +312,7 @@ export default function BrowseClient() {
                                 event.stopPropagation();
                                 social.toggleFavoriteStream(stream.pubkey, stream.streamId);
                               }}
-                              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-950/40 hover:bg-neutral-950/70 border border-neutral-800 text-neutral-200"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950/40 text-neutral-200 hover:bg-neutral-950/70 sm:h-9 sm:w-9 sm:rounded-xl"
                               title={favorite ? "Unfavorite" : "Favorite"}
                               aria-label={favorite ? "Unfavorite stream" : "Favorite stream"}
                             >
@@ -354,7 +358,7 @@ export default function BrowseClient() {
                   No replay streams match current filters.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                   {visibleVideoStreams.map((stream) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
@@ -370,7 +374,7 @@ export default function BrowseClient() {
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
                         key={`video:${streamCanonicalId(stream)}:${stream.createdAt}`}
-                        className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
+                        className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
@@ -391,9 +395,9 @@ export default function BrowseClient() {
                             {videoModeLabel(videoPolicy)}
                           </div>
                         </div>
-                        <div className="p-4 space-y-1">
+                        <div className="space-y-1 p-3 sm:p-4">
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className="font-bold text-base line-clamp-1 min-w-0">{stream.title || "Untitled Replay"}</h3>
+                            <h3 className="min-w-0 line-clamp-2 text-sm font-bold leading-snug sm:line-clamp-1 sm:text-base">{stream.title || "Untitled Replay"}</h3>
                             <button
                               type="button"
                               onClick={(event) => {
@@ -401,7 +405,7 @@ export default function BrowseClient() {
                                 event.stopPropagation();
                                 social.toggleFavoriteStream(stream.pubkey, stream.streamId);
                               }}
-                              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-950/40 hover:bg-neutral-950/70 border border-neutral-800 text-neutral-200"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950/40 text-neutral-200 hover:bg-neutral-950/70 sm:h-9 sm:w-9 sm:rounded-xl"
                               title={favorite ? "Unfavorite" : "Favorite"}
                               aria-label={favorite ? "Unfavorite stream" : "Favorite stream"}
                             >
@@ -436,7 +440,7 @@ export default function BrowseClient() {
                   No offline streams match current filters.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                   {visibleOfflineStreams.map((stream) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
@@ -451,7 +455,7 @@ export default function BrowseClient() {
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
                         key={`offline:${streamCanonicalId(stream)}:${stream.createdAt}`}
-                        className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
+                        className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
@@ -472,9 +476,9 @@ export default function BrowseClient() {
                             Offline
                           </div>
                         </div>
-                        <div className="p-4 space-y-1">
+                        <div className="space-y-1 p-3 sm:p-4">
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className="font-bold text-base line-clamp-1 min-w-0">{stream.title || "Untitled Stream"}</h3>
+                            <h3 className="min-w-0 line-clamp-2 text-sm font-bold leading-snug sm:line-clamp-1 sm:text-base">{stream.title || "Untitled Stream"}</h3>
                             <button
                               type="button"
                               onClick={(event) => {
@@ -482,7 +486,7 @@ export default function BrowseClient() {
                                 event.stopPropagation();
                                 social.toggleFavoriteStream(stream.pubkey, stream.streamId);
                               }}
-                              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-neutral-950/40 hover:bg-neutral-950/70 border border-neutral-800 text-neutral-200"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950/40 text-neutral-200 hover:bg-neutral-950/70 sm:h-9 sm:w-9 sm:rounded-xl"
                               title={favorite ? "Unfavorite" : "Favorite"}
                               aria-label={favorite ? "Unfavorite stream" : "Favorite stream"}
                             >

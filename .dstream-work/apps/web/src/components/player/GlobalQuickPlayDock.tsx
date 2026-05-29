@@ -41,6 +41,20 @@ type PipCapableVideo = HTMLVideoElement & {
   disablePictureInPicture?: boolean;
   requestPictureInPicture?: () => Promise<void>;
 };
+type AudioSessionLike = {
+  type?: string;
+};
+
+function configureAudioSessionForPlayback(): void {
+  if (typeof navigator === "undefined") return;
+  const audioSession = (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession;
+  if (!audioSession) return;
+  try {
+    audioSession.type = "playback";
+  } catch {
+    // ignore unsupported or read-only implementations
+  }
+}
 
 function toHeight(width: number): number {
   return Math.round((width * 9) / 16);
@@ -144,6 +158,7 @@ export function GlobalQuickPlayDock() {
   const [muted, setMuted] = useState(false);
   const [pipActive, setPipActive] = useState(false);
   const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
+  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"idle" | "drag" | "resize">("idle");
   const [touchDevice, setTouchDevice] = useState(false);
 
@@ -267,10 +282,17 @@ export function GlobalQuickPlayDock() {
   useEffect(() => {
     setTouchDevice(isTouchDevice());
     setBackgroundPlayEnabled(readBackgroundPlayPreference());
+    setBackgroundPlayPreferenceLoaded(true);
   }, []);
 
   useEffect(() => {
+    if (!backgroundPlayPreferenceLoaded) return;
     writeBackgroundPlayPreference(backgroundPlayEnabled);
+  }, [backgroundPlayEnabled, backgroundPlayPreferenceLoaded]);
+
+  useEffect(() => {
+    if (!backgroundPlayEnabled) return;
+    configureAudioSessionForPlayback();
   }, [backgroundPlayEnabled]);
 
   useEffect(() => {
@@ -697,6 +719,39 @@ export function GlobalQuickPlayDock() {
     }
   }, [requestSystemPip]);
 
+  const enableBackgroundPlayFromGesture = useCallback(() => {
+    setBackgroundPlayEnabled(true);
+    configureAudioSessionForPlayback();
+
+    const video = videoRef.current as PipCapableVideo | null;
+    const nextVolume = muted || volume === 0 ? 0.7 : clampVolume(volume);
+    setMuted(false);
+    setVolume(nextVolume);
+
+    if (!video) return;
+    try {
+      video.muted = false;
+      video.volume = nextVolume;
+    } catch {
+      // ignore
+    }
+
+    void video.play().catch(() => {
+      // Keep the preference on; the shared player will retry while background mode is enabled.
+    });
+    if (touchDevice) {
+      void requestSystemPip();
+    }
+  }, [muted, requestSystemPip, touchDevice, volume]);
+
+  const handleToggleBackgroundPlay = useCallback(() => {
+    if (backgroundPlayEnabled) {
+      setBackgroundPlayEnabled(false);
+      return;
+    }
+    enableBackgroundPlayFromGesture();
+  }, [backgroundPlayEnabled, enableBackgroundPlayFromGesture]);
+
   const globalPlayerProps = useMemo(() => ({
     src: hlsSrc,
     whepSrc,
@@ -882,7 +937,7 @@ export function GlobalQuickPlayDock() {
             <div className="flex flex-col gap-1 items-center relative">
               <button
                 type="button"
-                onClick={() => setBackgroundPlayEnabled((current) => !current)}
+                onClick={handleToggleBackgroundPlay}
                 className={`rounded-lg border px-1 py-1 text-[10px] font-semibold transition z-10 ${
                   backgroundPlayEnabled
                     ? "border-blue-400/60 bg-blue-500/20 text-blue-100"
