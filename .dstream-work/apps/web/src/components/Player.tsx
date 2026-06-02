@@ -244,7 +244,10 @@ export function Player({
     setPreferNativeHls(shouldPreferNativeHlsPlayback());
   }, []);
 
-  const effectiveAutoplayMuted = isMobilePlayback ? true : (autoplayMuted ?? true);
+  const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
+  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
+  const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
+  const effectiveAutoplayMuted = effectiveBackgroundPlayEnabled ? false : isMobilePlayback ? true : (autoplayMuted ?? true);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
@@ -257,8 +260,6 @@ export function Player({
   const [unmuteHintPhase, setUnmuteHintPhase] = useState<"hidden" | "visible" | "fading">("hidden");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
-  const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
-  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
   const [timelineStart, setTimelineStart] = useState(0);
   const [timelineEnd, setTimelineEnd] = useState(0);
   const [timelinePosition, setTimelinePosition] = useState(0);
@@ -283,11 +284,15 @@ export function Player({
     if (persisted) {
       const persistedMuted = persisted.muted === true;
       const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
+      if (effectiveBackgroundPlayEnabled) {
+        setVolume(Math.max(0.05, persistedVolume || 1));
+        return;
+      }
       setVolume(persistedMuted ? 0 : persistedVolume);
       return;
     }
     setVolume(effectiveAutoplayMuted ? 0 : 1);
-  }, [effectiveAutoplayMuted, playbackStateKey]);
+  }, [effectiveAutoplayMuted, effectiveBackgroundPlayEnabled, playbackStateKey]);
 
   useEffect(() => {
     setBackgroundPlayEnabled(readBackgroundPlayPreference());
@@ -299,8 +304,6 @@ export function Player({
     if (backgroundPlayEnabledOverride !== undefined) return;
     writeBackgroundPlayPreference(backgroundPlayEnabled);
   }, [backgroundPlayEnabled, backgroundPlayEnabledOverride, backgroundPlayPreferenceLoaded]);
-
-  const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
 
   useEffect(() => {
     selectedQualityRef.current = selectedQuality;
@@ -330,12 +333,13 @@ export function Player({
     const video = videoRef.current;
     if (!video) return;
     try {
-      video.volume = Math.min(1, Math.max(0, volume));
-      video.muted = volume === 0;
+      const nextVolume = effectiveBackgroundPlayEnabled && volume === 0 ? 1 : Math.min(1, Math.max(0, volume));
+      video.volume = nextVolume;
+      video.muted = nextVolume === 0;
     } catch {
       // ignore
     }
-  }, [volume]);
+  }, [effectiveBackgroundPlayEnabled, volume]);
 
   useEffect(() => {
     if (volume > 0) {
@@ -1194,7 +1198,7 @@ export function Player({
   const liveLagSeconds = Math.max(0, timelineEnd - clampedTimelinePosition);
   const canJumpToLive = isLiveStream && playbackMode === "hls" && showTimeline && liveLagSeconds > 8.0;
   const isAtLiveEdge = !isLiveStream || !showTimeline || liveLagSeconds <= 8.0;
-  const showTapForSound = !error && !needsClick && (volume === 0 || videoRef.current?.muted === true);
+  const showTapForSound = !effectiveBackgroundPlayEnabled && !error && !needsClick && (volume === 0 || videoRef.current?.muted === true);
   const timelineDuration = Math.max(0, timelineEnd - timelineStart);
   const visibleTimelinePosition = Math.max(0, clampedTimelinePosition - timelineStart);
   const overlayTitleLabel = (overlayTitle ?? "").trim();
@@ -1483,7 +1487,7 @@ export function Player({
           playsInline
           controls={effectiveNativeControls && nsfwConsented}
           autoPlay={nsfwConsented}
-          muted={volume === 0}
+          muted={volume === 0 && !effectiveBackgroundPlayEnabled}
           onClick={handleVideoSurfaceInteraction}
         >
           {captionTrackList.map((track, index) => (

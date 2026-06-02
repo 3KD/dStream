@@ -17,8 +17,19 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
   const [forceTick, setForceTick] = useState(0);
   const portalsRef = useRef<Record<string, HTMLElement>>({});
   const [activeRequest, setActiveRequest] = useState<{ id: string; props: any } | null>(null);
+  const [playerHost, setPlayerHost] = useState<HTMLDivElement | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const fallbackContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const host = document.createElement("div");
+    host.setAttribute("data-global-player-host", "true");
+    host.className = "w-full h-full relative z-0";
+    setPlayerHost(host);
+    return () => {
+      host.remove();
+    };
+  }, []);
 
   const registerPortal = useCallback((id: string, el: HTMLElement) => {
     portalsRef.current[id] = el;
@@ -65,22 +76,36 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // If the active request's portal exists, render it there.
-  // Otherwise, render into the fallback persistent container so it NEVER unmounts and wipes the buffer!
-  let targetEl = null;
-  if (activeRequest && portalsRef.current[activeRequest.id]) {
-    targetEl = portalsRef.current[activeRequest.id];
-  } else if (activeRequest && fallbackContainerRef.current) {
-    targetEl = fallbackContainerRef.current;
-  }
+  useLayoutEffect(() => {
+    if (!playerHost) return;
+    const fallback = fallbackContainerRef.current;
+    const target = activeRequest ? portalsRef.current[activeRequest.id] ?? fallback : fallback;
+    if (!target) return;
+    if (playerHost.parentElement !== target) {
+      target.appendChild(playerHost);
+    }
+  }, [activeRequest, forceTick, playerHost]);
 
   const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal, clearRequest }), [registerPortal, unregisterPortal, requestPortal, clearRequest]);
 
   return (
     <GlobalPlayerContext.Provider value={contextValue}>
       {children}
-      <div ref={fallbackContainerRef} style={{ display: "none" }} aria-hidden="true" />
-      {targetEl && activeRequest ? createPortal(<Player {...(activeRequest.props || {})} />, targetEl) : null}
+      <div
+        ref={fallbackContainerRef}
+        style={{
+          position: "fixed",
+          left: -10000,
+          top: 0,
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none"
+        }}
+        aria-hidden="true"
+      />
+      {playerHost && activeRequest ? createPortal(<Player {...(activeRequest.props || {})} />, playerHost) : null}
     </GlobalPlayerContext.Provider>
   );
 }
