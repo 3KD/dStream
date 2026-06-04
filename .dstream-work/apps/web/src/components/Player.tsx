@@ -184,6 +184,17 @@ function formatPlaybackTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
+function applyHlsPlaybackTuning(hls: Hls, options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }): void {
+  const lowLatencyMode = options.lowLatencyEnabled && !options.backgroundPlayEnabled;
+  const config = hls.config as any;
+  config.lowLatencyMode = lowLatencyMode;
+  config.maxBufferLength = options.backgroundPlayEnabled ? 180 : lowLatencyMode ? 30 : 90;
+  config.maxMaxBufferLength = options.backgroundPlayEnabled ? 300 : lowLatencyMode ? 60 : 120;
+  config.backBufferLength = options.backgroundPlayEnabled ? 30 : lowLatencyMode ? 30 : 90;
+  config.liveSyncDurationCount = options.backgroundPlayEnabled ? 8 : lowLatencyMode ? 3 : 5;
+  config.liveMaxLatencyDurationCount = options.backgroundPlayEnabled ? 16 : lowLatencyMode ? 5 : 8;
+}
+
 export function Player({
   src,
   fallbackSrc,
@@ -312,6 +323,12 @@ export function Player({
   useEffect(() => {
     playbackModeRef.current = playbackMode;
   }, [playbackMode]);
+
+  useEffect(() => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    applyHlsPlaybackTuning(hls, { lowLatencyEnabled, backgroundPlayEnabled: effectiveBackgroundPlayEnabled });
+  }, [effectiveBackgroundPlayEnabled, lowLatencyEnabled]);
 
   useEffect(() => {
     const hls = hlsRef.current;
@@ -908,15 +925,12 @@ export function Player({
         fragLoadingMaxRetry: 30,
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetryTimeout: 8000,
-        maxBufferLength: lowLatencyEnabled ? 30 : 90,
-        backBufferLength: lowLatencyEnabled ? 30 : 90,
-        liveSyncDurationCount: lowLatencyEnabled ? 3 : 5,
-        liveMaxLatencyDurationCount: lowLatencyEnabled ? 5 : 8,
         fLoader: P2PFragmentLoader,
-        lowLatencyMode: lowLatencyEnabled,
+        lowLatencyMode: false,
         dstreamRefs: dstreamRefs,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
+      applyHlsPlaybackTuning(hls, { lowLatencyEnabled, backgroundPlayEnabled: effectiveBackgroundPlayEnabled });
       hlsRef.current = hls;
 
       hls.loadSource(hlsSource);
