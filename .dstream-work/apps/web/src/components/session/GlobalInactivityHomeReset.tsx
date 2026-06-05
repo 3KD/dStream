@@ -30,8 +30,9 @@ function writeLastVisitAtMs(value: number) {
 export function GlobalInactivityHomeReset() {
   const router = useRouter();
   const pathname = usePathname();
-  const { clearQuickPlayStream } = useQuickPlay();
+  const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const redirectingRef = useRef(false);
+  const playbackActive = !!quickPlayStream || (pathname?.startsWith("/watch/") ?? false);
 
   const clearPlayers = useCallback(() => {
     clearQuickPlayStream();
@@ -51,6 +52,7 @@ export function GlobalInactivityHomeReset() {
     const lastVisitAtMs = readLastVisitAtMs();
     const inactive = typeof lastVisitAtMs === "number" && nowMs - lastVisitAtMs >= INACTIVITY_RESET_MS;
     writeLastVisitAtMs(nowMs);
+    if (playbackActive) return;
     if (!inactive || redirectingRef.current) return;
 
     clearPlayers();
@@ -61,7 +63,7 @@ export function GlobalInactivityHomeReset() {
         redirectingRef.current = false;
       }, 1200);
     }
-  }, [clearPlayers, pathname, router]);
+  }, [clearPlayers, pathname, playbackActive, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

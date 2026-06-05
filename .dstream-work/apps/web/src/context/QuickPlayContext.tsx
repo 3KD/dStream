@@ -19,6 +19,7 @@ interface QuickPlayContextValue {
 const QuickPlayContext = createContext<QuickPlayContextValue | null>(null);
 export const QUICK_PLAY_STORAGE_KEY = "dstream_quick_play_stream_v1";
 const STORAGE_KEY = QUICK_PLAY_STORAGE_KEY;
+const QUICK_PLAY_STORAGE_TTL_MS = 12 * 60 * 60 * 1000;
 
 function isValidStreamRef(input: unknown): input is QuickPlayStreamRef {
   if (!input || typeof input !== "object") return false;
@@ -74,7 +75,7 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
       let payload = parsed;
       if (parsed && typeof parsed === "object" && "data" in parsed && typeof parsed.savedAt === "number") {
         const age = Date.now() - parsed.savedAt;
-        if (age > 20 * 60 * 1000) {
+        if (age > QUICK_PLAY_STORAGE_TTL_MS) {
           localStorage.removeItem(STORAGE_KEY);
           return;
         }
@@ -126,37 +127,6 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
     }),
     [clearQuickPlayStream, quickPlayStream, setQuickPlayStream]
   );
-
-  useEffect(() => {
-    if (!quickPlayStream) return;
-    
-    let lastActive = Date.now();
-    const updateActivity = () => {
-      lastActive = Date.now();
-    };
-
-    window.addEventListener("mousemove", updateActivity);
-    window.addEventListener("keydown", updateActivity);
-    window.addEventListener("touchstart", updateActivity);
-    window.addEventListener("scroll", updateActivity);
-
-    const interval = setInterval(() => {
-      if (Date.now() - lastActive > 20 * 60 * 1000) {
-        clearQuickPlayStream();
-        if (window.location.pathname.startsWith("/watch")) {
-           window.location.href = "/";
-        }
-      }
-    }, 60000);
-
-    return () => {
-      window.removeEventListener("mousemove", updateActivity);
-      window.removeEventListener("keydown", updateActivity);
-      window.removeEventListener("touchstart", updateActivity);
-      window.removeEventListener("scroll", updateActivity);
-      clearInterval(interval);
-    };
-  }, [quickPlayStream, clearQuickPlayStream]);
 
   return <QuickPlayContext.Provider value={value}>{children}</QuickPlayContext.Provider>;
 }
