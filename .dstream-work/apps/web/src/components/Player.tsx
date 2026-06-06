@@ -147,7 +147,7 @@ function isLikelySafariBrowser(): boolean {
 }
 
 function shouldPreferNativeHlsPlayback(): boolean {
-  return isLikelySafariBrowser() || isLikelyIosPlaybackDevice() || isLikelyMobilePlaybackDevice();
+  return isLikelySafariBrowser() || isLikelyIosPlaybackDevice();
 }
 
 function configureAudioSessionForPlayback(): void {
@@ -249,10 +249,12 @@ export function Player({
   const [isMobilePlayback, setIsMobilePlayback] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [preferNativeHls, setPreferNativeHls] = useState(false);
+  const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(false);
 
   useEffect(() => {
     setIsMobilePlayback(isLikelyMobilePlaybackDevice());
     setPreferNativeHls(shouldPreferNativeHlsPlayback());
+    setPlaybackEnvironmentReady(true);
   }, []);
 
   const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
@@ -599,6 +601,8 @@ export function Player({
   }, []);
 
   useEffect(() => {
+    if (!playbackEnvironmentReady) return;
+
     setError(null);
     setStatus("Loading…");
     setNeedsClick(false);
@@ -1144,6 +1148,7 @@ export function Player({
   }, [
     isMobilePlayback,
     lowLatencyEnabled,
+    playbackEnvironmentReady,
     preferNativeHls,
     src,
     whepSrc

@@ -479,9 +479,11 @@ export default function WatchPage() {
     if (renditionMasterUrl) return renditionMasterUrl;
     if (renditionHints[0]?.url) return renditionHints[0].url;
     if (isLikelyPublicPlayableMediaUrl(announceStreamingHint)) return announceStreamingHint;
+    if (announceLoading && !announce) return "";
     if (announceLoading && !canUseLocalFallback) return "";
     return canUseLocalFallback ? fallbackUrl : "";
   }, [
+    announce,
     announceLoading,
     announceStreamingHint,
     canUseLocalFallback,
@@ -499,7 +501,12 @@ export default function WatchPage() {
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;
     if (!streamUrl) return false;
-    return isLikelyHlsUrl(streamUrl);
+    const normalized = streamUrl.toLowerCase();
+    const isDstreamHls =
+      streamUrl.startsWith("/api/hls/") ||
+      normalized.includes("://dstream.stream/api/hls/") ||
+      normalized.includes("://www.dstream.stream/api/hls/");
+    return isDstreamHls && isLikelyHlsUrl(streamUrl);
   }, [originStreamId, streamUrl]);
 
   const whepSrc = useMemo(() => {
