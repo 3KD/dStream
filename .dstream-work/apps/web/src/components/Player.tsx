@@ -635,7 +635,10 @@ export function Player({
     let cancelled = false;
     const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
-      persistedPlayback && typeof persistedPlayback.currentTime === "number" && Number.isFinite(persistedPlayback.currentTime)
+      !isLiveStream &&
+      persistedPlayback &&
+      typeof persistedPlayback.currentTime === "number" &&
+      Number.isFinite(persistedPlayback.currentTime)
         ? Math.max(0, persistedPlayback.currentTime)
         : null;
     const applyPersistedSeek = () => {
@@ -681,6 +684,85 @@ export function Player({
       }
     };
     let removeNativeListener: (() => void) | null = null;
+    let removeHlsStartupListener: (() => void) | null = null;
+    const clearHlsStartupListener = () => {
+      try {
+        removeHlsStartupListener?.();
+      } catch {
+        // ignore
+      }
+      removeHlsStartupListener = null;
+    };
+    const getBufferedAheadSeconds = () => {
+      try {
+        const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        for (let index = 0; index < video.buffered.length; index++) {
+          const start = video.buffered.start(index);
+          const end = video.buffered.end(index);
+          if (current >= start - 0.05 && current <= end + 0.05) return Math.max(0, end - current);
+        }
+        if (video.buffered.length > 0) {
+          return Math.max(0, video.buffered.end(video.buffered.length - 1) - current);
+        }
+      } catch {
+        // ignore
+      }
+      return 0;
+    };
+    const beginHlsPlayback = () => {
+      setStatus("Ready");
+      sendReady();
+      void video.play().catch(() => {
+        setStatus("Click to play");
+        setNeedsClick(true);
+      });
+    };
+    const waitForHlsStartupBuffer = (hls: Hls) => {
+      clearHlsStartupListener();
+      if (!isLiveStream) {
+        beginHlsPlayback();
+        return;
+      }
+      const targetBufferSeconds = effectiveBackgroundPlayEnabled ? 8 : lowLatencyEnabled ? 2 : 6;
+      const maxWaitMs = effectiveBackgroundPlayEnabled ? 9000 : lowLatencyEnabled ? 2500 : 6500;
+      const startedAt = Date.now();
+      let started = false;
+      let startupTimer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (startupTimer) {
+          clearTimeout(startupTimer);
+          startupTimer = null;
+        }
+        try {
+          hls.off(Hls.Events.FRAG_BUFFERED, maybeStart);
+        } catch {
+          // ignore
+        }
+        video.removeEventListener("canplay", maybeStart);
+        video.removeEventListener("progress", maybeStart);
+      };
+      const startNow = () => {
+        if (started || cancelled) return;
+        started = true;
+        cleanup();
+        removeHlsStartupListener = null;
+        beginHlsPlayback();
+      };
+      function maybeStart() {
+        if (started || cancelled) return;
+        const waitedMs = Date.now() - startedAt;
+        if (getBufferedAheadSeconds() >= targetBufferSeconds || waitedMs >= maxWaitMs) {
+          startNow();
+        }
+      }
+      setStatus("Buffering…");
+      hls.on(Hls.Events.FRAG_BUFFERED, maybeStart);
+      video.addEventListener("canplay", maybeStart);
+      video.addEventListener("progress", maybeStart);
+      startupTimer = setTimeout(maybeStart, maxWaitMs);
+      removeHlsStartupListener = cleanup;
+      maybeStart();
+    };
     let whepFallbackInProgress = false;
     let whepStallTimer: ReturnType<typeof setTimeout> | null = null;
     const clearWhepStallTimer = () => {
@@ -955,12 +1037,7 @@ export function Player({
             ? "Auto"
             : options.find((o) => o.value === selectedQualityRef.current)?.label ?? "Manual"
         );
-        setStatus("Ready");
-        sendReady();
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        waitForHlsStartupBuffer(hls);
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
@@ -1122,6 +1199,7 @@ export function Player({
         // ignore
       }
       clearWhepStallTimer();
+      clearHlsStartupListener();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (whepRef.current) {
