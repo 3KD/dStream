@@ -469,35 +469,90 @@ export function Player({
     if (typeof document === "undefined" || !effectiveBackgroundPlayEnabled) return;
     const video = videoRef.current;
     if (!video) return;
-    const keepPlaybackAlive = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (video.ended) return;
-      if (!video.paused) return;
-      void video.play().catch(() => {
-        // ignore browser policy failures
-      });
-    };
+
+    let backgroundPlaybackRequested = document.visibilityState === "hidden";
+    let pageLifecycleHidden = document.visibilityState === "hidden";
     let resumeTimer: ReturnType<typeof setTimeout> | null = null;
-    const onPause = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (resumeTimer) clearTimeout(resumeTimer);
-      resumeTimer = setTimeout(keepPlaybackAlive, 120);
+
+    const restoreAudiblePlayback = () => {
+      const nextVolume = Math.max(0.05, Math.min(1, lastAudibleVolumeRef.current || 1));
+      try {
+        video.muted = false;
+        if (video.volume === 0) video.volume = nextVolume;
+      } catch {
+        // ignore unsupported media writes
+      }
+      setVolume((current) => (current === 0 ? nextVolume : current));
     };
-    const onPageHidden = () => {
+
+    const attemptBackgroundPlay = (allowVisibleResume = false) => {
       if (video.ended) return;
+      if (!allowVisibleResume && document.visibilityState !== "hidden") return;
+      backgroundPlaybackRequested = true;
+      configureAudioSessionForPlayback();
+      restoreAudiblePlayback();
       void video.play().catch(() => {
         // ignore browser policy failures
       });
     };
-    document.addEventListener("visibilitychange", keepPlaybackAlive);
-    window.addEventListener("pagehide", onPageHidden);
-    document.addEventListener("freeze", onPageHidden as EventListener);
+
+    const scheduleBestEffortRetry = () => {
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => {
+        resumeTimer = null;
+        if (backgroundPlaybackRequested || document.visibilityState === "hidden") {
+          attemptBackgroundPlay(true);
+        }
+      }, 250);
+    };
+
+    const onHiddenLifecycle = () => {
+      pageLifecycleHidden = true;
+      attemptBackgroundPlay(true);
+      scheduleBestEffortRetry();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        onHiddenLifecycle();
+        return;
+      }
+      pageLifecycleHidden = false;
+      if (backgroundPlaybackRequested && video.paused && !video.ended) {
+        attemptBackgroundPlay(true);
+      }
+      backgroundPlaybackRequested = false;
+    };
+
+    const onPause = () => {
+      if (document.visibilityState !== "hidden" && !pageLifecycleHidden) return;
+      attemptBackgroundPlay(true);
+      scheduleBestEffortRetry();
+    };
+
+    const onVisibleLifecycle = () => {
+      pageLifecycleHidden = false;
+      if (backgroundPlaybackRequested && video.paused && !video.ended) {
+        attemptBackgroundPlay(true);
+      }
+      backgroundPlaybackRequested = false;
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", onHiddenLifecycle);
+    window.addEventListener("pageshow", onVisibleLifecycle);
+    window.addEventListener("focus", onVisibleLifecycle);
+    document.addEventListener("freeze", onHiddenLifecycle as EventListener);
+    document.addEventListener("resume", onVisibleLifecycle as EventListener);
     video.addEventListener("pause", onPause);
     return () => {
       if (resumeTimer) clearTimeout(resumeTimer);
-      document.removeEventListener("visibilitychange", keepPlaybackAlive);
-      window.removeEventListener("pagehide", onPageHidden);
-      document.removeEventListener("freeze", onPageHidden as EventListener);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onHiddenLifecycle);
+      window.removeEventListener("pageshow", onVisibleLifecycle);
+      window.removeEventListener("focus", onVisibleLifecycle);
+      document.removeEventListener("freeze", onHiddenLifecycle as EventListener);
+      document.removeEventListener("resume", onVisibleLifecycle as EventListener);
       video.removeEventListener("pause", onPause);
     };
   }, [effectiveBackgroundPlayEnabled]);
