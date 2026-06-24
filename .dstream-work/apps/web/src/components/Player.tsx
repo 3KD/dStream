@@ -261,6 +261,8 @@ export function Player({
   const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
   const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
   const effectiveAutoplayMuted = effectiveBackgroundPlayEnabled ? false : isMobilePlayback ? true : (autoplayMuted ?? true);
+  const playbackStartupPolicyReady =
+    playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
@@ -297,6 +299,11 @@ export function Player({
     if (persisted) {
       const persistedMuted = persisted.muted === true;
       const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
+      if (!effectiveBackgroundPlayEnabled && effectiveAutoplayMuted) {
+        if (!persistedMuted && persistedVolume > 0) lastAudibleVolumeRef.current = persistedVolume;
+        setVolume(0);
+        return;
+      }
       if (effectiveBackgroundPlayEnabled) {
         setVolume(Math.max(0.05, persistedVolume || 1));
         return;
@@ -601,7 +608,7 @@ export function Player({
   }, []);
 
   useEffect(() => {
-    if (!playbackEnvironmentReady) return;
+    if (!playbackStartupPolicyReady) return;
 
     setError(null);
     setStatus("Loading…");
@@ -616,8 +623,9 @@ export function Player({
 
     const primarySrc = (src ?? "").trim();
     const primaryKind = inferMediaUrlKind(primarySrc);
-    const backupSrc = (fallbackSrc ?? "").trim();
-    const canUseBackup = backupSrc.length > 0 && backupSrc !== primarySrc && !isExternalPlaybackUrl(primarySrc);
+    const getBackupSrc = () => (fallbackSrcRef.current ?? "").trim();
+    const canUseBackupSource = (candidate: string) =>
+      candidate.length > 0 && candidate !== primarySrc && !isExternalPlaybackUrl(primarySrc);
     let backupTried = false;
 
     if (!primarySrc || !videoRef.current) return;
@@ -771,7 +779,8 @@ export function Player({
       whepStallTimer = null;
     };
     const tryHlsBackup = (reason: string, beforeStart?: () => void): boolean => {
-      if (!canUseBackup || backupTried || cancelled) return false;
+      const backupSrc = getBackupSrc();
+      if (!canUseBackupSource(backupSrc) || backupTried || cancelled) return false;
       backupTried = true;
       setError(null);
       setStatus("Loading…");
@@ -1225,8 +1234,9 @@ export function Player({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isMobilePlayback,
+    isLiveStream,
     lowLatencyEnabled,
-    playbackEnvironmentReady,
+    playbackStartupPolicyReady,
     preferNativeHls,
     src,
     whepSrc

@@ -21,8 +21,6 @@ const DEFAULT_WIDTH = 320;
 const DEFAULT_GAP = 24;
 const AUTO_PIP_RETRY_MS = 1200;
 const AUTO_PIP_MAX_ATTEMPTS = 8;
-const AUTO_RESUME_RETRY_MS = 500;
-const AUTO_RESUME_MAX_ATTEMPTS = 12;
 const DRAG_BLOCK_SELECTOR = "video,button,a,input,select,textarea,label,[role='button'],[data-no-drag='true']";
 
 type ResizeHandle = "top_left" | "top_right" | "bottom_right" | "bottom_left";
@@ -194,9 +192,6 @@ export function GlobalQuickPlayDock() {
   const autoPipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPipAttemptsRef = useRef(0);
   const autoPipAttemptKeyRef = useRef<string | null>(null);
-  const autoResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoResumeAttemptsRef = useRef(0);
-  const autoResumeAttemptKeyRef = useRef<string | null>(null);
 
   const height = useMemo(() => toHeight(width), [width]);
   const originStreamId = useMemo(() => {
@@ -235,12 +230,6 @@ export function GlobalQuickPlayDock() {
     if (!autoPipTimerRef.current) return;
     clearTimeout(autoPipTimerRef.current);
     autoPipTimerRef.current = null;
-  }, []);
-
-  const clearAutoResumeTimer = useCallback(() => {
-    if (!autoResumeTimerRef.current) return;
-    clearTimeout(autoResumeTimerRef.current);
-    autoResumeTimerRef.current = null;
   }, []);
 
   const requestSystemPip = useCallback(async () => {
@@ -338,21 +327,31 @@ export function GlobalQuickPlayDock() {
   }, [ready, width]);
 
   useEffect(() => {
+    if (!ready || !backgroundPlayPreferenceLoaded || isWatchRoute || !quickPlayStream || !hlsSrc) return;
     const host = playerHostRef.current;
     if (!host) return;
+
+    let attachedVideo: HTMLVideoElement | null = null;
+    let cleanupAttachedVideo: (() => void) | null = null;
+
+    const detachVideo = () => {
+      cleanupAttachedVideo?.();
+      cleanupAttachedVideo = null;
+      if (videoRef.current === attachedVideo) videoRef.current = null;
+      attachedVideo = null;
+    };
 
     const attachVideo = () => {
       const found = host.querySelector("video");
       if (!(found instanceof HTMLVideoElement)) return;
-      if (videoRef.current === found) return;
-      videoRef.current = found;
-
-      try {
-        setVolume(found.muted ? 0 : found.volume);
-        setMuted(found.muted || found.volume === 0);
-      } catch {
-        // ignore
+      if (attachedVideo === found) {
+        setIsPlaying(!found.paused && !found.ended);
+        return;
       }
+
+      detachVideo();
+      attachedVideo = found;
+      videoRef.current = found;
 
       const onVolumeChange = () => {
         try {
@@ -363,11 +362,12 @@ export function GlobalQuickPlayDock() {
           // ignore
         }
       };
-      const onEnterPip = () => setPipActive(true);
-      const onLeavePip = () => setPipActive(false);
-      const onWebkitPip = () => {
+      const syncPip = () => {
         const webkitMode = (found as HTMLVideoElement & { webkitPresentationMode?: string }).webkitPresentationMode;
-        setPipActive(webkitMode === "picture-in-picture");
+        setPipActive(
+          (document as Document & { pictureInPictureElement?: Element }).pictureInPictureElement === found ||
+            webkitMode === "picture-in-picture"
+        );
       };
 
       const onTimeUpdate = () => {
@@ -399,31 +399,48 @@ export function GlobalQuickPlayDock() {
         } catch { }
       };
 
-      const onPlayState = () => setIsPlaying(!found.paused);
-      setIsPlaying(!found.paused);
+      const onPlayState = () => setIsPlaying(!found.paused && !found.ended);
 
       found.addEventListener("volumechange", onVolumeChange);
-      found.addEventListener("enterpictureinpicture", onEnterPip as any);
-      found.addEventListener("leavepictureinpicture", onLeavePip as any);
-      found.addEventListener("webkitpresentationmodechanged", onWebkitPip as any);
+      found.addEventListener("enterpictureinpicture", syncPip as any);
+      found.addEventListener("leavepictureinpicture", syncPip as any);
+      found.addEventListener("webkitpresentationmodechanged", syncPip as any);
       found.addEventListener("timeupdate", onTimeUpdate);
       found.addEventListener("progress", onTimeUpdate);
       found.addEventListener("play", onPlayState);
+      found.addEventListener("playing", onPlayState);
       found.addEventListener("pause", onPlayState);
+      found.addEventListener("ended", onPlayState);
 
-      if (
-        (document as Document & { pictureInPictureElement?: Element }).pictureInPictureElement === found ||
-        (found as HTMLVideoElement & { webkitPresentationMode?: string }).webkitPresentationMode === "picture-in-picture"
-      ) {
-        setPipActive(true);
-      }
+      cleanupAttachedVideo = () => {
+        found.removeEventListener("volumechange", onVolumeChange);
+        found.removeEventListener("enterpictureinpicture", syncPip as any);
+        found.removeEventListener("leavepictureinpicture", syncPip as any);
+        found.removeEventListener("webkitpresentationmodechanged", syncPip as any);
+        found.removeEventListener("timeupdate", onTimeUpdate);
+        found.removeEventListener("progress", onTimeUpdate);
+        found.removeEventListener("play", onPlayState);
+        found.removeEventListener("playing", onPlayState);
+        found.removeEventListener("pause", onPlayState);
+        found.removeEventListener("ended", onPlayState);
+      };
+
+      onVolumeChange();
+      onTimeUpdate();
+      onPlayState();
+      syncPip();
     };
 
     attachVideo();
     const observer = new MutationObserver(attachVideo);
     observer.observe(host, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [hlsSrc, muted, volume, whepSrc]);
+    const syncInterval = window.setInterval(attachVideo, 500);
+    return () => {
+      window.clearInterval(syncInterval);
+      observer.disconnect();
+      detachVideo();
+    };
+  }, [backgroundPlayPreferenceLoaded, hlsSrc, isWatchRoute, quickPlayStream, ready, whepSrc]);
 
   useEffect(() => {
     pipActiveRef.current = pipActive;
@@ -432,12 +449,11 @@ export function GlobalQuickPlayDock() {
   useEffect(() => {
     return () => {
       clearAutoPipTimer();
-      clearAutoResumeTimer();
     };
-  }, [clearAutoPipTimer, clearAutoResumeTimer]);
+  }, [clearAutoPipTimer]);
 
   useEffect(() => {
-    if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc || touchDevice) {
+    if (!ready || !backgroundPlayEnabled || isWatchRoute || !quickPlayStream || !hlsSrc || touchDevice) {
       clearAutoPipTimer();
       return;
     }
@@ -468,79 +484,7 @@ export function GlobalQuickPlayDock() {
     }, 350);
 
     return () => clearAutoPipTimer();
-  }, [clearAutoPipTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, requestSystemPip, touchDevice]);
-
-  useEffect(() => {
-    if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc) {
-      clearAutoResumeTimer();
-      return;
-    }
-
-    const attemptKey = `${quickPlayStream.streamPubkey}:${quickPlayStream.streamId}:${pathname ?? ""}:${hlsSrc}:${whepSrc ?? ""}`;
-    if (autoResumeAttemptKeyRef.current === attemptKey) return;
-    autoResumeAttemptKeyRef.current = attemptKey;
-    autoResumeAttemptsRef.current = 0;
-
-    const attempt = async () => {
-      const video = videoRef.current;
-      if (!video) {
-        if (autoResumeAttemptsRef.current >= AUTO_RESUME_MAX_ATTEMPTS) {
-          clearAutoResumeTimer();
-          return;
-        }
-        autoResumeAttemptsRef.current += 1;
-        autoResumeTimerRef.current = setTimeout(() => {
-          void attempt();
-        }, AUTO_RESUME_RETRY_MS);
-        return;
-      }
-
-      if (!video.paused && !video.ended) {
-        clearAutoResumeTimer();
-        return;
-      }
-
-      autoResumeAttemptsRef.current += 1;
-      try {
-        await video.play();
-        clearAutoResumeTimer();
-        return;
-      } catch {
-        // fallback to muted autoplay
-      }
-
-      try {
-        video.muted = true;
-        video.volume = 0;
-      } catch {
-        // ignore
-      }
-      setMuted(true);
-      setVolume(0);
-      try {
-        await video.play();
-        clearAutoResumeTimer();
-        return;
-      } catch {
-        // keep retrying while we still have budget
-      }
-
-      if (autoResumeAttemptsRef.current >= AUTO_RESUME_MAX_ATTEMPTS) {
-        clearAutoResumeTimer();
-        return;
-      }
-
-      autoResumeTimerRef.current = setTimeout(() => {
-        void attempt();
-      }, AUTO_RESUME_RETRY_MS);
-    };
-
-    autoResumeTimerRef.current = setTimeout(() => {
-      void attempt();
-    }, 160);
-
-    return () => clearAutoResumeTimer();
-  }, [clearAutoResumeTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, whepSrc]);
+  }, [backgroundPlayEnabled, clearAutoPipTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, requestSystemPip, touchDevice]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -679,10 +623,16 @@ export function GlobalQuickPlayDock() {
   }, []);
 
   const togglePlay = useCallback(() => {
-    if (videoRef.current) {
-      if (videoRef.current.paused) videoRef.current.play();
-      else videoRef.current.pause();
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      void video.play().then(() => setIsPlaying(true)).catch(() => {
+        setIsPlaying(!video.paused && !video.ended);
+      });
+      return;
     }
+    video.pause();
+    setIsPlaying(false);
   }, []);
 
   const jumpToLive = useCallback(() => {
@@ -755,7 +705,7 @@ export function GlobalQuickPlayDock() {
   const globalPlayerProps = useMemo(() => ({
     src: hlsSrc,
     whepSrc,
-    autoplayMuted: false,
+    autoplayMuted: !backgroundPlayEnabled,
     backgroundPlayEnabledOverride: backgroundPlayEnabled,
     isLiveStream: true,
     showTimelineControls: false,
@@ -770,7 +720,7 @@ export function GlobalQuickPlayDock() {
     }
   }, [quickPlayStream, clearRequest]);
 
-  if (!ready || isWatchRoute || !quickPlayStream || !hlsSrc) return null;
+  if (!ready || !backgroundPlayPreferenceLoaded || isWatchRoute || !quickPlayStream || !hlsSrc) return null;
 
   return (
     <div
@@ -891,10 +841,15 @@ export function GlobalQuickPlayDock() {
         </div>
 
         <div className="mt-auto p-2 pt-8 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
-          <div className="flex items-end gap-3 pointer-events-auto w-full">
+          <div className="flex items-end gap-3 pointer-events-auto w-full relative z-30">
             
-            <button 
-                onClick={togglePlay} 
+            <button
+                type="button"
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePlay();
+                }}
                 className="pb-1 px-1 text-white hover:text-white/80 active:scale-95 transition-all outline-none"
                 aria-label={isPlaying ? "Pause" : "Play"}
             >

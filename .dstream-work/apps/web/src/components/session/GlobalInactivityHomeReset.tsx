@@ -27,6 +27,21 @@ function writeLastVisitAtMs(value: number) {
   }
 }
 
+function hasActiveMediaPlayback(): boolean {
+  if (typeof document === "undefined") return false;
+  try {
+    const pipElement = (document as Document & { pictureInPictureElement?: Element | null }).pictureInPictureElement;
+    if (pipElement) return true;
+    const mediaElements = Array.from(document.querySelectorAll("video,audio"));
+    return mediaElements.some((element) => {
+      if (!(element instanceof HTMLMediaElement)) return false;
+      return !element.paused && !element.ended && element.readyState > 0;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function GlobalInactivityHomeReset() {
   const router = useRouter();
   const pathname = usePathname();
@@ -52,7 +67,7 @@ export function GlobalInactivityHomeReset() {
     const lastVisitAtMs = readLastVisitAtMs();
     const inactive = typeof lastVisitAtMs === "number" && nowMs - lastVisitAtMs >= INACTIVITY_RESET_MS;
     writeLastVisitAtMs(nowMs);
-    if (playbackActive) return;
+    if (playbackActive || hasActiveMediaPlayback()) return;
     if (!inactive || redirectingRef.current) return;
 
     clearPlayers();
