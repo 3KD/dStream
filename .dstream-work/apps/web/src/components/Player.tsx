@@ -50,6 +50,12 @@ interface PersistedPlaybackState {
   updatedAt?: number;
 }
 
+interface LiveHlsActivity {
+  lastFragBufferedAt: number;
+  lastFragChangedAt: number;
+  lastLevelUpdatedAt: number;
+}
+
 type PlaybackMode = "hls" | "whep" | "direct";
 type WebKitPresentationMode = "inline" | "picture-in-picture" | "fullscreen";
 type PictureInPictureVideo = HTMLVideoElement & {
@@ -112,6 +118,56 @@ function writeBackgroundPlayPreference(enabled: boolean): void {
   } catch {
     // ignore
   }
+}
+
+function readBufferedAheadSeconds(video: HTMLVideoElement): number {
+  try {
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    for (let index = 0; index < video.buffered.length; index++) {
+      const start = video.buffered.start(index);
+      const end = video.buffered.end(index);
+      if (current >= start - 0.05 && current <= end + 0.05) return Math.max(0, end - current);
+    }
+    if (video.buffered.length > 0) {
+      return Math.max(0, video.buffered.end(video.buffered.length - 1) - current);
+    }
+  } catch {
+    // ignore
+  }
+  return 0;
+}
+
+function readVideoFrameCount(video: HTMLVideoElement): number | null {
+  try {
+    const quality = video.getVideoPlaybackQuality?.();
+    const frames = quality?.totalVideoFrames;
+    return typeof frames === "number" && Number.isFinite(frames) ? frames : null;
+  } catch {
+    return null;
+  }
+}
+
+function readLiveEdgeTarget(video: HTMLVideoElement, hls: Hls | null): number | null {
+  const candidates: number[] = [];
+  const liveSyncPosition = hls?.liveSyncPosition;
+  if (typeof liveSyncPosition === "number" && Number.isFinite(liveSyncPosition) && liveSyncPosition > 0) {
+    candidates.push(liveSyncPosition);
+  }
+  try {
+    if (video.seekable.length > 0) {
+      candidates.push(Math.max(0, video.seekable.end(video.seekable.length - 1) - 0.5));
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (video.buffered.length > 0) {
+      candidates.push(Math.max(0, video.buffered.end(video.buffered.length - 1) - 0.25));
+    }
+  } catch {
+    // ignore
+  }
+  return candidates.find((candidate) => Number.isFinite(candidate) && candidate > 0) ?? null;
 }
 
 function isLikelyMobilePlaybackDevice(): boolean {
@@ -223,6 +279,12 @@ export function Player({
   const playbackModeRef = useRef<PlaybackMode>("hls");
   const onReadyRef = useRef(onReady);
   const selectedQualityRef = useRef(-1);
+  const liveHlsActivityRef = useRef<LiveHlsActivity>({
+    lastFragBufferedAt: 0,
+    lastFragChangedAt: 0,
+    lastLevelUpdatedAt: 0
+  });
+  const lastLivePlaybackRecoveryAtRef = useRef(0);
 
   const fallbackSrcRef = useRef(fallbackSrc);
   const playbackStateKeyRef = useRef(playbackStateKey);
@@ -250,6 +312,7 @@ export function Player({
   const [isHovered, setIsHovered] = useState(false);
   const [preferNativeHls, setPreferNativeHls] = useState(false);
   const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(false);
+  const [playbackReloadNonce, setPlaybackReloadNonce] = useState(0);
 
   useEffect(() => {
     setIsMobilePlayback(isLikelyMobilePlaybackDevice());
@@ -556,6 +619,141 @@ export function Player({
       video.removeEventListener("pause", onPause);
     };
   }, [effectiveBackgroundPlayEnabled]);
+
+  useEffect(() => {
+    if (!isLiveStream || !playbackStartupPolicyReady) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let lastObservedTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    let lastObservedFrames = readVideoFrameCount(video);
+    let lastProgressAt = Date.now();
+    let consecutiveRecoveries = 0;
+
+    const markHealthy = (now: number, currentTime: number, frameCount: number | null) => {
+      lastObservedTime = currentTime;
+      lastObservedFrames = frameCount;
+      lastProgressAt = now;
+      if (now - lastLivePlaybackRecoveryAtRef.current > 30000) {
+        consecutiveRecoveries = 0;
+      }
+    };
+
+    const seekToLiveEdge = () => {
+      const target = readLiveEdgeTarget(video, hlsRef.current);
+      if (target === null) return;
+      try {
+        if (!Number.isFinite(video.currentTime) || Math.abs(video.currentTime - target) > 1) {
+          video.currentTime = target;
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const recoverLivePlayback = (reason: string, forceReload = false) => {
+      const now = Date.now();
+      if (now - lastLivePlaybackRecoveryAtRef.current < 8000) return;
+      lastLivePlaybackRecoveryAtRef.current = now;
+      consecutiveRecoveries += 1;
+      setError(null);
+      setNeedsClick(false);
+      setStatus("Recovering…");
+      setNote(reason);
+
+      const hls = hlsRef.current;
+      const shouldReload = forceReload || playbackModeRef.current !== "hls" || !hls || consecutiveRecoveries >= 2;
+      if (shouldReload) {
+        setPlaybackReloadNonce((value) => value + 1);
+        return;
+      }
+
+      try {
+        hls.stopLoad();
+      } catch {
+        // ignore
+      }
+      try {
+        hls.startLoad(-1);
+      } catch {
+        // ignore
+      }
+      try {
+        hls.recoverMediaError();
+      } catch {
+        // ignore
+      }
+      seekToLiveEdge();
+      void video.play().catch(() => {
+        setStatus("Click to play");
+        setNeedsClick(true);
+      });
+    };
+
+    const checkLiveProgress = () => {
+      const now = Date.now();
+      const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      const frameCount = readVideoFrameCount(video);
+
+      if (video.paused || video.ended || needsClick) {
+        markHealthy(now, currentTime, frameCount);
+        return;
+      }
+
+      const timeAdvanced = currentTime > lastObservedTime + 0.35;
+      const framesAdvanced =
+        frameCount !== null && lastObservedFrames !== null && frameCount > lastObservedFrames + 2;
+      const jumpedBackward = lastObservedTime > 5 && currentTime + 1.25 < lastObservedTime;
+      const bufferAhead = readBufferedAheadSeconds(video);
+      const hlsActivity = liveHlsActivityRef.current;
+      const lastHlsActivityAt = Math.max(
+        hlsActivity.lastFragBufferedAt,
+        hlsActivity.lastFragChangedAt,
+        hlsActivity.lastLevelUpdatedAt
+      );
+      const hlsActivityStale =
+        playbackModeRef.current === "hls" &&
+        !!hlsRef.current &&
+        lastHlsActivityAt > 0 &&
+        now - lastHlsActivityAt > 25000 &&
+        bufferAhead < 6;
+
+      if (jumpedBackward) {
+        recoverLivePlayback("Live playback jumped backward. Reconnected to the live stream.");
+        markHealthy(now, currentTime, frameCount);
+        return;
+      }
+
+      if (timeAdvanced || framesAdvanced) {
+        markHealthy(now, currentTime, frameCount);
+        if (hlsActivityStale) {
+          recoverLivePlayback("Live stream stopped receiving new media. Reconnected to the live stream.");
+        }
+        return;
+      }
+
+      const stalledForMs = now - lastProgressAt;
+      const stallThresholdMs = typeof document !== "undefined" && document.visibilityState === "hidden" ? 18000 : 9000;
+      if (video.readyState >= 2 && stalledForMs >= stallThresholdMs) {
+        recoverLivePlayback(
+          "Live playback stopped advancing. Reconnected to the live stream.",
+          stalledForMs >= stallThresholdMs * 2
+        );
+        markHealthy(now, currentTime, frameCount);
+      }
+    };
+
+    const interval = setInterval(checkLiveProgress, 2000);
+    video.addEventListener("playing", checkLiveProgress);
+    video.addEventListener("waiting", checkLiveProgress);
+    video.addEventListener("stalled", checkLiveProgress);
+    return () => {
+      clearInterval(interval);
+      video.removeEventListener("playing", checkLiveProgress);
+      video.removeEventListener("waiting", checkLiveProgress);
+      video.removeEventListener("stalled", checkLiveProgress);
+    };
+  }, [isLiveStream, needsClick, playbackReloadNonce, playbackStartupPolicyReady, src, whepSrc]);
 
   useEffect(() => {
     if (error || needsClick || volume !== 0) {
@@ -944,6 +1142,14 @@ export function Player({
     const startHls = (hlsSource: string, options: { skipNative?: boolean } = {}): boolean => {
       let mediaRecoveryAttempts = 0;
       setPlaybackMode("hls");
+      liveHlsActivityRef.current = {
+        lastFragBufferedAt: Date.now(),
+        lastFragChangedAt: Date.now(),
+        lastLevelUpdatedAt: Date.now()
+      };
+      const markLiveHlsActivity = (key: keyof LiveHlsActivity) => {
+        liveHlsActivityRef.current[key] = Date.now();
+      };
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
       // unless integrity verification is enabled (we need byte access).
@@ -1103,6 +1309,11 @@ export function Player({
         );
         waitForHlsStartupBuffer(hls);
       });
+
+      hls.on(Hls.Events.FRAG_BUFFERED, () => markLiveHlsActivity("lastFragBufferedAt"));
+      hls.on(Hls.Events.FRAG_CHANGED, () => markLiveHlsActivity("lastFragChangedAt"));
+      hls.on(Hls.Events.LEVEL_LOADED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
+      hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         const idx = typeof data?.level === "number" ? data.level : -1;
@@ -1291,6 +1502,7 @@ export function Player({
     isMobilePlayback,
     isLiveStream,
     lowLatencyEnabled,
+    playbackReloadNonce,
     playbackStartupPolicyReady,
     preferNativeHls,
     src,
