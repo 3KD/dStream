@@ -56,6 +56,12 @@ interface LiveHlsActivity {
   lastLevelUpdatedAt: number;
 }
 
+interface LiveAudioFailureState {
+  count: number;
+  windowStartedAt: number;
+  lastRecoveryAt: number;
+}
+
 type PlaybackMode = "hls" | "whep" | "direct";
 type WebKitPresentationMode = "inline" | "picture-in-picture" | "fullscreen";
 type PictureInPictureVideo = HTMLVideoElement & {
@@ -128,13 +134,61 @@ function readBufferedAheadSeconds(video: HTMLVideoElement): number {
       const end = video.buffered.end(index);
       if (current >= start - 0.05 && current <= end + 0.05) return Math.max(0, end - current);
     }
-    if (video.buffered.length > 0) {
-      return Math.max(0, video.buffered.end(video.buffered.length - 1) - current);
-    }
   } catch {
     // ignore
   }
   return 0;
+}
+
+function readNextBufferedRangeStart(video: HTMLVideoElement): number | null {
+  try {
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    for (let index = 0; index < video.buffered.length; index++) {
+      const start = video.buffered.start(index);
+      const end = video.buffered.end(index);
+      if (current >= start - 0.05 && current <= end + 0.05) return null;
+      if (start > current + 0.25) return start;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function readBufferedRecoveryTarget(video: HTMLVideoElement, preferredTarget: number | null = null): number | null {
+  try {
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    const minimumPlayableTime = current + 0.05;
+    let firstFutureStart: number | null = null;
+    let nearestPlayableTarget: number | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < video.buffered.length; index++) {
+      const start = video.buffered.start(index);
+      const end = video.buffered.end(index);
+      if (end <= current + 0.25) continue;
+      if (firstFutureStart === null && start > current + 0.25) {
+        firstFutureStart = start;
+      }
+      if (preferredTarget === null || !Number.isFinite(preferredTarget)) continue;
+
+      const playableStart = Math.max(start + 0.05, minimumPlayableTime);
+      const playableEnd = Math.max(playableStart, end - 0.2);
+      const candidate =
+        preferredTarget < start ? playableStart : preferredTarget > end ? playableEnd : Math.min(playableEnd, Math.max(playableStart, preferredTarget));
+      const distance = Math.abs(candidate - preferredTarget);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestPlayableTarget = candidate;
+      }
+    }
+
+    if (nearestPlayableTarget !== null) return nearestPlayableTarget;
+    if (firstFutureStart !== null) return firstFutureStart + 0.05;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function readVideoFrameCount(video: HTMLVideoElement): number | null {
@@ -147,27 +201,69 @@ function readVideoFrameCount(video: HTMLVideoElement): number | null {
   }
 }
 
-function readLiveEdgeTarget(video: HTMLVideoElement, hls: Hls | null): number | null {
+function readLiveEdgeTarget(video: HTMLVideoElement, hls: Hls | null, safetyDelaySeconds = 12): number | null {
   const candidates: number[] = [];
+  let safeSeekableTarget: number | null = null;
   const liveSyncPosition = hls?.liveSyncPosition;
-  if (typeof liveSyncPosition === "number" && Number.isFinite(liveSyncPosition) && liveSyncPosition > 0) {
-    candidates.push(liveSyncPosition);
-  }
   try {
     if (video.seekable.length > 0) {
-      candidates.push(Math.max(0, video.seekable.end(video.seekable.length - 1) - 0.5));
+      safeSeekableTarget = Math.max(0, video.seekable.end(video.seekable.length - 1) - safetyDelaySeconds);
     }
   } catch {
     // ignore
   }
+  if (safeSeekableTarget !== null) {
+    candidates.push(safeSeekableTarget);
+  }
+  if (typeof liveSyncPosition === "number" && Number.isFinite(liveSyncPosition) && liveSyncPosition > 0) {
+    const minimumFreshTarget = safeSeekableTarget === null ? 0 : safeSeekableTarget - Math.max(12, safetyDelaySeconds);
+    if (liveSyncPosition >= minimumFreshTarget) {
+      candidates.push(safeSeekableTarget === null ? liveSyncPosition : Math.min(liveSyncPosition, safeSeekableTarget));
+    }
+  }
   try {
     if (video.buffered.length > 0) {
-      candidates.push(Math.max(0, video.buffered.end(video.buffered.length - 1) - 0.25));
+      candidates.push(Math.max(0, video.buffered.end(video.buffered.length - 1) - Math.max(4, safetyDelaySeconds / 2)));
     }
   } catch {
     // ignore
   }
   return candidates.find((candidate) => Number.isFinite(candidate) && candidate > 0) ?? null;
+}
+
+function isForwardPlaybackTarget(video: HTMLVideoElement, target: number | null, toleranceSeconds = 0.5): target is number {
+  if (target === null || !Number.isFinite(target)) return false;
+  try {
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    return target >= current - toleranceSeconds;
+  } catch {
+    return true;
+  }
+}
+
+function readLiveRecoveryTargets(video: HTMLVideoElement, hls: Hls | null, safetyDelaySeconds: number) {
+  const stableTarget = readLiveEdgeTarget(video, hls, safetyDelaySeconds);
+  const bufferedTarget = readBufferedRecoveryTarget(video, stableTarget);
+  const loadTarget = bufferedTarget ?? stableTarget;
+  return {
+    seekTarget: isForwardPlaybackTarget(video, bufferedTarget) ? bufferedTarget : null,
+    loadTarget: isForwardPlaybackTarget(video, loadTarget) ? loadTarget : null
+  };
+}
+
+function isHlsAudioFragment(data: any): boolean {
+  const fragType = typeof data?.frag?.type === "string" ? data.frag.type : null;
+  const parentType = typeof data?.parent === "string" ? data.parent : null;
+  return fragType === "audio" || parentType === "audio";
+}
+
+function isRecoverableAudioFragmentError(data: any): boolean {
+  if (!isHlsAudioFragment(data)) return false;
+  const details = data?.details;
+  if (details !== Hls.ErrorDetails.FRAG_LOAD_ERROR && details !== Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) return false;
+  if (details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) return true;
+  const statusCode = typeof data?.response?.code === "number" ? data.response.code : null;
+  return statusCode === null || statusCode === 0 || statusCode === 404 || statusCode === 410 || statusCode >= 500;
 }
 
 function isLikelyMobilePlaybackDevice(): boolean {
@@ -240,15 +336,22 @@ function formatPlaybackTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-function applyHlsPlaybackTuning(hls: Hls, options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }): void {
+function getHlsPlaybackTuning(options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }) {
   const lowLatencyMode = options.lowLatencyEnabled && !options.backgroundPlayEnabled;
+  return {
+    lowLatencyMode,
+    maxBufferLength: options.backgroundPlayEnabled ? 240 : lowLatencyMode ? 45 : 180,
+    maxMaxBufferLength: options.backgroundPlayEnabled ? 360 : lowLatencyMode ? 90 : 240,
+    backBufferLength: options.backgroundPlayEnabled ? 60 : lowLatencyMode ? 30 : 60,
+    liveSyncDurationCount: options.backgroundPlayEnabled ? 12 : lowLatencyMode ? 4 : 10,
+    liveMaxLatencyDurationCount: Number.POSITIVE_INFINITY,
+    liveSyncOnStallIncrease: 0
+  };
+}
+
+function applyHlsPlaybackTuning(hls: Hls, options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }): void {
   const config = hls.config as any;
-  config.lowLatencyMode = lowLatencyMode;
-  config.maxBufferLength = options.backgroundPlayEnabled ? 180 : lowLatencyMode ? 30 : 90;
-  config.maxMaxBufferLength = options.backgroundPlayEnabled ? 300 : lowLatencyMode ? 60 : 120;
-  config.backBufferLength = options.backgroundPlayEnabled ? 30 : lowLatencyMode ? 30 : 90;
-  config.liveSyncDurationCount = options.backgroundPlayEnabled ? 8 : lowLatencyMode ? 3 : 5;
-  config.liveMaxLatencyDurationCount = options.backgroundPlayEnabled ? 16 : lowLatencyMode ? 5 : 8;
+  Object.assign(config, getHlsPlaybackTuning(options));
 }
 
 export function Player({
@@ -332,6 +435,7 @@ export function Player({
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
   const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
   const lastAudibleVolumeRef = useRef(1);
+  const userPausedPlaybackRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mobileControlsVisible, setMobileControlsVisible] = useState(false);
   const mobileControlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -491,11 +595,13 @@ export function Player({
         });
       }
       mediaSession.setActionHandler("play", () => {
+        userPausedPlaybackRef.current = false;
         void video.play().catch(() => {
           // ignore
         });
       });
       mediaSession.setActionHandler("pause", () => {
+        userPausedPlaybackRef.current = true;
         video.pause();
       });
     } catch {
@@ -628,20 +734,33 @@ export function Player({
     let lastObservedTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
     let lastObservedFrames = readVideoFrameCount(video);
     let lastProgressAt = Date.now();
-    let consecutiveRecoveries = 0;
 
     const markHealthy = (now: number, currentTime: number, frameCount: number | null) => {
       lastObservedTime = currentTime;
       lastObservedFrames = frameCount;
       lastProgressAt = now;
-      if (now - lastLivePlaybackRecoveryAtRef.current > 30000) {
-        consecutiveRecoveries = 0;
-      }
     };
 
-    const seekToLiveEdge = () => {
-      const target = readLiveEdgeTarget(video, hlsRef.current);
-      if (target === null) return;
+    const readStableLiveTarget = () => {
+      const safetyDelaySeconds = effectiveBackgroundPlayEnabled ? 18 : lowLatencyEnabled ? 4 : 12;
+      return readLiveEdgeTarget(video, hlsRef.current, safetyDelaySeconds);
+    };
+
+    const readStableRecoveryTarget = () => {
+      const stableTarget = readStableLiveTarget();
+      const target = readBufferedRecoveryTarget(video, stableTarget);
+      return isForwardPlaybackTarget(video, target) ? target : null;
+    };
+
+    const readStableLoadTarget = () => {
+      const stableTarget = readStableLiveTarget();
+      const target = readBufferedRecoveryTarget(video, stableTarget) ?? stableTarget;
+      return isForwardPlaybackTarget(video, target) ? target : null;
+    };
+
+    const seekToStableLiveTarget = () => {
+      const target = readStableRecoveryTarget();
+      if (target === null) return null;
       try {
         if (!Number.isFinite(video.currentTime) || Math.abs(video.currentTime - target) > 1) {
           video.currentTime = target;
@@ -649,45 +768,42 @@ export function Player({
       } catch {
         // ignore
       }
+      return target;
     };
 
-    const recoverLivePlayback = (reason: string, forceReload = false) => {
+    const recoverLivePlayback = (reason: string, bypassThrottle = false) => {
       const now = Date.now();
-      if (now - lastLivePlaybackRecoveryAtRef.current < 8000) return;
+      if (!bypassThrottle && now - lastLivePlaybackRecoveryAtRef.current < 8000) return null;
       lastLivePlaybackRecoveryAtRef.current = now;
-      consecutiveRecoveries += 1;
       setError(null);
       setNeedsClick(false);
       setStatus("Recovering…");
       setNote(reason);
 
       const hls = hlsRef.current;
-      const shouldReload = forceReload || playbackModeRef.current !== "hls" || !hls || consecutiveRecoveries >= 2;
+      const shouldReload = playbackModeRef.current !== "hls" || !hls;
       if (shouldReload) {
         setPlaybackReloadNonce((value) => value + 1);
-        return;
+        return null;
       }
 
+      const target = readStableRecoveryTarget();
       try {
         hls.stopLoad();
       } catch {
         // ignore
       }
       try {
-        hls.startLoad(-1);
+        hls.startLoad(readStableLoadTarget() ?? -1);
       } catch {
         // ignore
       }
-      try {
-        hls.recoverMediaError();
-      } catch {
-        // ignore
-      }
-      seekToLiveEdge();
+      seekToStableLiveTarget();
       void video.play().catch(() => {
         setStatus("Click to play");
         setNeedsClick(true);
       });
+      return target;
     };
 
     const checkLiveProgress = () => {
@@ -696,6 +812,25 @@ export function Player({
       const frameCount = readVideoFrameCount(video);
 
       if (video.paused || video.ended || needsClick) {
+        if (video.paused && !video.ended && !needsClick && effectiveBackgroundPlayEnabled && !userPausedPlaybackRef.current) {
+          const safetyDelaySeconds = effectiveBackgroundPlayEnabled ? 18 : lowLatencyEnabled ? 4 : 12;
+          const { seekTarget, loadTarget } = readLiveRecoveryTargets(video, hlsRef.current, safetyDelaySeconds);
+          if (seekTarget !== null && readBufferedAheadSeconds(video) < 0.25) {
+            try {
+              video.currentTime = seekTarget;
+            } catch {
+              // ignore
+            }
+          }
+          try {
+            hlsRef.current?.startLoad(loadTarget ?? -1);
+          } catch {
+            // ignore
+          }
+          void video.play().catch(() => {
+            // Browser policy can still require a user gesture after a hard mobile lock.
+          });
+        }
         markHealthy(now, currentTime, frameCount);
         return;
       }
@@ -705,6 +840,7 @@ export function Player({
         frameCount !== null && lastObservedFrames !== null && frameCount > lastObservedFrames + 2;
       const jumpedBackward = lastObservedTime > 5 && currentTime + 1.25 < lastObservedTime;
       const bufferAhead = readBufferedAheadSeconds(video);
+      const nextBufferedStart = readNextBufferedRangeStart(video);
       const hlsActivity = liveHlsActivityRef.current;
       const lastHlsActivityAt = Math.max(
         hlsActivity.lastFragBufferedAt,
@@ -719,8 +855,8 @@ export function Player({
         bufferAhead < 6;
 
       if (jumpedBackward) {
-        recoverLivePlayback("Live playback jumped backward. Reconnected to the live stream.");
-        markHealthy(now, currentTime, frameCount);
+        const target = recoverLivePlayback("Live playback jumped backward. Reconnected to the live stream.", true);
+        markHealthy(now, target ?? currentTime, frameCount);
         return;
       }
 
@@ -733,17 +869,67 @@ export function Player({
       }
 
       const stalledForMs = now - lastProgressAt;
+      const stableTarget = bufferAhead < 0.25 ? readStableLiveTarget() : null;
+      const bufferedTarget = bufferAhead < 0.25 ? readBufferedRecoveryTarget(video, stableTarget) : null;
+      const bufferedRecoveryTarget =
+        bufferAhead < 0.25
+          ? isForwardPlaybackTarget(video, bufferedTarget)
+            ? bufferedTarget
+            : nextBufferedStart
+          : nextBufferedStart;
+      const liveRecoveryTarget = isForwardPlaybackTarget(video, stableTarget) ? stableTarget : null;
+      const shouldRecoverBufferedGap = bufferedRecoveryTarget !== null && stalledForMs >= 1500;
+      const shouldCatchUpToLive =
+        bufferedRecoveryTarget === null &&
+        liveRecoveryTarget !== null &&
+        stalledForMs >= 2500 &&
+        now - lastLivePlaybackRecoveryAtRef.current >= 2500;
+      if (shouldRecoverBufferedGap) {
+        const target = (bufferedRecoveryTarget ?? 0) + (bufferedRecoveryTarget === nextBufferedStart ? 0.05 : 0);
+        try {
+          video.currentTime = target;
+          hlsRef.current?.startLoad(target);
+        } catch {
+          // ignore
+        }
+        setError(null);
+        setNeedsClick(false);
+        setStatus("Recovering…");
+        setNote("Live playback skipped a media gap. Reconnected to the live stream.");
+        void video.play().catch(() => {
+          setStatus("Click to play");
+          setNeedsClick(true);
+        });
+        markHealthy(now, target, frameCount);
+        return;
+      }
+      if (shouldCatchUpToLive) {
+        lastLivePlaybackRecoveryAtRef.current = now;
+        try {
+          hlsRef.current?.stopLoad();
+          hlsRef.current?.startLoad(liveRecoveryTarget);
+        } catch {
+          // ignore
+        }
+        setError(null);
+        setNeedsClick(false);
+        setStatus("Recovering…");
+        setNote("Live playback is loading the live window.");
+        void video.play().catch(() => {
+          setStatus("Click to play");
+          setNeedsClick(true);
+        });
+        return;
+      }
+
       const stallThresholdMs = typeof document !== "undefined" && document.visibilityState === "hidden" ? 18000 : 9000;
-      if (video.readyState >= 2 && stalledForMs >= stallThresholdMs) {
-        recoverLivePlayback(
-          "Live playback stopped advancing. Reconnected to the live stream.",
-          stalledForMs >= stallThresholdMs * 2
-        );
+      if (stalledForMs >= stallThresholdMs && (video.readyState >= 2 || bufferAhead < 0.25)) {
+        recoverLivePlayback("Live playback stopped advancing. Reconnected to the live stream.");
         markHealthy(now, currentTime, frameCount);
       }
     };
 
-    const interval = setInterval(checkLiveProgress, 2000);
+    const interval = setInterval(checkLiveProgress, 1000);
     video.addEventListener("playing", checkLiveProgress);
     video.addEventListener("waiting", checkLiveProgress);
     video.addEventListener("stalled", checkLiveProgress);
@@ -753,7 +939,16 @@ export function Player({
       video.removeEventListener("waiting", checkLiveProgress);
       video.removeEventListener("stalled", checkLiveProgress);
     };
-  }, [isLiveStream, needsClick, playbackReloadNonce, playbackStartupPolicyReady, src, whepSrc]);
+  }, [
+    effectiveBackgroundPlayEnabled,
+    isLiveStream,
+    lowLatencyEnabled,
+    needsClick,
+    playbackReloadNonce,
+    playbackStartupPolicyReady,
+    src,
+    whepSrc
+  ]);
 
   useEffect(() => {
     if (error || needsClick || volume !== 0) {
@@ -962,9 +1157,6 @@ export function Player({
           const end = video.buffered.end(index);
           if (current >= start - 0.05 && current <= end + 0.05) return Math.max(0, end - current);
         }
-        if (video.buffered.length > 0) {
-          return Math.max(0, video.buffered.end(video.buffered.length - 1) - current);
-        }
       } catch {
         // ignore
       }
@@ -984,8 +1176,8 @@ export function Player({
         beginHlsPlayback();
         return;
       }
-      const targetBufferSeconds = effectiveBackgroundPlayEnabled ? 8 : lowLatencyEnabled ? 2 : 6;
-      const maxWaitMs = effectiveBackgroundPlayEnabled ? 9000 : lowLatencyEnabled ? 2500 : 6500;
+      const targetBufferSeconds = effectiveBackgroundPlayEnabled ? 16 : lowLatencyEnabled ? 4 : 12;
+      const maxWaitMs = effectiveBackgroundPlayEnabled ? 18000 : lowLatencyEnabled ? 5000 : 15000;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1141,6 +1333,7 @@ export function Player({
 
     const startHls = (hlsSource: string, options: { skipNative?: boolean } = {}): boolean => {
       let mediaRecoveryAttempts = 0;
+      let hasBufferedHlsFragment = false;
       setPlaybackMode("hls");
       liveHlsActivityRef.current = {
         lastFragBufferedAt: Date.now(),
@@ -1149,6 +1342,64 @@ export function Player({
       };
       const markLiveHlsActivity = (key: keyof LiveHlsActivity) => {
         liveHlsActivityRef.current[key] = Date.now();
+      };
+      const liveAudioFailureState: LiveAudioFailureState = {
+        count: 0,
+        windowStartedAt: 0,
+        lastRecoveryAt: 0
+      };
+      const resetLiveAudioFailureState = () => {
+        liveAudioFailureState.count = 0;
+        liveAudioFailureState.windowStartedAt = 0;
+      };
+      const recoverFromLiveAudioFragmentErrors = (data: any): boolean => {
+        if (!isLiveStream || !isRecoverableAudioFragmentError(data)) return false;
+
+        const now = Date.now();
+        if (now - liveAudioFailureState.windowStartedAt > 20000) {
+          liveAudioFailureState.count = 0;
+          liveAudioFailureState.windowStartedAt = now;
+        }
+        liveAudioFailureState.count += 1;
+
+        const bufferAhead = getBufferedAheadSeconds();
+        if (liveAudioFailureState.count < 2 && bufferAhead > 2) return false;
+        if (now - liveAudioFailureState.lastRecoveryAt < 8000) return true;
+
+        liveAudioFailureState.lastRecoveryAt = now;
+        setError(null);
+        setNeedsClick(false);
+        setStatus("Recovering…");
+        setNote("Live audio fell behind the source. Reconnected to the live stream.");
+
+        const safetyDelaySeconds = effectiveBackgroundPlayEnabled ? 24 : lowLatencyEnabled ? 8 : 18;
+        const { seekTarget, loadTarget } = readLiveRecoveryTargets(video, hls, safetyDelaySeconds);
+        try {
+          hls.stopLoad();
+        } catch {
+          // ignore
+        }
+        try {
+          const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : null;
+          const shouldSeek =
+            seekTarget !== null &&
+            (currentTime === null || seekTarget > currentTime + 1 || (bufferAhead < 0.25 && seekTarget >= currentTime - 1));
+          if (shouldSeek) {
+            video.currentTime = seekTarget;
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          hls.startLoad(loadTarget ?? -1);
+        } catch {
+          // ignore
+        }
+        void video.play().catch(() => {
+          setStatus("Click to play");
+          setNeedsClick(true);
+        });
+        return true;
       };
 
       // Prefer native HLS (Safari is typically more reliable without hls.js),
@@ -1269,6 +1520,10 @@ export function Player({
         integrityEnabled && hlsSource.includes("/api/dev/tamper-hls/")
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
+      const hlsPlaybackTuning = getHlsPlaybackTuning({
+        lowLatencyEnabled,
+        backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+      });
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
@@ -1282,7 +1537,7 @@ export function Player({
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetryTimeout: 8000,
         fLoader: P2PFragmentLoader,
-        lowLatencyMode: false,
+        ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
@@ -1310,7 +1565,11 @@ export function Player({
         waitForHlsStartupBuffer(hls);
       });
 
-      hls.on(Hls.Events.FRAG_BUFFERED, () => markLiveHlsActivity("lastFragBufferedAt"));
+      hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+        hasBufferedHlsFragment = true;
+        markLiveHlsActivity("lastFragBufferedAt");
+        if (isHlsAudioFragment(data)) resetLiveAudioFailureState();
+      });
       hls.on(Hls.Events.FRAG_CHANGED, () => markLiveHlsActivity("lastFragChangedAt"));
       hls.on(Hls.Events.LEVEL_LOADED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
       hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
@@ -1324,10 +1583,13 @@ export function Player({
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (recoverFromLiveAudioFragmentErrors(data)) return;
         if (!data.fatal) return;
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
             if (
+              (!isLiveStream || !hasBufferedHlsFragment) &&
+              (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) &&
               tryHlsBackup("Primary stream unavailable (trying backup stream path).", () => {
                 try {
                   hls.destroy();
@@ -1343,7 +1605,19 @@ export function Player({
             setStatus("Retrying…");
             setTimeout(() => {
               try {
-                hls.startLoad();
+                const safetyDelaySeconds = effectiveBackgroundPlayEnabled ? 24 : lowLatencyEnabled ? 8 : 18;
+                const { seekTarget, loadTarget } = isLiveStream
+                  ? readLiveRecoveryTargets(video, hls, safetyDelaySeconds)
+                  : { seekTarget: null, loadTarget: null };
+                if (seekTarget !== null) {
+                  video.currentTime = seekTarget;
+                }
+                hls.stopLoad();
+                hls.startLoad(loadTarget ?? -1);
+                void video.play().catch(() => {
+                  setStatus("Click to play");
+                  setNeedsClick(true);
+                });
               } catch {
                 // ignore
               }
@@ -1354,16 +1628,52 @@ export function Player({
             setStatus("Recovering…");
             mediaRecoveryAttempts++;
             try {
-              if (mediaRecoveryAttempts <= 1) {
-                  hls.recoverMediaError();
-              } else if (mediaRecoveryAttempts === 2) {
-                  hls.swapAudioCodec();
-                  hls.recoverMediaError();
+              const safetyDelaySeconds = effectiveBackgroundPlayEnabled ? 24 : lowLatencyEnabled ? 8 : 18;
+              const { seekTarget, loadTarget } = isLiveStream
+                ? readLiveRecoveryTargets(video, hls, safetyDelaySeconds)
+                : { seekTarget: null, loadTarget: null };
+              const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+              const resumeTarget = seekTarget;
+              if (seekTarget !== null) {
+                video.currentTime = seekTarget;
+              }
+              if (isLiveStream && mediaRecoveryAttempts <= 2) {
+                hls.stopLoad();
+                hls.startLoad(loadTarget ?? -1);
+                void video.play().catch(() => {
+                  setStatus("Click to play");
+                  setNeedsClick(true);
+                });
+                return;
+              }
+              if (mediaRecoveryAttempts === 2) {
+                hls.swapAudioCodec();
+              }
+              hls.recoverMediaError();
+              hls.startLoad(loadTarget ?? -1);
+              if (isLiveStream && resumeTarget !== null) {
+                setTimeout(() => {
+                  try {
+                    if (video.currentTime + 1 < resumeTarget) {
+                      video.currentTime = resumeTarget;
+                      hls.startLoad(resumeTarget);
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }, 250);
+              }
+              void video.play().catch(() => {
+                setStatus("Click to play");
+                setNeedsClick(true);
+              });
+              if (!isLiveStream && mediaRecoveryAttempts > 2) {
+                hls.destroy();
+                setTimeout(() => {
+                  startBestEffort(hlsSource);
+                }, 1000);
               } else {
-                  hls.destroy();
-                  setTimeout(() => {
-                      startBestEffort(hlsSource);
-                  }, 1000);
+                mediaRecoveryAttempts = Math.min(mediaRecoveryAttempts, 2);
               }
             } catch {
               // ignore
@@ -1686,11 +1996,12 @@ export function Player({
     }
   };
 
-  const enableBackgroundPlayFromGesture = () => {
-    const video = videoRef.current;
-    setBackgroundPlayEnabled(true);
-    configureAudioSessionForPlayback();
-    if (!video) return;
+    const enableBackgroundPlayFromGesture = () => {
+      const video = videoRef.current;
+      setBackgroundPlayEnabled(true);
+      userPausedPlaybackRef.current = false;
+      configureAudioSessionForPlayback();
+      if (!video) return;
 
     setNeedsClick(false);
     unmuteFromGesture();
@@ -1711,17 +2022,19 @@ export function Player({
     enableBackgroundPlayFromGesture();
   };
 
-  const togglePlayPause = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused || video.ended) {
-      void video.play().catch(() => {
-        // ignore autoplay restrictions
-      });
-      return;
-    }
-    video.pause();
-  };
+    const togglePlayPause = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (video.paused || video.ended) {
+        userPausedPlaybackRef.current = false;
+        void video.play().catch(() => {
+          // ignore autoplay restrictions
+        });
+        return;
+      }
+      userPausedPlaybackRef.current = true;
+      video.pause();
+    };
 
   const toggleMute = () => {
     const video = videoRef.current;
@@ -1781,6 +2094,7 @@ export function Player({
       const shouldUnmuteAfterPlay = currentlyMuted || needsClick;
       setNeedsClick(false);
       if (shouldUnmuteAfterPlay) unmuteFromGesture();
+      if (currentlyPaused || needsClick) userPausedPlaybackRef.current = false;
       const playPromise = currentlyPaused || needsClick ? video.play() : Promise.resolve();
       void playPromise.catch(() => {
         if (shouldUnmuteAfterPlay) {
