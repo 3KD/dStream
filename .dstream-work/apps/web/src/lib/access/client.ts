@@ -110,6 +110,7 @@ export interface VideoAccessPackage {
   description?: string;
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
+  paymentAddress?: string;
   paymentRailId?: string;
   durationHours: number;
   status: VideoAccessPackageStatus;
@@ -993,6 +994,7 @@ export async function upsertVideoAccessPackageClient(input: {
   playlistId?: string;
   relativePath?: string;
   description?: string;
+  paymentAddress?: string;
   paymentRailId?: string;
   status?: VideoAccessPackageStatus;
   visibility?: VideoAccessPackageVisibility;
@@ -1013,6 +1015,7 @@ export async function upsertVideoAccessPackageClient(input: {
       playlistId: input.playlistId,
       relativePath: input.relativePath,
       description: input.description,
+      paymentAddress: input.paymentAddress,
       paymentRailId: input.paymentRailId,
       status: input.status,
       visibility: input.visibility,
@@ -1067,6 +1070,7 @@ export async function purchaseVideoAccessPackageClient(input: {
   buyerProofEvent: NostrEvent;
   sourceRef?: string;
   settlementRef?: string;
+  paymentProof?: unknown;
   stakeSessionToken?: string;
   operatorProofEvent?: NostrEvent;
   verifiedByOperator?: boolean;
@@ -1096,6 +1100,7 @@ export async function purchaseVideoAccessPackageClient(input: {
       buyerProofEvent: input.buyerProofEvent,
       sourceRef: input.sourceRef,
       settlementRef: input.settlementRef,
+      paymentProof: input.paymentProof,
       stakeSessionToken: input.stakeSessionToken,
       operatorProofEvent: input.operatorProofEvent,
       verifiedByOperator: input.verifiedByOperator,

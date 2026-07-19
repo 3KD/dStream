@@ -138,6 +138,7 @@ export function VideoAccessPackagesPanel() {
   const [descriptionInput, setDescriptionInput] = useState("");
   const [paymentAsset, setPaymentAsset] = useState<StreamPaymentAsset>("xmr");
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
+  const [paymentAddressInput, setPaymentAddressInput] = useState("");
   const [paymentRailIdInput, setPaymentRailIdInput] = useState("");
   const [durationHoursInput, setDurationHoursInput] = useState("720");
   const [purchasePolicyInput, setPurchasePolicyInput] = useState<VideoPurchasePolicy>(DEFAULT_Video_PURCHASE_POLICY);
@@ -396,6 +397,7 @@ export function VideoAccessPackagesPanel() {
     setDescriptionInput("");
     setPaymentAsset("xmr");
     setPaymentAmountInput("");
+    setPaymentAddressInput("");
     setPaymentRailIdInput("");
     setDurationHoursInput("720");
     setPurchasePolicyInput(DEFAULT_Video_PURCHASE_POLICY);
@@ -412,6 +414,7 @@ export function VideoAccessPackagesPanel() {
     setDescriptionInput(row.description ?? "");
     setPaymentAsset(row.paymentAsset);
     setPaymentAmountInput(row.paymentAmount);
+    setPaymentAddressInput(row.paymentAddress ?? "");
     setPaymentRailIdInput(row.paymentRailId ?? "");
     setDurationHoursInput(String(row.durationHours));
     setPurchasePolicyInput(getVideoPurchasePolicyFromMetadata(row.metadata));
@@ -725,6 +728,7 @@ export function VideoAccessPackagesPanel() {
             description: `Playlist package for ${playlistLabel}.`,
             paymentAsset,
             paymentAmount: amount,
+            paymentAddress: paymentAddressInput.trim() || undefined,
             paymentRailId: paymentRailIdInput.trim() || undefined,
             durationHours,
             status: "active",
@@ -763,6 +767,7 @@ export function VideoAccessPackagesPanel() {
     bulkTitlePrefixInput,
     normalizedHostPubkey,
     packages,
+    paymentAddressInput,
     paymentAsset,
     paymentRailIdInput,
     purchasePolicyInput,
@@ -834,6 +839,7 @@ export function VideoAccessPackagesPanel() {
             description: `File package for ${normalizedRelativePath}.`,
             paymentAsset,
             paymentAmount: amount,
+            paymentAddress: paymentAddressInput.trim() || undefined,
             paymentRailId: paymentRailIdInput.trim() || undefined,
             durationHours,
             status: "active",
@@ -874,6 +880,7 @@ export function VideoAccessPackagesPanel() {
     bulkTitlePrefixInput,
     normalizedHostPubkey,
     packages,
+    paymentAddressInput,
     paymentAsset,
     paymentRailIdInput,
     purchasePolicyInput,
@@ -937,6 +944,7 @@ export function VideoAccessPackagesPanel() {
         description: descriptionInput.trim() || undefined,
         paymentAsset,
         paymentAmount: amount,
+        paymentAddress: paymentAddressInput.trim() || undefined,
         paymentRailId: paymentRailIdInput.trim() || undefined,
         durationHours,
         status: statusInput,
@@ -961,6 +969,7 @@ export function VideoAccessPackagesPanel() {
     durationHoursInput,
     editingPackageId,
     normalizedHostPubkey,
+    paymentAddressInput,
     paymentAmountInput,
     paymentAsset,
     paymentRailIdInput,
@@ -1023,6 +1032,7 @@ export function VideoAccessPackagesPanel() {
           description: row.description,
           paymentAsset: row.paymentAsset,
           paymentAmount: row.paymentAmount,
+          paymentAddress: row.paymentAddress,
           paymentRailId: row.paymentRailId,
           durationHours: row.durationHours,
           status: "active",
@@ -1049,6 +1059,7 @@ export function VideoAccessPackagesPanel() {
     setDescriptionInput(row.description ?? "");
     setPaymentAsset(row.paymentAsset);
     setPaymentAmountInput(row.paymentAmount);
+    setPaymentAddressInput(row.paymentAddress ?? "");
     setPaymentRailIdInput(row.paymentRailId ?? "");
     setDurationHoursInput(String(row.durationHours));
     setPurchasePolicyInput(getVideoPurchasePolicyFromMetadata(row.metadata));
@@ -1249,6 +1260,12 @@ export function VideoAccessPackagesPanel() {
             className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
           />
         </div>
+        <input
+          value={paymentAddressInput}
+          onChange={(event) => setPaymentAddressInput(event.target.value)}
+          placeholder="Trusted payment recipient address (required for verified BTC, ETH, or TRX)"
+          className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm font-mono"
+        />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <select
             value={purchasePolicyInput}

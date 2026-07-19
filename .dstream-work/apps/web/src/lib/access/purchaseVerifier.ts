@@ -105,6 +105,7 @@ export async function verifyExternalPurchase(input: ExternalPurchaseVerification
           resourceId: input.package.resourceId,
           paymentAsset: input.package.paymentAsset,
           paymentAmount: input.package.paymentAmount,
+          paymentAddress: input.package.paymentAddress,
           paymentRailId: input.package.paymentRailId,
           durationHours: input.package.durationHours
         },

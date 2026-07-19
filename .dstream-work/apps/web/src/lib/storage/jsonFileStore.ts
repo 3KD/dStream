@@ -32,7 +32,7 @@ function releaseFileLock(path: string): void {
   }
 }
 
-function withFileLock(filePath: string, fn: () => void): void {
+function withFileLock<T>(filePath: string, fn: () => T): T {
   const lock = lockPath(filePath);
   const startedAt = Date.now();
   const timeoutMs = 5000;
@@ -43,9 +43,17 @@ function withFileLock(filePath: string, fn: () => void): void {
     sleep(25);
   }
   try {
-    fn();
+    return fn();
   } finally {
     releaseFileLock(lock);
+  }
+}
+
+function readTextFile(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch {
+    return null;
   }
 }
 
@@ -90,5 +98,63 @@ export function writeJsonFileAtomic(filePath: string, value: unknown): void {
         // no-op
       }
     }
+  });
+}
+
+export function updateJsonFileAtomic<T>(
+  filePath: string,
+  fallback: T,
+  update: (current: T) => T
+): T {
+  return withFileLock(filePath, () => {
+    const baseDir = dirname(filePath);
+    const backup = backupPath(filePath);
+    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
+    mkdirSync(baseDir, { recursive: true });
+
+    let current = fallback;
+    let primaryWasValid = false;
+    const primaryRaw = readTextFile(filePath);
+    const backupRaw = readTextFile(backup);
+    if (primaryRaw) {
+      try {
+        current = JSON.parse(primaryRaw) as T;
+        primaryWasValid = true;
+      } catch {
+        if (!backupRaw) throw new Error(`JSON store is corrupt: ${filePath}`);
+        try {
+          current = JSON.parse(backupRaw) as T;
+        } catch {
+          throw new Error(`JSON store and backup are corrupt: ${filePath}`);
+        }
+      }
+    } else if (backupRaw) {
+      try {
+        current = JSON.parse(backupRaw) as T;
+      } catch {
+        throw new Error(`JSON store backup is corrupt: ${filePath}`);
+      }
+    }
+
+    const next = update(current);
+    const body = `${JSON.stringify(next, null, 2)}\n`;
+    try {
+      if (primaryWasValid && existsSync(filePath)) {
+        try {
+          copyFileSync(filePath, backup);
+        } catch {
+          // no-op
+        }
+      }
+      writeFileSync(tempPath, body, "utf8");
+      renameSync(tempPath, filePath);
+    } finally {
+      try {
+        rmSync(tempPath, { force: true });
+      } catch {
+        // no-op
+      }
+    }
+    return next;
   });
 }

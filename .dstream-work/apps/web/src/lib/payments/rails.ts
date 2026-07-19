@@ -10,6 +10,7 @@ export interface PaymentRailMeta {
   description: string;
   execution: PaymentRailExecution;
   assets: StreamPaymentAsset[];
+  verifiedAssets?: StreamPaymentAsset[];
 }
 
 const BTC_LIGHTNING_INVOICE_RE = /^(lnbc|lntb|lnbcrt|lnsb|lntbs)[0-9a-z]+$/i;
@@ -50,23 +51,26 @@ export const PAYMENT_RAILS: PaymentRailMeta[] = [
   {
     id: "utxo",
     name: "UTXO",
-    description: "UTXO chains routed through wallet URI/open-copy flows.",
+    description: "Bitcoin on-chain supports verified backend settlement; DOGE and BCH use wallet handoff.",
     execution: "wallet_uri",
-    assets: ["btc", "doge", "bch"]
+    assets: ["btc", "doge", "bch"],
+    verifiedAssets: ["btc"]
   },
   {
     id: "evm",
     name: "EVM",
-    description: "EVM assets routed through compatible wallet integrations.",
+    description: "Native ETH supports verified backend settlement; tokens use compatible wallet integrations.",
     execution: "wallet_uri",
-    assets: ["eth", "usdt", "usdc", "pepe"]
+    assets: ["eth", "usdt", "usdc", "pepe"],
+    verifiedAssets: ["eth"]
   },
   {
     id: "tron",
     name: "TRON",
-    description: "TRON rail routed via TRON-compatible wallets.",
+    description: "Native TRX supports verified backend settlement and TRON-compatible wallet handoff.",
     execution: "wallet_uri",
-    assets: ["trx"]
+    assets: ["trx"],
+    verifiedAssets: ["trx"]
   },
   {
     id: "solana",

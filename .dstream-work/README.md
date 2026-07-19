@@ -13,6 +13,8 @@ npm run dev
 Copy `.env.example` to `.env.local` if you want to override relays/origin/ICE servers.
 Set support addresses (`NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`, `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`, optional `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`, `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`, `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`) to expose platform donation rails on `/donate`.
 
+BTC on-chain, native ETH, and native TRX have built-in noncustodial settlement verifiers for paid access. Configure their server-only RPC variables from `.env.example`; an unset verifier fails closed and is reported as disabled by `/api/payments/capabilities`. Lightning, ERC-20, TRC-20, and the remaining catalog assets currently provide wallet handoff only.
+
 ## Docker (all-in-one)
 
 ```bash

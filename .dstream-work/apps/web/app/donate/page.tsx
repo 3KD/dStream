@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { Copy, Heart, Wallet } from "lucide-react";
+import type { StreamPaymentAsset, StreamPaymentMethod } from "@dstream/protocol";
+import { Heart, ShieldCheck } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
-import { SupportAddressCopyChip } from "@/components/layout/SupportXmrAddress";
+import { DonationWalletCard } from "@/components/payments/DonationWalletCard";
+import { PAYMENT_ASSET_META, buildPaymentUri } from "@/lib/payments/catalog";
+import { validatePaymentAddress } from "@/lib/payments/methods";
 
 const fallbackSupportXmrAddress =
   "49zL3oidgJbD6DeMheen873myfW1Jkp2tHiQJWXD7L64gjMjQ2pjFmjeksziP3CGKA1rfeLMCtgEqbUWBmhzL9YGP6X5w42";
@@ -11,149 +14,94 @@ const supportBtcLightning = (process.env.NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING ?? ""
 const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
 const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
 
+interface SupportPayment {
+  method: StreamPaymentMethod;
+  name: string;
+  networkLabel: string;
+  symbolClassName: string;
+  walletUri: string;
+}
+
+function supportPayment(
+  asset: StreamPaymentAsset,
+  address: string,
+  network: string,
+  networkLabel: string,
+  symbolClassName: string,
+  label = "dStream"
+): SupportPayment | null {
+  if (!address) return null;
+
+  const addressError = validatePaymentAddress(asset, address, network);
+  if (addressError) {
+    throw new Error(`Invalid ${asset.toUpperCase()} support address: ${addressError}`);
+  }
+
+  const method: StreamPaymentMethod = { asset, address, network, label };
+  const walletUri = buildPaymentUri(method);
+  if (!walletUri) throw new Error(`No wallet URI is configured for ${asset.toUpperCase()} support.`);
+
+  return { method, name: PAYMENT_ASSET_META[asset].name, networkLabel, symbolClassName, walletUri };
+}
+
+const configuredPayments = [
+  supportPayment("xmr", supportXmrAddress, "mainnet", "Monero mainnet", "bg-orange-600"),
+  supportPayment("btc", supportBtcAddress, "bitcoin", "Bitcoin mainnet", "bg-amber-500"),
+  supportPayment("btc", supportBtcLightning, "lightning", "Bitcoin Lightning", "bg-yellow-500", "dStream Lightning"),
+  supportPayment("eth", supportEthAddress, "ethereum", "Ethereum mainnet", "bg-indigo-600"),
+  supportPayment("trx", supportTrxAddress, "tron", "TRON mainnet", "bg-red-600")
+].filter((payment): payment is SupportPayment => payment !== null);
+
+const configuredAssets = new Set(configuredPayments.map((payment) => payment.method.asset));
+const missingAssets = (["xmr", "btc", "eth", "trx"] as const).filter((asset) => !configuredAssets.has(asset));
+
 export default function DonatePage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-8">
+      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
         <header className="space-y-3">
           <p className="text-xs uppercase tracking-wider text-neutral-500">Support</p>
-          <h1 className="text-4xl font-black tracking-tight inline-flex items-center gap-3">
-            <Heart className="w-9 h-9 text-rose-400" />
+          <h1 className="inline-flex items-center gap-3 text-3xl font-black sm:text-4xl">
+            <Heart className="h-8 w-8 text-rose-400 sm:h-9 sm:w-9" />
             Donate to dStream
           </h1>
-          <p className="text-neutral-300 max-w-3xl">
-            dStream is designed to be self-hostable and decentralized. Support keeps protocol work, testing, and infrastructure moving.
+          <p className="max-w-3xl text-neutral-300">
+            Send directly to a dStream wallet. These addresses are non-custodial and support Cake Wallet QR scans and mobile wallet links.
           </p>
         </header>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-orange-400" />
-            Monero Support Address
-          </h2>
-
-          <p className="text-sm text-neutral-400">Send XMR directly to:</p>
-          <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportXmrAddress}</p>
-          <p className="text-xs text-neutral-500 inline-flex items-center gap-2">
-            <Copy className="w-4 h-4" />
-            Copy from your wallet client to avoid transcription errors.
-          </p>
-          <p className="text-xs text-neutral-500">
-            Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_XMR_ADDRESS</span> (falls back to default support
-            address when unset).
-          </p>
+        <section aria-label="Donation wallets" className="grid gap-4">
+          {configuredPayments.map((payment) => (
+            <DonationWalletCard
+              key={`${payment.method.asset}:${payment.method.network}`}
+              name={payment.name}
+              symbol={PAYMENT_ASSET_META[payment.method.asset].symbol}
+              network={payment.networkLabel}
+              address={payment.method.address}
+              walletUri={payment.walletUri}
+              symbolClassName={payment.symbolClassName}
+            />
+          ))}
         </section>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-amber-400" />
-            Bitcoin Support Address
-          </h2>
-          {supportBtcAddress ? (
-            <>
-              <p className="text-sm text-neutral-400">Send BTC directly to:</p>
-              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportBtcAddress}</p>
-              <SupportAddressCopyChip label="BTC" address={supportBtcAddress} ariaLabel="Copy Bitcoin support address" />
-            </>
-          ) : (
-            <p className="text-sm text-neutral-400">
-              This deployment does not currently expose a BTC support address.
-            </p>
-          )}
+        {missingAssets.length > 0 ? (
+          <section className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
+            Wallet configuration pending: {missingAssets.map((asset) => PAYMENT_ASSET_META[asset].symbol).join(", ")}.
+          </section>
+        ) : null}
 
-          {supportBtcLightning ? (
-            <div className="space-y-2">
-              <p className="text-sm text-neutral-400">Lightning (optional):</p>
-              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportBtcLightning}</p>
-              <SupportAddressCopyChip label="LN" address={supportBtcLightning} ariaLabel="Copy Lightning support address" />
-            </div>
-          ) : null}
-
-          <p className="text-xs text-neutral-500">
-            Address sources: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_BTC_ADDRESS</span> and{" "}
-            <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING</span>.
+        <section className="flex flex-col gap-4 border-t border-neutral-800 pt-6 text-sm text-neutral-400 sm:flex-row sm:items-center sm:justify-between">
+          <p className="inline-flex max-w-2xl items-start gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+            Match the asset and network shown above. dStream will never ask for your wallet seed phrase or private key.
           </p>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-violet-400" />
-            Ethereum Support Address
-          </h2>
-          {supportEthAddress ? (
-            <>
-              <p className="text-sm text-neutral-400">Send ETH (and EVM tokens) to:</p>
-              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportEthAddress}</p>
-              <SupportAddressCopyChip label="ETH" address={supportEthAddress} ariaLabel="Copy Ethereum support address" />
-            </>
-          ) : (
-            <p className="text-sm text-neutral-400">This deployment does not currently expose an ETH support address.</p>
-          )}
-          <p className="text-xs text-neutral-500">
-            Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_ETH_ADDRESS</span>.
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold inline-flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-cyan-400" />
-            TRON Support Address
-          </h2>
-          {supportTrxAddress ? (
-            <>
-              <p className="text-sm text-neutral-400">Send TRX to:</p>
-              <p className="font-mono text-sm md:text-base break-all text-neutral-200">{supportTrxAddress}</p>
-              <SupportAddressCopyChip label="TRX" address={supportTrxAddress} ariaLabel="Copy TRON support address" />
-            </>
-          ) : (
-            <p className="text-sm text-neutral-400">This deployment does not currently expose a TRX support address.</p>
-          )}
-          <p className="text-xs text-neutral-500">
-            Address source: <span className="font-mono text-neutral-300">NEXT_PUBLIC_SUPPORT_TRX_ADDRESS</span>.
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-3 text-sm text-neutral-300">
-          <h2 className="text-2xl font-bold">Where support goes</h2>
-          <ul className="list-disc pl-5 space-y-2">
-            <li>Protocol hardening (WHIP/WHEP/HLS path reliability and integrity checks).</li>
-            <li>Relay, TURN, and wallet-rpc operations coverage.</li>
-            <li>End-to-end testing across Chrome/Firefox and multi-network scenarios.</li>
-            <li>Maintenance of docs, ADRs, and deployment runbooks.</li>
-          </ul>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-3 text-sm text-neutral-300">
-          <h2 className="text-2xl font-bold">Wallet Plugin Guidance</h2>
-          <ul className="list-disc pl-5 space-y-2">
-            <li>Set preferred wallet per asset in Settings → Wallet Integrations.</li>
-            <li>Use watch-page wallet URI actions for compatible assets and wallet apps.</li>
-            <li>Use copy-address mode for CLI/external signing flows.</li>
-          </ul>
-          <div className="pt-2 flex flex-wrap gap-3">
+          <div className="flex shrink-0 gap-4">
             <Link href="/settings#wallet-integrations" className="text-blue-400 hover:text-blue-300">
-              Open wallet integrations
+              Wallet settings
             </Link>
             <Link href="/docs" className="text-blue-400 hover:text-blue-300">
-              Read technical docs
-            </Link>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-3 text-sm text-neutral-300">
-          <h2 className="text-2xl font-bold">Other Ways to Help</h2>
-          <ul className="list-disc pl-5 space-y-2">
-            <li>Tip streamers directly from watch pages (Monero panel).</li>
-            <li>Run smoke suites and report regressions with logs.</li>
-            <li>Host your own relays/origin nodes and contribute hardening feedback.</li>
-          </ul>
-          <div className="pt-2 flex flex-wrap gap-3">
-            <Link href="/docs" className="text-blue-400 hover:text-blue-300">
-              Read deployment and architecture docs
-            </Link>
-            <Link href="/whitepaper" className="text-blue-400 hover:text-blue-300">
-              Open whitepaper
+              Payment docs
             </Link>
           </div>
         </section>

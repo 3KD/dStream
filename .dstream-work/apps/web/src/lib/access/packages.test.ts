@@ -233,6 +233,38 @@ test("video packages: rejects mixed playlist + relative path scope", async () =>
   );
 });
 
+test("video packages: validates and stores trusted native payment recipients", async () => {
+  const { upsertVideoAccessPackage } = await import("./packages");
+  const hostPubkey = "d".repeat(64);
+  const ethAddress = `0x${"A".repeat(40)}`;
+  const created = upsertVideoAccessPackage({
+    hostPubkey,
+    streamId: "native-payment-package",
+    title: "Native ETH pass",
+    paymentAsset: "eth",
+    paymentAmount: "0.01",
+    paymentAddress: ethAddress,
+    paymentRailId: "evm",
+    durationHours: 24
+  });
+  assert.equal(created.paymentAddress, ethAddress.toLowerCase());
+
+  assert.throws(
+    () =>
+      upsertVideoAccessPackage({
+        hostPubkey,
+        streamId: "invalid-native-payment-package",
+        title: "Invalid ETH pass",
+        paymentAsset: "eth",
+        paymentAmount: "0.01",
+        paymentAddress: "not-an-eth-address",
+        paymentRailId: "evm",
+        durationHours: 24
+      }),
+    /valid Ethereum address/
+  );
+});
+
 test("video package policy: normalize + metadata defaults", async () => {
   const { getVideoPurchasePolicyFromMetadata, getVideoPurchasePolicyLabel, normalizeVideoPurchasePolicy } = await import(
     "./videoPackagePolicy"

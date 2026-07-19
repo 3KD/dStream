@@ -52,6 +52,7 @@ export async function POST(req: Request): Promise<Response> {
       description: asString(payload.description) || undefined,
       paymentAsset: paymentAsset as StreamPaymentAsset,
       paymentAmount,
+      paymentAddress: asString(payload.paymentAddress) || undefined,
       paymentRailId: asString(payload.paymentRailId) || undefined,
       durationHours,
       status: parseStatus(payload.status),

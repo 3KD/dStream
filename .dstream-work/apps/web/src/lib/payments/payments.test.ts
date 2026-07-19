@@ -58,7 +58,16 @@ test("buildPaymentUri emits scheme URIs for supported assets", () => {
   );
   assert.equal(
     buildPaymentUri({ asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum" }),
-    "ethereum:0x1111111111111111111111111111111111111111?chain=ethereum"
+    "ethereum:0x1111111111111111111111111111111111111111"
+  );
+  assert.equal(
+    buildPaymentUri({ asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", amount: "0.25" }),
+    "ethereum:0x1111111111111111111111111111111111111111?amount=0.25"
+  );
+  assert.equal(buildPaymentUri({ asset: "trx", address: "TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF" }), "tron:TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF");
+  assert.equal(
+    buildPaymentUri({ asset: "trx", address: "TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF", amount: "12.5" }),
+    "tron:TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF?amount=12.5"
   );
 });
 
@@ -122,6 +131,9 @@ test("payment rails map expected assets", () => {
   assert.equal(getPaymentRailForAsset("xrp").id, "xrpl");
   assert.equal(getPaymentRailForAsset("ada").id, "cardano");
   assert.ok(PAYMENT_RAILS.length >= 6);
+  assert.deepEqual(getPaymentRailForAsset("btc").verifiedAssets, ["btc"]);
+  assert.deepEqual(getPaymentRailForAsset("eth").verifiedAssets, ["eth"]);
+  assert.deepEqual(getPaymentRailForAsset("trx").verifiedAssets, ["trx"]);
 });
 
 test("payment rails classify BTC on-chain vs Lightning", () => {

@@ -6,6 +6,12 @@ import { getVideoPurchasePolicyFromMetadata } from "@/lib/access/videoPackagePol
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
 import { getStakeTotals } from "@/lib/monero/stakeVerify";
 import { getXmrConfirmationsRequired, getXmrWalletRpcClient } from "@/lib/monero/server";
+import {
+  isVerifiedNativePaymentAsset,
+  NativePaymentVerificationError,
+  verifyNativePayment
+} from "@/lib/payments/server";
+import { recordNativePaymentSettlement } from "@/lib/payments/server/settlementStore";
 import { asString, authorizeAccessAdmin, parseBoolean } from "../../_lib";
 
 export const runtime = "nodejs";
@@ -35,6 +41,13 @@ function purchasePolicyError(policy: "operator_or_verified" | "verified_only" | 
   if (policy === "verified_only") return "This package requires verified settlement.";
   if (policy === "unverified_ok") return "Unverified unlocks are disabled on this deployment.";
   return "This package requires verified settlement or host operator confirmation.";
+}
+
+function getPaymentTransactionId(input: unknown): string | null {
+  if (typeof input === "string") return input.trim() || null;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const proof = input as Record<string, unknown>;
+  return asString(proof.txId) || asString(proof.txid) || asString(proof.transactionHash) || null;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -134,67 +147,110 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
   } else {
-    const verifiedByOperator = parseBoolean(payload.verifiedByOperator);
-    const externalVerifierConfigured = hasExternalPurchaseVerifier();
-    const canUseOperatorOverride = packagePurchasePolicy === "operator_or_verified";
-    const canUseUnverifiedFallback = packagePurchasePolicy === "unverified_ok" && allowUnverifiedPurchases();
-
-    if (externalVerifierConfigured) {
-      const verification = await verifyExternalPurchase({
-        package: pkg,
-        buyerPubkey: buyerProof.pubkey,
-        buyerProofEvent: payload.buyerProofEvent,
-        sourceRef,
-        settlementRef,
-        paymentProof,
-        metadata
-      });
-      if (verification.verified) {
+    if (isVerifiedNativePaymentAsset(pkg.paymentAsset) && paymentProof) {
+      const txId = getPaymentTransactionId(paymentProof);
+      if (!txId) return Response.json({ ok: false, error: "paymentProof must include a transaction ID." }, { status: 400 });
+      if (!pkg.paymentAddress) {
+        return Response.json({ ok: false, error: "This package has no trusted payment recipient configured." }, { status: 400 });
+      }
+      try {
+        const payment = await verifyNativePayment({
+          asset: pkg.paymentAsset,
+          address: pkg.paymentAddress,
+          amount: pkg.paymentAmount,
+          txId,
+          paymentRailId: pkg.paymentRailId
+        });
+        const settlement = recordNativePaymentSettlement({
+          payment,
+          packageId: pkg.id,
+          buyerPubkey: buyerProof.pubkey
+        });
         source = "purchase_verified";
-        sourceRef = verification.sourceRef || sourceRef;
-        settlementRef = verification.settlementRef || settlementRef;
-        Object.assign(metadata, verification.metadata ?? {});
-        verificationMode = "external_verified";
-        metadata.verificationMode = verificationMode;
+        sourceRef = `native_settlement:${payment.settlementKey}`;
+        settlementRef = payment.settlementKey;
+        verificationMode = "native_verified";
+        Object.assign(metadata, {
+          verificationMode,
+          railId: payment.railId,
+          asset: payment.asset,
+          network: payment.network,
+          txId: payment.txId,
+          recipient: payment.recipient,
+          amountAtomic: payment.amountAtomic,
+          confirmations: payment.confirmations,
+          blockHeight: payment.blockHeight,
+          settlementRecordId: settlement.record.id,
+          settlementRecordExisting: settlement.existing
+        });
+      } catch (error) {
+        const status = error instanceof NativePaymentVerificationError ? error.status : 502;
+        const message = error instanceof Error ? error.message : "Native payment verification failed.";
+        return Response.json({ ok: false, error: message }, { status });
+      }
+    } else {
+      const verifiedByOperator = parseBoolean(payload.verifiedByOperator);
+      const externalVerifierConfigured = hasExternalPurchaseVerifier();
+      const canUseOperatorOverride = packagePurchasePolicy === "operator_or_verified";
+      const canUseUnverifiedFallback = packagePurchasePolicy === "unverified_ok" && allowUnverifiedPurchases();
+
+      if (externalVerifierConfigured) {
+        const verification = await verifyExternalPurchase({
+          package: pkg,
+          buyerPubkey: buyerProof.pubkey,
+          buyerProofEvent: payload.buyerProofEvent,
+          sourceRef,
+          settlementRef,
+          paymentProof,
+          metadata
+        });
+        if (verification.verified) {
+          source = "purchase_verified";
+          sourceRef = verification.sourceRef || sourceRef;
+          settlementRef = verification.settlementRef || settlementRef;
+          Object.assign(metadata, verification.metadata ?? {});
+          verificationMode = "external_verified";
+          metadata.verificationMode = verificationMode;
+        } else if (verifiedByOperator && canUseOperatorOverride) {
+          const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
+          if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
+          source = "purchase_verified";
+          actorPubkey = auth.actorPubkey;
+          metadata.operatorOverride = true;
+          metadata.externalVerifierError = verification.error ?? "verification failed";
+          verificationMode = "operator_override";
+          metadata.verificationMode = verificationMode;
+        } else if (canUseUnverifiedFallback) {
+          source = "purchase_unverified";
+          metadata.externalVerifierError = verification.error ?? "verification failed";
+          metadata.unverifiedFallback = true;
+          verificationMode = "unverified_fallback";
+          metadata.verificationMode = verificationMode;
+        } else {
+          return Response.json(
+            {
+              ok: false,
+              error: verification.error ?? purchasePolicyError(packagePurchasePolicy)
+            },
+            { status: verification.status >= 400 && verification.status < 600 ? verification.status : 402 }
+          );
+        }
       } else if (verifiedByOperator && canUseOperatorOverride) {
         const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
         if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
         source = "purchase_verified";
         actorPubkey = auth.actorPubkey;
         metadata.operatorOverride = true;
-        metadata.externalVerifierError = verification.error ?? "verification failed";
         verificationMode = "operator_override";
         metadata.verificationMode = verificationMode;
       } else if (canUseUnverifiedFallback) {
         source = "purchase_unverified";
-        metadata.externalVerifierError = verification.error ?? "verification failed";
         metadata.unverifiedFallback = true;
         verificationMode = "unverified_fallback";
         metadata.verificationMode = verificationMode;
       } else {
-        return Response.json(
-          {
-            ok: false,
-            error: verification.error ?? purchasePolicyError(packagePurchasePolicy)
-          },
-          { status: verification.status >= 400 && verification.status < 600 ? verification.status : 402 }
-        );
+        return Response.json({ ok: false, error: purchasePolicyError(packagePurchasePolicy) }, { status: 402 });
       }
-    } else if (verifiedByOperator && canUseOperatorOverride) {
-      const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
-      if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
-      source = "purchase_verified";
-      actorPubkey = auth.actorPubkey;
-      metadata.operatorOverride = true;
-      verificationMode = "operator_override";
-      metadata.verificationMode = verificationMode;
-    } else if (canUseUnverifiedFallback) {
-      source = "purchase_unverified";
-      metadata.unverifiedFallback = true;
-      verificationMode = "unverified_fallback";
-      metadata.verificationMode = verificationMode;
-    } else {
-      return Response.json({ ok: false, error: purchasePolicyError(packagePurchasePolicy) }, { status: 402 });
     }
   }
 

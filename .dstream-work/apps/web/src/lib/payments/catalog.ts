@@ -343,8 +343,9 @@ export function buildPaymentUri(method: StreamPaymentMethod): string | null {
     case "sol":
       return `solana:${address}`;
     case "trx":
-      return `tron:${address}`;
+      return withQuery(`tron:${address}`, { amount: method.amount });
     case "eth":
+      return withQuery(`ethereum:${address}`, { amount: method.amount });
     case "usdt":
     case "usdc":
     case "pepe":

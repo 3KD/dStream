@@ -3,6 +3,7 @@ import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protoco
 import { grantAccessEntitlement, listAccessEntitlements } from "./store";
 import type { AccessEntitlement, AccessEntitlementSource } from "./types";
 import { readTextFileWithBackup, writeJsonFileAtomic } from "../storage/jsonFileStore";
+import { isVerifiedNativePaymentAsset, validateNativePaymentAddress } from "../payments/server";
 
 const STORE_PATH =
   (process.env.DSTREAM_Video_PACKAGE_STORE_PATH ?? "/var/lib/dstream/video-packages.json").trim() ||
@@ -26,6 +27,7 @@ export interface VideoAccessPackage {
   description?: string;
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
+  paymentAddress?: string;
   paymentRailId?: string;
   durationHours: number;
   status: VideoAccessPackageStatus;
@@ -193,6 +195,7 @@ function parseStoredPackage(input: unknown): VideoAccessPackage | null {
     description: sanitizeShortText(row.description, 500) ?? undefined,
     paymentAsset,
     paymentAmount,
+    paymentAddress: sanitizeShortText(row.paymentAddress, 240) ?? undefined,
     paymentRailId: sanitizeShortText(row.paymentRailId, 80) ?? undefined,
     durationHours,
     status: parseStatus(row.status),
@@ -386,6 +389,7 @@ export function upsertVideoAccessPackage(input: {
   description?: string;
   paymentAsset: StreamPaymentAsset;
   paymentAmount: string;
+  paymentAddress?: string;
   paymentRailId?: string;
   durationHours: number;
   status?: VideoAccessPackageStatus;
@@ -402,6 +406,7 @@ export function upsertVideoAccessPackage(input: {
   const description = sanitizeShortText(input.description, 500) ?? undefined;
   const paymentAsset = normalizePaymentAsset(input.paymentAsset);
   const paymentAmount = normalizeAmount(input.paymentAmount);
+  const paymentAddressInput = sanitizeShortText(input.paymentAddress, 240) ?? undefined;
   const paymentRailId = sanitizeShortText(input.paymentRailId, 80) ?? undefined;
   const durationHours = parsePositiveInt(input.durationHours);
   const status = parseStatus(input.status);
@@ -411,6 +416,10 @@ export function upsertVideoAccessPackage(input: {
   if (!title) throw new Error("title is required.");
   if (!paymentAsset) throw new Error("paymentAsset is invalid.");
   if (!paymentAmount) throw new Error("paymentAmount must be a positive decimal string.");
+  const paymentAddress =
+    paymentAddressInput && isVerifiedNativePaymentAsset(paymentAsset)
+      ? validateNativePaymentAddress(paymentAsset, paymentAddressInput)
+      : paymentAddressInput;
   if (!durationHours) throw new Error("durationHours must be a positive integer.");
   if (playlistId && relativePath) throw new Error("Only one package scope is allowed: playlistId or relativePath.");
 
@@ -430,6 +439,7 @@ export function upsertVideoAccessPackage(input: {
     existing.description = description;
     existing.paymentAsset = paymentAsset;
     existing.paymentAmount = paymentAmount;
+    existing.paymentAddress = paymentAddress;
     existing.paymentRailId = paymentRailId;
     existing.durationHours = durationHours;
     existing.status = status;
@@ -451,6 +461,7 @@ export function upsertVideoAccessPackage(input: {
     description,
     paymentAsset,
     paymentAmount,
+    paymentAddress,
     paymentRailId,
     durationHours,
     status,

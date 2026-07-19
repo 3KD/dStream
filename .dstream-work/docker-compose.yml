@@ -30,6 +30,20 @@ services:
       DSTREAM_XMR_CONFIRMATIONS_REQUIRED: "${DSTREAM_XMR_CONFIRMATIONS_REQUIRED:-10}"
       DSTREAM_XMR_ESCROW_SESSION_TTL_SEC: "${DSTREAM_XMR_ESCROW_SESSION_TTL_SEC:-3600}"
       DSTREAM_XMR_SESSION_SECRET: "${DSTREAM_XMR_SESSION_SECRET:-dev-session-secret-0123456789abcdef}"
+      # Verified BTC/ETH/TRX settlement adapters. They remain disabled until an RPC origin is configured.
+      DSTREAM_PAYMENT_RPC_TIMEOUT_MS: "${DSTREAM_PAYMENT_RPC_TIMEOUT_MS:-8000}"
+      DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH: "${DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH:-/var/lib/dstream/payment-settlements.json}"
+      DSTREAM_BTC_RPC_ORIGIN: "${DSTREAM_BTC_RPC_ORIGIN:-}"
+      DSTREAM_BTC_RPC_USER: "${DSTREAM_BTC_RPC_USER:-}"
+      DSTREAM_BTC_RPC_PASS: "${DSTREAM_BTC_RPC_PASS:-}"
+      DSTREAM_BTC_NETWORK: "${DSTREAM_BTC_NETWORK:-main}"
+      DSTREAM_BTC_CONFIRMATIONS_REQUIRED: "${DSTREAM_BTC_CONFIRMATIONS_REQUIRED:-3}"
+      DSTREAM_ETH_RPC_ORIGIN: "${DSTREAM_ETH_RPC_ORIGIN:-}"
+      DSTREAM_ETH_CHAIN_ID: "${DSTREAM_ETH_CHAIN_ID:-0x1}"
+      DSTREAM_ETH_CONFIRMATIONS_REQUIRED: "${DSTREAM_ETH_CONFIRMATIONS_REQUIRED:-12}"
+      DSTREAM_TRON_RPC_ORIGIN: "${DSTREAM_TRON_RPC_ORIGIN:-}"
+      DSTREAM_TRON_API_KEY: "${DSTREAM_TRON_API_KEY:-}"
+      DSTREAM_TRON_CONFIRMATIONS_REQUIRED: "${DSTREAM_TRON_CONFIRMATIONS_REQUIRED:-20}"
       # Allow /dev/* pages and /api/dev/log in local docker runs (still opt-in in non-local envs).
       DSTREAM_DEVTOOLS: "${DSTREAM_DEVTOOLS:-1}"
     depends_on:
@@ -43,6 +57,7 @@ services:
       - "127.0.0.1:${DSTREAM_WEB_PORT:-5656}:5656"
     volumes:
       - dstream_recordings:/recordings:ro
+      - dstream_data:/var/lib/dstream
     restart: unless-stopped
 
   turn:
@@ -195,6 +210,7 @@ services:
 
 volumes:
   relay_data:
+  dstream_data:
   dstream_hls:
   dstream_recordings:
   xmr_wallet_data:
