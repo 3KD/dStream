@@ -342,6 +342,12 @@ export function Player({
   const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(false);
   const [playbackReloadNonce, setPlaybackReloadNonce] = useState(0);
   const playbackSessionGenerationRef = useRef(0);
+  const preferSourceVideoRef = useRef(false);
+
+  useEffect(() => {
+    preferSourceVideoRef.current = false;
+  }, [normalizedSrc]);
+
   const requestLivePlaybackReload = useCallback((reason: string) => {
     const now = Date.now();
     if (now - lastLivePlaybackRecoveryAtRef.current < 8_000) return false;
@@ -1446,8 +1452,8 @@ export function Player({
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
       const useMonotonicPlaylistGuard = !isFirefoxPlayback && !isZapStreamHlsUrl(hlsSource);
-      let malformedZapTimingDetected = false;
-      let switchMalformedZapSourceToAudio = () => false;
+      let correctedZapPlaylistTiming = false;
+      let switchZapSourceToAudio: (reason: string) => boolean = () => false;
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
@@ -1469,10 +1475,11 @@ export function Player({
         ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
         dstreamMonotonicPlaylistGuard: useMonotonicPlaylistGuard,
-        dstreamInvalidPlaylistTiming: false,
-        dstreamOnInvalidPlaylistTiming: () => {
-          malformedZapTimingDetected = true;
-          setTimeout(() => switchMalformedZapSourceToAudio(), 0);
+        dstreamPlaylistTimingCorrected: false,
+        dstreamOnPlaylistTimingCorrected: () => {
+          correctedZapPlaylistTiming = true;
+          video.dataset.dstreamPlaylistTimingCorrected = "true";
+          setTimeout(() => switchZapSourceToAudio("playlist-timing-corrected"), 0);
         },
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
@@ -1526,9 +1533,10 @@ export function Player({
         }
         if (data.frag?.sn !== undefined) video.dataset.dstreamHlsFragment = String(data.frag.sn);
       });
-      switchMalformedZapSourceToAudio = () => {
+      switchZapSourceToAudio = (reason: string) => {
         if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
-        if (!malformedZapTimingDetected && !(hls.config as any).dstreamInvalidPlaylistTiming) return false;
+        if (reason === "playlist-timing-corrected" && preferSourceVideoRef.current) return false;
+        if (!correctedZapPlaylistTiming && !(hls.config as any).dstreamPlaylistTimingCorrected) return false;
         const audioTrackUrl = hls.audioTracks.find(
           (track) => typeof track.url === "string" && track.url.length > 0
         )?.url;
@@ -1537,12 +1545,13 @@ export function Player({
         zapAudioFallbackActive = true;
         clearHlsStartupListener();
         setError(null);
-        setStatus("Switching to stable audio…");
-        setNote("The source video timeline is malformed. Playing its stable audio rendition.");
+        setStatus("Switching to audio…");
+        setNote(null);
         setQualityOptions([]);
         setQualityIndicator("Audio");
         setAudioOnlyFallbackActive(true);
         video.dataset.dstreamSourceMode = "zap-audio-fallback";
+        video.dataset.dstreamAudioFallbackReason = reason;
         setTimeout(() => {
           if (cancelled || hlsRef.current !== hls) return;
           try {
@@ -1564,9 +1573,7 @@ export function Player({
       };
       hls.on(Hls.Events.LEVEL_LOADED, () => {
         markLiveHlsActivity("lastLevelUpdatedAt");
-        switchMalformedZapSourceToAudio();
       });
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => switchMalformedZapSourceToAudio());
       hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
@@ -1633,6 +1640,7 @@ export function Player({
                 hls.swapAudioCodec();
                 hls.recoverMediaError();
               } else if (isLiveStream) {
+                if (switchZapSourceToAudio("video-decoder-recovery-exhausted")) return;
                 requestLivePlaybackReload("The media decoder failed repeatedly. Reconnected with a fresh player session.");
               } else {
                 setError("Unable to decode this media source.");
@@ -1643,7 +1651,9 @@ export function Player({
                 setNeedsClick(true);
               });
             } catch {
-              if (isLiveStream) requestLivePlaybackReload("Media recovery failed. Reconnected with a fresh player session.");
+              if (isLiveStream && !switchZapSourceToAudio("video-decoder-recovery-failed")) {
+                requestLivePlaybackReload("Media recovery failed. Reconnected with a fresh player session.");
+              }
             }
             break;
           default:
@@ -2035,6 +2045,16 @@ export function Player({
     }
   };
 
+  const trySourceVideo = () => {
+    preferSourceVideoRef.current = true;
+    setAudioOnlyFallbackActive(false);
+    setError(null);
+    setNeedsClick(false);
+    setNote(null);
+    setStatus("Loading video…");
+    setPlaybackReloadNonce((value) => value + 1);
+  };
+
   const handleKeyDownRef = useRef<((e: KeyboardEvent) => void) | undefined>(undefined);
   handleKeyDownRef.current = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
@@ -2354,13 +2374,17 @@ export function Player({
                   )}
                 </div>
                 {audioOnlyFallbackActive && (
-                  <div
+                  <button
+                    type="button"
+                    onClick={trySourceVideo}
                     data-testid="audio-mode-indicator"
-                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-neutral-200"
+                    className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-white"
+                    title="Audio mode is active for stable playback. Click to try the source video."
+                    aria-label="Audio mode active. Try source video"
                   >
                     <Headphones className="h-3.5 w-3.5" />
                     <span>Audio mode</span>
-                  </div>
+                  </button>
                 )}
               </div>
 

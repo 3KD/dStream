@@ -168,8 +168,8 @@ export class MonotonicPlaylistLoader implements Loader<PlaylistLoaderContext> {
           this.stats = stats;
           const responseData = typeof response.data === "string" ? sanitizePlaylistTiming(response.data) : response.data;
           if (responseData !== response.data) {
-            this.config.dstreamInvalidPlaylistTiming = true;
-            this.config.dstreamOnInvalidPlaylistTiming?.(context.url);
+            this.config.dstreamPlaylistTimingCorrected = true;
+            this.config.dstreamOnPlaylistTimingCorrected?.(context.url);
           }
           const window = typeof responseData === "string" ? inspectPlaylistWindow(responseData) : null;
           const guardMonotonicity = this.config.dstreamMonotonicPlaylistGuard !== false;

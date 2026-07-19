@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inspectPlaylistWindow, isStalePlaylistWindow, sanitizePlaylistTiming } from "./monotonicPlaylistLoader";
+import {
+  inspectPlaylistWindow,
+  isStalePlaylistWindow,
+  MonotonicPlaylistLoader,
+  sanitizePlaylistTiming
+} from "./monotonicPlaylistLoader";
 
 function playlist(sequence: number, dates: string[]): string {
   return [
@@ -58,4 +63,37 @@ test("invalid target durations are raised to the rounded maximum segment duratio
 test("valid target durations are not changed", () => {
   const valid = ["#EXTM3U", "#EXT-X-TARGETDURATION:2", "#EXTINF:2.005,", "100.m4s"].join("\n");
   assert.equal(sanitizePlaylistTiming(valid), valid);
+});
+
+test("loader reports corrected timing without classifying the rendition as unusable", async () => {
+  const malformed = ["#EXTM3U", "#EXT-X-MEDIA-SEQUENCE:100", "#EXT-X-TARGETDURATION:2", "#EXTINF:3.92,", "100.m4s"].join("\n");
+  const correctedUrls: string[] = [];
+  class TestHttpLoader {
+    destroy() {}
+    abort() {}
+    load(context: any, _config: any, callbacks: any) {
+      callbacks.onSuccess({ data: malformed, url: context.url }, {}, context, null);
+    }
+  }
+  const config: any = {
+    loader: TestHttpLoader,
+    dstreamPlaylistTimingCorrected: false,
+    dstreamOnPlaylistTimingCorrected: (url: string) => correctedUrls.push(url)
+  };
+  const loader = new MonotonicPlaylistLoader(config);
+  const response = await new Promise<string>((resolve, reject) => {
+    loader.load(
+      { type: "level", level: 0, url: "https://example.test/video.m3u8", responseType: "text" } as any,
+      {} as any,
+      {
+        onSuccess: (result: any) => resolve(result.data),
+        onError: (error: any) => reject(error),
+        onTimeout: () => reject(new Error("playlist load timed out"))
+      } as any
+    );
+  });
+
+  assert.match(response, /^#EXT-X-TARGETDURATION:4$/m);
+  assert.equal(config.dstreamPlaylistTimingCorrected, true);
+  assert.deepEqual(correctedUrls, ["https://example.test/video.m3u8"]);
 });
