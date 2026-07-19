@@ -221,6 +221,32 @@ function getHlsPlaybackTuning(options: { lowLatencyEnabled: boolean; backgroundP
 function applyHlsPlaybackTuning(hls: Hls, options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }): void {
   const config = hls.config as any;
   Object.assign(config, getHlsPlaybackTuning(options));
+
+  const backgroundCappingState = hls as Hls & {
+    dstreamCappingBeforeBackground?: { autoLevel: number; capToPlayerSize: boolean };
+  };
+  if (options.backgroundPlayEnabled && hls.levels.length > 0) {
+    if (backgroundCappingState.dstreamCappingBeforeBackground === undefined) {
+      backgroundCappingState.dstreamCappingBeforeBackground = {
+        autoLevel: hls.autoLevelCapping,
+        capToPlayerSize: hls.capLevelToPlayerSize
+      };
+    }
+    if (hls.capLevelToPlayerSize) hls.capLevelToPlayerSize = false;
+    const lowestBitrateLevel = hls.levels.reduce(
+      (lowest, level, index, levels) => (level.bitrate < levels[lowest].bitrate ? index : lowest),
+      0
+    );
+    hls.autoLevelCapping = lowestBitrateLevel;
+    if (hls.manualLevel === -1) hls.nextLoadLevel = lowestBitrateLevel;
+    return;
+  }
+  if (backgroundCappingState.dstreamCappingBeforeBackground !== undefined) {
+    const previous = backgroundCappingState.dstreamCappingBeforeBackground;
+    hls.autoLevelCapping = previous.autoLevel;
+    hls.capLevelToPlayerSize = previous.capToPlayerSize;
+    delete backgroundCappingState.dstreamCappingBeforeBackground;
+  }
 }
 
 export function Player({
@@ -522,6 +548,7 @@ export function Player({
     let pageLifecycleHidden = document.visibilityState === "hidden";
     let resumeTimer: ReturnType<typeof setTimeout> | null = null;
     let progressCheckTimer: ReturnType<typeof setTimeout> | null = null;
+    let backgroundRecoveryAttempts = 0;
 
     const restoreAudiblePlayback = () => {
       const nextVolume = Math.max(0.05, Math.min(1, lastAudibleVolumeRef.current || 1));
@@ -580,14 +607,38 @@ export function Player({
       attemptBackgroundPlay(true);
       scheduleBestEffortRetry();
       if (progressCheckTimer) clearTimeout(progressCheckTimer);
-      progressCheckTimer = setTimeout(() => {
+      const checkBackgroundProgress = () => {
         progressCheckTimer = null;
         if (document.visibilityState !== "hidden" || userPausedPlaybackRef.current || video.ended) return;
         const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-        if (currentTime <= pausedAt + 0.25) {
-          requestLivePlaybackReload("Background playback stopped advancing. Reconnected to the current live window.");
+        if (currentTime > pausedAt + 0.25) {
+          backgroundRecoveryAttempts = 0;
+          return;
         }
-      }, 5_000);
+
+        backgroundRecoveryAttempts += 1;
+        const reason = "Background playback paused. Retrying at the current position.";
+        setError(null);
+        setStatus("Reconnecting…");
+        setNote(reason);
+        video.dataset.dstreamPlaybackRecoveryReason = reason;
+
+        const hls = hlsRef.current;
+        if (playbackModeRef.current === "hls" && hls) {
+          try {
+            hls.stopLoad();
+            hls.startLoad(pausedAt, true);
+          } catch {
+            // A later visible-page watchdog can rebuild the session if this retry fails.
+          }
+        }
+        attemptBackgroundPlay(true);
+        scheduleBestEffortRetry();
+        if (backgroundRecoveryAttempts < 3) {
+          progressCheckTimer = setTimeout(checkBackgroundProgress, 5_000);
+        }
+      };
+      progressCheckTimer = setTimeout(checkBackgroundProgress, 5_000);
     };
 
     const onVisibleLifecycle = () => {
@@ -616,7 +667,7 @@ export function Player({
       document.removeEventListener("resume", onVisibleLifecycle as EventListener);
       video.removeEventListener("pause", onPause);
     };
-  }, [effectiveBackgroundPlayEnabled, requestLivePlaybackReload]);
+  }, [effectiveBackgroundPlayEnabled]);
 
   useEffect(() => {
     if (!isLiveStream || !playbackStartupPolicyReady) return;
@@ -1316,6 +1367,10 @@ export function Player({
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        applyHlsPlaybackTuning(hls, {
+          lowLatencyEnabled,
+          backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+        });
         applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
         setQualityOptions(options);
