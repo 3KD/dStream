@@ -13,6 +13,7 @@ const SOAK_MS = positiveNumber(process.env.PLAYBACK_SOAK_MS, 10 * 60_000);
 const SOURCE_LIMIT = Math.floor(positiveNumber(process.env.PLAYBACK_SOURCE_LIMIT, 2));
 const START_TIMEOUT_MS = positiveNumber(process.env.PLAYBACK_START_TIMEOUT_MS, 45_000);
 const STALL_LIMIT_MS = positiveNumber(process.env.PLAYBACK_STALL_LIMIT_MS, 30_000);
+const STARTUP_STABILITY_MS = positiveNumber(process.env.PLAYBACK_STARTUP_STABILITY_MS, 15_000);
 const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
@@ -181,21 +182,46 @@ async function startPlayback(page) {
   const deadline = Date.now() + START_TIMEOUT_MS;
   let lastError = "media did not start";
   while (Date.now() < deadline) {
-    const result = await page.locator("video").first().evaluate(async (video) => {
-      video.muted = true;
-      video.volume = 0;
-      try {
-        await video.play();
-      } catch (error) {
-        return { playing: false, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
-      }
-      return { playing: !video.paused && !video.ended, error: "" };
+    const result = await page.locator("video").first().evaluate((video) => {
+      const startupGate = video.dataset.dstreamStartupGate ?? "unknown";
+      return {
+        playing: !video.paused && !video.ended && video.readyState >= 2,
+        gateBypassed: startupGate === "pending" && !video.paused,
+        startupGate,
+        readyState: video.readyState,
+        paused: video.paused
+      };
     });
+    if (result.gateBypassed) {
+      fail(`playback began while the startup buffer gate was pending (ready=${result.readyState})`);
+    }
     if (result.playing) return;
-    if (result.error) lastError = result.error;
-    await page.waitForTimeout(500);
+    lastError = `gate=${result.startupGate}, ready=${result.readyState}, paused=${result.paused}`;
+    await page.waitForTimeout(100);
   }
   fail(`playback did not start within ${Math.round(START_TIMEOUT_MS / 1000)}s (${lastError})`);
+}
+
+async function observeStartupStability(page, label) {
+  await page.waitForTimeout(STARTUP_STABILITY_MS);
+  const result = await page.locator("video").first().evaluate((video) => {
+    const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
+    const firstPlaying = events.findIndex((entry) => entry.event === "playing");
+    const interruptions = firstPlaying < 0
+      ? []
+      : events.slice(firstPlaying + 1).filter((entry) => entry.event === "waiting" || entry.event === "stalled" || entry.event === "error");
+    return {
+      events,
+      interruptions,
+      startupBuffer: Number(video.dataset.dstreamStartupBuffer),
+      startupGate: video.dataset.dstreamStartupGate ?? "unknown"
+    };
+  });
+  if (result.interruptions.length > 0) {
+    fail(`${label}: playback was interrupted during the startup stability window (${JSON.stringify(result.interruptions)})`);
+  }
+  if (result.startupGate !== "released") fail(`${label}: startup gate remained ${result.startupGate}`);
+  return result;
 }
 
 async function openRun(context, scenario, stream, index) {
@@ -229,11 +255,37 @@ async function openRun(context, scenario, stream, index) {
   try {
     await page.goto(watchUrl(stream), { waitUntil: "domcontentloaded", timeout: START_TIMEOUT_MS });
     await page.locator("video").first().waitFor({ state: "attached", timeout: START_TIMEOUT_MS });
+    await page.locator("video").first().evaluate((video) => {
+      const events = [];
+      window.__dstreamPlaybackStartupEvents = events;
+      const record = (event) => {
+        events.push({
+          event,
+          at: Math.round(performance.now()),
+          currentTime: Number(video.currentTime.toFixed(3)),
+          readyState: video.readyState,
+          paused: video.paused,
+          startupGate: video.dataset.dstreamStartupGate ?? "unknown",
+          buffered: Array.from({ length: video.buffered.length }, (_, index) => [
+            Number(video.buffered.start(index).toFixed(3)),
+            Number(video.buffered.end(index).toFixed(3))
+          ])
+        });
+      };
+      for (const event of ["play", "playing", "waiting", "stalled", "error"]) {
+        video.addEventListener(event, () => record(event));
+      }
+      record("observed");
+    });
     marker = `${scenario}-${index}-${Date.now()}`;
     await page.locator("video").first().evaluate((video, identity) => {
       video.dataset.playbackSoakIdentity = identity;
     }, marker);
     await startPlayback(page);
+    const startup = await observeStartupStability(page, `${scenario}/${title}`);
+    console.log(
+      `  startup ${scenario} / ${title}: buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
+    );
     if (background) {
       const toggle = page.getByTitle("Keep audio playing when the app is backgrounded");
       await toggle.waitFor({ state: "attached", timeout: START_TIMEOUT_MS });

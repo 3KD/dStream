@@ -51,6 +51,22 @@ export function inspectPlaylistWindow(playlist: string): PlaylistWindow | null {
   };
 }
 
+export function sanitizePlaylistTiming(playlist: string): string {
+  const targetMatch = playlist.match(/^#EXT-X-TARGETDURATION\s*:\s*(\d+)\s*$/m);
+  if (!targetMatch) return playlist;
+  const declaredTarget = Number(targetMatch[1]);
+  if (!Number.isSafeInteger(declaredTarget) || declaredTarget < 1) return playlist;
+
+  const segmentDurations = Array.from(playlist.matchAll(/^#EXTINF\s*:\s*([0-9]+(?:\.[0-9]+)?)/gm))
+    .map((match) => Number(match[1]))
+    .filter(Number.isFinite);
+  if (segmentDurations.length === 0) return playlist;
+
+  const requiredTarget = Math.max(1, Math.round(Math.max(...segmentDurations)));
+  if (declaredTarget >= requiredTarget) return playlist;
+  return playlist.replace(targetMatch[0], `#EXT-X-TARGETDURATION:${requiredTarget}`);
+}
+
 export function isStalePlaylistWindow(previous: PlaylistWindow, next: PlaylistWindow): boolean {
   if (next.endSequence < previous.endSequence) return true;
   if (next.endSequence > previous.endSequence) return false;
@@ -150,8 +166,11 @@ export class MonotonicPlaylistLoader implements Loader<PlaylistLoaderContext> {
         onSuccess: (response, stats, _requestContext, networkDetails) => {
           if (this.aborted || this.httpLoader !== httpLoader) return;
           this.stats = stats;
-          const window = typeof response.data === "string" ? inspectPlaylistWindow(response.data) : null;
-          const previous = window ? this.acceptedWindows.get(key) : null;
+          const responseData = typeof response.data === "string" ? sanitizePlaylistTiming(response.data) : response.data;
+          if (responseData !== response.data) this.config.dstreamInvalidPlaylistTiming = true;
+          const window = typeof responseData === "string" ? inspectPlaylistWindow(responseData) : null;
+          const guardMonotonicity = this.config.dstreamMonotonicPlaylistGuard !== false;
+          const previous = window && guardMonotonicity ? this.acceptedWindows.get(key) : null;
           if (window && previous && isStalePlaylistWindow(previous, window)) {
             httpLoader.destroy();
             if (attempt < STALE_RETRY_LIMIT) {
@@ -169,8 +188,8 @@ export class MonotonicPlaylistLoader implements Loader<PlaylistLoaderContext> {
             );
             return;
           }
-          if (window) this.acceptedWindows.set(key, window);
-          callbacks.onSuccess({ ...response, url: context.url }, stats, context, networkDetails);
+          if (window && guardMonotonicity) this.acceptedWindows.set(key, window);
+          callbacks.onSuccess({ ...response, data: responseData, url: context.url }, stats, context, networkDetails);
         },
         onError: (error, _requestContext, networkDetails, stats) => {
           this.stats = stats;

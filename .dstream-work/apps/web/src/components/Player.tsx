@@ -165,6 +165,11 @@ function isLikelySafariBrowser(): boolean {
   return true;
 }
 
+function isLikelyFirefoxBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Firefox\//i.test(navigator.userAgent ?? "");
+}
+
 function shouldPreferNativeHlsPlayback(): boolean {
   return isLikelySafariBrowser() || isLikelyIosPlaybackDevice();
 }
@@ -182,6 +187,15 @@ function configureAudioSessionForPlayback(): void {
 
 function isExternalPlaybackUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
+}
+
+function isZapStreamHlsUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "zap.stream" || hostname.endsWith(".zap.stream");
+  } catch {
+    return false;
+  }
 }
 
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
@@ -203,7 +217,13 @@ function formatPlaybackTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-function getHlsPlaybackTuning(options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }) {
+type HlsPlaybackTuningOptions = {
+  lowLatencyEnabled: boolean;
+  backgroundPlayEnabled: boolean;
+  bridgeLiveGaps?: boolean;
+};
+
+function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
   const lowLatencyMode = options.lowLatencyEnabled;
   const stableLiveSyncDuration = options.backgroundPlayEnabled ? 30 : 24;
   return {
@@ -215,11 +235,14 @@ function getHlsPlaybackTuning(options: { lowLatencyEnabled: boolean; backgroundP
     liveSyncDuration: lowLatencyMode ? undefined : stableLiveSyncDuration,
     liveMaxLatencyDurationCount: lowLatencyMode ? Number.POSITIVE_INFINITY : undefined,
     liveMaxLatencyDuration: lowLatencyMode ? undefined : Number.POSITIVE_INFINITY,
-    liveSyncOnStallIncrease: 1
+    liveSyncOnStallIncrease: 1,
+    maxBufferHole: options.bridgeLiveGaps ? 2.5 : 0.1,
+    detectStallWithCurrentTimeMs: options.bridgeLiveGaps ? 250 : 1_250,
+    highBufferWatchdogPeriod: options.bridgeLiveGaps ? 0.25 : 2
   };
 }
 
-function applyHlsPlaybackTuning(hls: Hls, options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }): void {
+function applyHlsPlaybackTuning(hls: Hls, options: HlsPlaybackTuningOptions): void {
   const config = hls.config as any;
   Object.assign(config, getHlsPlaybackTuning(options));
 
@@ -310,6 +333,7 @@ export function Player({
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
   const [isMobilePlayback, setIsMobilePlayback] = useState(false);
+  const [isFirefoxPlayback, setIsFirefoxPlayback] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [preferNativeHls, setPreferNativeHls] = useState(false);
   const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(false);
@@ -329,8 +353,11 @@ export function Player({
   }, []);
 
   useEffect(() => {
+    const firefox = isLikelyFirefoxBrowser();
     setIsMobilePlayback(isLikelyMobilePlaybackDevice());
+    setIsFirefoxPlayback(firefox);
     setPreferNativeHls(shouldPreferNativeHlsPlayback());
+    setLowLatencyEnabled(!firefox);
     setPlaybackEnvironmentReady(true);
   }, []);
 
@@ -341,12 +368,16 @@ export function Player({
   const playbackStartupPolicyReady =
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
+  const zapStreamCompatibilityMode = isZapStreamHlsUrl(normalizedSrc);
+  const stableHlsCompatibilityMode = isFirefoxPlayback || zapStreamCompatibilityMode;
+  const effectiveLowLatencyEnabled = lowLatencyEnabled && !stableHlsCompatibilityMode;
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
   const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
   const lastAudibleVolumeRef = useRef(1);
   const userPausedPlaybackRef = useRef(false);
+  const startupGatePendingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mobileControlsVisible, setMobileControlsVisible] = useState(false);
   const mobileControlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -409,8 +440,12 @@ export function Player({
   useEffect(() => {
     const hls = hlsRef.current;
     if (!hls) return;
-    applyHlsPlaybackTuning(hls, { lowLatencyEnabled, backgroundPlayEnabled: effectiveBackgroundPlayEnabled });
-  }, [effectiveBackgroundPlayEnabled, lowLatencyEnabled]);
+    applyHlsPlaybackTuning(hls, {
+      lowLatencyEnabled: effectiveLowLatencyEnabled,
+      backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+      bridgeLiveGaps: stableHlsCompatibilityMode
+    });
+  }, [effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled, stableHlsCompatibilityMode]);
 
   useEffect(() => {
     const hls = hlsRef.current;
@@ -566,6 +601,7 @@ export function Player({
       if (video.ended) return;
       if (!allowVisibleResume && document.visibilityState !== "hidden") return;
       backgroundPlaybackRequested = true;
+      if (startupGatePendingRef.current) return;
       configureAudioSessionForPlayback();
       restoreAudiblePlayback();
       void video.play().catch(() => {
@@ -720,7 +756,7 @@ export function Player({
         return;
       }
 
-      if (video.paused) {
+      if (video.paused && !startupGatePendingRef.current) {
         void video.play().catch(() => {
           setStatus("Click to play");
           setNeedsClick(true);
@@ -939,6 +975,7 @@ export function Player({
     const canUseBackupSource = (candidate: string) =>
       candidate.length > 0 && candidate !== primarySrc && !isExternalPlaybackUrl(primarySrc);
     let backupTried = false;
+    let zapAudioFallbackActive = false;
 
     if (!primarySrc || !videoRef.current) return;
 
@@ -961,13 +998,16 @@ export function Player({
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
     video.dataset.dstreamPlaybackSignature = JSON.stringify({
       isMobilePlayback,
+      isFirefoxPlayback,
       isLiveStream,
-      lowLatencyEnabled,
+      lowLatencyEnabled: effectiveLowLatencyEnabled,
       playbackStartupPolicyReady,
       preferNativeHls,
       src: normalizedSrc,
       whepSrc: normalizedWhepSrc
     });
+    startupGatePendingRef.current = false;
+    video.dataset.dstreamStartupGate = "released";
     let cancelled = false;
     const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
@@ -1042,7 +1082,33 @@ export function Player({
       }
       return 0;
     };
+    const getBestStartupRange = () => {
+      let best: { start: number; end: number; duration: number } | null = null;
+      try {
+        for (let index = 0; index < video.buffered.length; index++) {
+          const start = video.buffered.start(index);
+          const end = video.buffered.end(index);
+          const duration = Math.max(0, end - start);
+          if (
+            !best ||
+            duration > best.duration + 0.05 ||
+            (Math.abs(duration - best.duration) <= 0.05 && end > best.end)
+          ) {
+            best = { start, end, duration };
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return best;
+    };
+    const setStartupGatePending = (pending: boolean) => {
+      startupGatePendingRef.current = pending;
+      video.dataset.dstreamStartupGate = pending ? "pending" : "released";
+      if (!pending) video.dataset.dstreamStartupBuffer = getBufferedAheadSeconds().toFixed(3);
+    };
     const beginHlsPlayback = () => {
+      setStartupGatePending(false);
       setStatus("Ready");
       sendReady();
       void video.play().catch(() => {
@@ -1056,8 +1122,15 @@ export function Player({
         beginHlsPlayback();
         return;
       }
-      const targetBufferSeconds = effectiveBackgroundPlayEnabled ? 8 : lowLatencyEnabled ? 3 : 5;
-      const maxWaitMs = effectiveBackgroundPlayEnabled ? 12000 : lowLatencyEnabled ? 5000 : 8000;
+      const targetBufferSeconds =
+        effectiveBackgroundPlayEnabled || zapStreamCompatibilityMode ? 8 : effectiveLowLatencyEnabled ? 3 : 5;
+      const maxWaitMs = zapStreamCompatibilityMode
+        ? 20_000
+        : effectiveBackgroundPlayEnabled
+          ? 12_000
+          : effectiveLowLatencyEnabled
+            ? 5_000
+            : 8_000;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1084,7 +1157,20 @@ export function Player({
       function maybeStart() {
         if (started || cancelled) return;
         const waitedMs = Date.now() - startedAt;
-        if (getBufferedAheadSeconds() >= targetBufferSeconds || waitedMs >= maxWaitMs) {
+        const bufferedAhead = getBufferedAheadSeconds();
+        const startupRange = bufferedAhead > 0 ? null : getBestStartupRange();
+        if (
+          bufferedAhead >= targetBufferSeconds ||
+          (startupRange?.duration ?? 0) >= targetBufferSeconds ||
+          waitedMs >= maxWaitMs
+        ) {
+          if (bufferedAhead === 0 && startupRange && startupRange.duration > 0.25) {
+            try {
+              video.currentTime = startupRange.start + Math.min(0.1, startupRange.duration / 4);
+            } catch {
+              // ignore
+            }
+          }
           startNow();
         }
       }
@@ -1172,6 +1258,7 @@ export function Player({
     const integrityEnabled = !!integrity?.enabled;
 
     const startDirect = (mediaSource: string): boolean => {
+      setStartupGatePending(false);
       setPlaybackMode("direct");
       setQualityOptions([]);
       setQualityIndicator("Source");
@@ -1216,6 +1303,7 @@ export function Player({
       let networkRecoveryAttempts = 0;
       let networkRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
       let hasBufferedHlsFragment = false;
+      setStartupGatePending(true);
       setPlaybackMode("hls");
       liveHlsActivityRef.current = {
         lastFragBufferedAt: Date.now(),
@@ -1228,6 +1316,7 @@ export function Player({
       // Prefer native HLS (Safari is typically more reliable without hls.js),
       // unless integrity verification is enabled (we need byte access).
       if (!integrityEnabled && preferNativeHls && !options.skipNative && video.canPlayType("application/vnd.apple.mpegurl")) {
+        setStartupGatePending(false);
         let nativeStartTimer: ReturnType<typeof setTimeout> | null = null;
         let nativeSettled = false;
         const cleanupNativeListeners = () => {
@@ -1335,6 +1424,7 @@ export function Player({
       }
 
       if (!Hls.isSupported()) {
+        setStartupGatePending(false);
         setError("HLS not supported in this browser.");
         return false;
       }
@@ -1344,10 +1434,12 @@ export function Player({
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
       const hlsPlaybackTuning = getHlsPlaybackTuning({
-        lowLatencyEnabled,
-        backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+        lowLatencyEnabled: effectiveLowLatencyEnabled,
+        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+        bridgeLiveGaps: stableHlsCompatibilityMode
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
+      const useMonotonicPlaylistGuard = !isFirefoxPlayback && !isZapStreamHlsUrl(hlsSource);
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
@@ -1368,9 +1460,15 @@ export function Player({
         ...(needsDstreamFragmentLoader ? { fLoader: P2PFragmentLoader } : {}),
         ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
+        dstreamMonotonicPlaylistGuard: useMonotonicPlaylistGuard,
+        dstreamInvalidPlaylistTiming: false,
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
-      applyHlsPlaybackTuning(hls, { lowLatencyEnabled, backgroundPlayEnabled: effectiveBackgroundPlayEnabled });
+      applyHlsPlaybackTuning(hls, {
+        lowLatencyEnabled: effectiveLowLatencyEnabled,
+        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+        bridgeLiveGaps: stableHlsCompatibilityMode
+      });
       hlsRef.current = hls;
 
       hls.loadSource(hlsSource);
@@ -1378,8 +1476,9 @@ export function Player({
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         applyHlsPlaybackTuning(hls, {
-          lowLatencyEnabled,
-          backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+          lowLatencyEnabled: effectiveLowLatencyEnabled,
+          backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+          bridgeLiveGaps: stableHlsCompatibilityMode
         });
         applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
@@ -1415,7 +1514,44 @@ export function Player({
         }
         if (data.frag?.sn !== undefined) video.dataset.dstreamHlsFragment = String(data.frag.sn);
       });
-      hls.on(Hls.Events.LEVEL_LOADED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
+      const switchMalformedZapSourceToAudio = () => {
+        if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
+        if (!(hls.config as any).dstreamInvalidPlaylistTiming) return false;
+        const audioTrackUrl = hls.audioTracks.find(
+          (track) => typeof track.url === "string" && track.url.length > 0
+        )?.url;
+        if (!audioTrackUrl) return false;
+
+        zapAudioFallbackActive = true;
+        clearHlsStartupListener();
+        setError(null);
+        setStatus("Switching to stable audio…");
+        setNote("The source video timeline is malformed. Playing its stable audio rendition.");
+        setQualityOptions([]);
+        setQualityIndicator("Audio");
+        setTimeout(() => {
+          if (cancelled || hlsRef.current !== hls) return;
+          try {
+            hls.destroy();
+          } catch {
+            // ignore
+          }
+          hlsRef.current = null;
+          try {
+            video.pause();
+            video.removeAttribute("src");
+            video.load();
+          } catch {
+            // ignore
+          }
+          startHls(audioTrackUrl);
+        }, 0);
+        return true;
+      };
+      hls.on(Hls.Events.LEVEL_LOADED, () => {
+        markLiveHlsActivity("lastLevelUpdatedAt");
+        switchMalformedZapSourceToAudio();
+      });
       hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
@@ -1517,6 +1653,7 @@ export function Player({
     const endpoint = normalizedWhepSrc;
     const rtcSupported = typeof RTCPeerConnection !== "undefined";
     const tryWhep = async () => {
+      setStartupGatePending(true);
       setStatus("Loading…");
       try {
         const client = new WhepClient(endpoint);
@@ -1539,6 +1676,7 @@ export function Player({
         }
         applyPersistedSeek();
 
+        setStartupGatePending(false);
         void video.play().catch(() => {
           setStatus("Click to play");
           setNeedsClick(true);
@@ -1583,7 +1721,7 @@ export function Player({
         const { mode, attemptedWhep } = await pickPlaybackMode({
           whepSrc: endpoint,
           rtcSupported,
-          preferLowLatency: lowLatencyEnabled,
+          preferLowLatency: effectiveLowLatencyEnabled,
           tryWhep
         });
         if (cancelled) return;
@@ -1595,6 +1733,7 @@ export function Player({
 
     return () => {
       cancelled = true;
+      startupGatePendingRef.current = false;
       try {
         video.removeEventListener("playing", onPlaying);
         video.removeEventListener("waiting", onWaiting);
@@ -1627,8 +1766,9 @@ export function Player({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isMobilePlayback,
+    isFirefoxPlayback,
     isLiveStream,
-    lowLatencyEnabled,
+    effectiveLowLatencyEnabled,
     playbackReloadNonce,
     playbackStartupPolicyReady,
     preferNativeHls,
@@ -2002,7 +2142,6 @@ export function Player({
           className={`relative z-0 block h-full w-full cursor-pointer object-contain ${!nsfwConsented ? 'opacity-0' : 'opacity-100'}`}
           playsInline
           controls={effectiveNativeControls && nsfwConsented}
-          autoPlay={nsfwConsented}
           muted={volume === 0 && !effectiveBackgroundPlayEnabled}
           onClick={handleVideoSurfaceInteraction}
         >
@@ -2201,9 +2340,14 @@ export function Player({
                 <button
                   type="button"
                   onClick={() => setLowLatencyEnabled((cur) => !cur)}
-                  disabled={playbackMode !== "hls"}
+                  disabled={playbackMode !== "hls" || stableHlsCompatibilityMode}
+                  title={
+                    stableHlsCompatibilityMode
+                      ? "Stable playback is required for this source or browser"
+                      : "Toggle low-latency playback"
+                  }
                   className={`flex shrink-0 items-center gap-1.5 px-1.5 sm:px-2 py-1 rounded-md text-[11px] font-bold transition ${
-                    lowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
+                    effectiveLowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
                   } disabled:opacity-50`}
                 >
                   <Gauge className="h-3.5 w-3.5" />

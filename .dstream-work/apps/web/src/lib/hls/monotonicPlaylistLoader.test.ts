@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inspectPlaylistWindow, isStalePlaylistWindow } from "./monotonicPlaylistLoader";
+import { inspectPlaylistWindow, isStalePlaylistWindow, sanitizePlaylistTiming } from "./monotonicPlaylistLoader";
 
 function playlist(sequence: number, dates: string[]): string {
   return [
@@ -40,4 +40,22 @@ test("newer and expanding live playlist windows are accepted", () => {
   );
   assert.ok(current && expanded);
   assert.equal(isStalePlaylistWindow(current, expanded), false);
+});
+
+test("invalid target durations are raised to the rounded maximum segment duration", () => {
+  const malformed = [
+    "#EXTM3U",
+    "#EXT-X-TARGETDURATION:2",
+    "#EXTINF:3.921,",
+    "100.m4s",
+    "#EXTINF:3.920,",
+    "101.m4s"
+  ].join("\n");
+
+  assert.match(sanitizePlaylistTiming(malformed), /^#EXT-X-TARGETDURATION:4$/m);
+});
+
+test("valid target durations are not changed", () => {
+  const valid = ["#EXTM3U", "#EXT-X-TARGETDURATION:2", "#EXTINF:2.005,", "100.m4s"].join("\n");
+  assert.equal(sanitizePlaylistTiming(valid), valid);
 });
