@@ -12,6 +12,7 @@ import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
 import { buildWatchHref } from "@/lib/watchHref";
+import { setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
@@ -626,11 +627,13 @@ export function GlobalQuickPlayDock() {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
+      setMediaUserPaused(video, false);
       void video.play().then(() => setIsPlaying(true)).catch(() => {
         setIsPlaying(!video.paused && !video.ended);
       });
       return;
     }
+    setMediaUserPaused(video, true);
     video.pause();
     setIsPlaying(false);
   }, []);

@@ -14,6 +14,7 @@ import type { IntegritySession } from "@/lib/integrity/session";
 import { WhepClient } from "@/lib/whep";
 import { pickPlaybackMode } from "@/lib/whep-fallback";
 import { inferMediaUrlKind } from "@/lib/mediaUrl";
+import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
 
 interface PlayerProps {
@@ -388,6 +389,14 @@ export function Player({
   const lastAudibleVolumeRef = useRef(1);
   const userPausedPlaybackRef = useRef(false);
   const startupGatePendingRef = useRef(false);
+  const setUserPausedPlayback = useCallback((paused: boolean, media = videoRef.current) => {
+    userPausedPlaybackRef.current = paused;
+    setMediaUserPaused(media, paused);
+  }, []);
+
+  useEffect(() => {
+    setUserPausedPlayback(false);
+  }, [normalizedSrc, setUserPausedPlayback]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mobileControlsVisible, setMobileControlsVisible] = useState(false);
   const mobileControlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -547,13 +556,13 @@ export function Player({
         });
       }
       mediaSession.setActionHandler("play", () => {
-        userPausedPlaybackRef.current = false;
+        setUserPausedPlayback(false, video);
         void video.play().catch(() => {
           // ignore
         });
       });
       mediaSession.setActionHandler("pause", () => {
-        userPausedPlaybackRef.current = true;
+        setUserPausedPlayback(true, video);
         video.pause();
       });
     } catch {
@@ -568,7 +577,7 @@ export function Player({
         // ignore
       }
     };
-  }, [isLiveStream, normalizedSrc]);
+  }, [isLiveStream, normalizedSrc, setUserPausedPlayback]);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -649,14 +658,19 @@ export function Player({
 
     const onPause = () => {
       if (document.visibilityState !== "hidden" && !pageLifecycleHidden) return;
-      if (userPausedPlaybackRef.current) return;
+      if (userPausedPlaybackRef.current || isMediaUserPaused(video)) return;
       const pausedAt = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       attemptBackgroundPlay(true);
       scheduleBestEffortRetry();
       if (progressCheckTimer) clearTimeout(progressCheckTimer);
       const checkBackgroundProgress = () => {
         progressCheckTimer = null;
-        if (document.visibilityState !== "hidden" || userPausedPlaybackRef.current || video.ended) return;
+        if (
+          document.visibilityState !== "hidden" ||
+          userPausedPlaybackRef.current ||
+          isMediaUserPaused(video) ||
+          video.ended
+        ) return;
         const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
         if (currentTime > pausedAt + 0.25) {
           backgroundRecoveryAttempts = 0;
@@ -740,7 +754,7 @@ export function Player({
       const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       const frameCount = readVideoFrameCount(video);
 
-      if (needsClick || userPausedPlaybackRef.current) {
+      if (needsClick || userPausedPlaybackRef.current || isMediaUserPaused(video)) {
         markHealthy(now, currentTime, frameCount);
         return;
       }
@@ -1991,7 +2005,7 @@ export function Player({
       const video = videoRef.current;
       setBackgroundPlayEnabled(true);
       if (backgroundPlayEnabledOverride === undefined) writeBackgroundPlayPreference(true);
-      userPausedPlaybackRef.current = false;
+      setUserPausedPlayback(false, video);
       configureAudioSessionForPlayback();
       if (!video) return;
 
@@ -2019,13 +2033,13 @@ export function Player({
       const video = videoRef.current;
       if (!video) return;
       if (video.paused || video.ended) {
-        userPausedPlaybackRef.current = false;
+        setUserPausedPlayback(false, video);
         void video.play().catch(() => {
           // ignore autoplay restrictions
         });
         return;
       }
-      userPausedPlaybackRef.current = true;
+      setUserPausedPlayback(true, video);
       video.pause();
     };
 
@@ -2097,7 +2111,7 @@ export function Player({
       const shouldUnmuteAfterPlay = currentlyMuted || needsClick;
       setNeedsClick(false);
       if (shouldUnmuteAfterPlay) unmuteFromGesture();
-      if (currentlyPaused || needsClick) userPausedPlaybackRef.current = false;
+      if (currentlyPaused || needsClick) setUserPausedPlayback(false, video);
       const playPromise = currentlyPaused || needsClick ? video.play() : Promise.resolve();
       void playPromise.catch(() => {
         if (shouldUnmuteAfterPlay) {
@@ -2137,7 +2151,7 @@ export function Player({
       }
     } else {
       // Desktop: Clicking the video surface pauses it
-      userPausedPlaybackRef.current = true;
+      setUserPausedPlayback(true, video);
       video.pause();
       setStatus("Paused");
     }
