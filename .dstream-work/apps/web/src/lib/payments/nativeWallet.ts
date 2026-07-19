@@ -2,8 +2,9 @@
 
 import type { StreamPaymentAsset, StreamPaymentMethod } from "@dstream/protocol";
 import { buildPaymentUri } from "./catalog";
+import { payLightningInvoice } from "./lightningWallet";
 
-export type NativeWalletProvider = "metamask" | "webln" | "phantom" | "tronlink" | "wallet_uri";
+export type NativeWalletProvider = "metamask" | "nwc" | "webln" | "phantom" | "tronlink" | "wallet_uri";
 export type NativeWalletCapabilityMode = "provider_send" | "wallet_uri" | "unsupported";
 
 export interface NativeWalletSendResult {
@@ -25,18 +26,30 @@ export interface NativeWalletCapability {
 
 const EVM_CHAIN_BY_NETWORK: Record<string, `0x${string}`> = {
   "1": "0x1",
+  "0x1": "0x1",
+  "eip155:1": "0x1",
   ethereum: "0x1",
   mainnet: "0x1",
   "137": "0x89",
+  "0x89": "0x89",
+  "eip155:137": "0x89",
   polygon: "0x89",
   matic: "0x89",
   "56": "0x38",
+  "0x38": "0x38",
+  "eip155:56": "0x38",
   bsc: "0x38",
   "10": "0xa",
+  "0xa": "0xa",
+  "eip155:10": "0xa",
   optimism: "0xa",
   "42161": "0xa4b1",
+  "0xa4b1": "0xa4b1",
+  "eip155:42161": "0xa4b1",
   arbitrum: "0xa4b1",
   "8453": "0x2105",
+  "0x2105": "0x2105",
+  "eip155:8453": "0x2105",
   base: "0x2105"
 };
 
@@ -52,6 +65,10 @@ const EVM_TOKEN_META: Record<
 };
 
 const TRON_USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const SOLANA_TOKEN_META = {
+  usdc: { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+  usdt: { mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }
+} as const;
 const BTC_LIGHTNING_INVOICE_RE = /^(lnbc|lntb|lnbcrt|lnsb|lntbs)[0-9a-z]+$/i;
 const BTC_LIGHTNING_LNURL_RE = /^lnurl[0-9a-z]+$/i;
 const BTC_LIGHTNING_ADDRESS_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -87,6 +104,11 @@ function isBtcLightningMethod(method: StreamPaymentMethod): boolean {
 
 function isTronNetwork(networkRaw: string | null | undefined): boolean {
   return normalizeNetworkKey(networkRaw).includes("tron");
+}
+
+function isSolanaNetwork(networkRaw: string | null | undefined): boolean {
+  const network = normalizeNetworkKey(networkRaw);
+  return network.includes("solana") || network.includes("spl");
 }
 
 function parseAmountToUnits(amountRaw: string | undefined, decimals: number): bigint | null {
@@ -156,14 +178,18 @@ function supportsNativeProvider(method: StreamPaymentMethod): boolean {
   if (method.asset === "btc") return isBtcLightningMethod(method) && hasWebLnProvider();
   if (method.asset === "trx") return hasTronProvider();
   if (method.asset === "usdt" && isTronNetwork(method.network)) return hasTronProvider();
-  if (method.asset === "sol") return hasPhantomProvider();
+  if (method.asset === "sol" || ((method.asset === "usdc" || method.asset === "usdt") && isSolanaNetwork(method.network))) {
+    return hasPhantomProvider();
+  }
   if (isEvmAsset(method.asset)) return !!getEthereumProvider();
   return false;
 }
 
 function providerLabelForNativeMethod(method: StreamPaymentMethod): string {
   if (method.asset === "btc") return "WebLN";
-  if (method.asset === "sol") return "Phantom";
+  if (method.asset === "sol" || ((method.asset === "usdc" || method.asset === "usdt") && isSolanaNetwork(method.network))) {
+    return "Phantom";
+  }
   if (method.asset === "trx") return "TronLink";
   if (method.asset === "usdt") {
     if (isTronNetwork(method.network)) return "TronLink";
@@ -192,22 +218,22 @@ function isEvmAsset(asset: StreamPaymentAsset): asset is "eth" | "usdt" | "usdc"
   return asset === "eth" || asset === "usdt" || asset === "usdc" || asset === "pepe";
 }
 
-async function switchEvmChain(provider: any, networkRaw: string | undefined): Promise<void> {
-  const key = normalizeNetworkKey(networkRaw);
-  if (!key) return;
+async function requireEvmChain(provider: any, networkRaw: string | undefined): Promise<`0x${string}`> {
+  const key = normalizeNetworkKey(networkRaw) || "ethereum";
   const targetChain = EVM_CHAIN_BY_NETWORK[key];
-  if (!targetChain) return;
+  if (!targetChain) throw new Error(`Unsupported EVM network: ${key}.`);
+  let current = "";
   try {
-    const current = (await provider.request({ method: "eth_chainId" })) as string;
-    if (typeof current === "string" && current.toLowerCase() === targetChain.toLowerCase()) return;
+    current = String(await provider.request({ method: "eth_chainId" })).toLowerCase();
   } catch {
-    // ignore, attempt switch anyway
+    throw new Error("Wallet did not report its active EVM network.");
   }
-  try {
+  if (current !== targetChain.toLowerCase()) {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: targetChain }] });
-  } catch {
-    // ignore chain switch failures; wallet may still allow manual chain switch
+    current = String(await provider.request({ method: "eth_chainId" })).toLowerCase();
   }
+  if (current !== targetChain.toLowerCase()) throw new Error(`Wallet must be connected to EVM chain ${targetChain}.`);
+  return targetChain;
 }
 
 async function sendEvmPayment(method: StreamPaymentMethod): Promise<NativeWalletSendResult> {
@@ -226,9 +252,8 @@ async function sendEvmPayment(method: StreamPaymentMethod): Promise<NativeWallet
   const from = accounts?.[0];
   if (!from) return { ok: false, error: "No wallet account selected." };
 
-  await switchEvmChain(provider, method.network);
-
   try {
+    const chainId = await requireEvmChain(provider, method.network);
     if (method.asset === "eth") {
       const valueWei = parseAmountToUnits(amountRaw, 18);
       if (!valueWei) return { ok: false, error: "Invalid ETH amount." };
@@ -240,7 +265,6 @@ async function sendEvmPayment(method: StreamPaymentMethod): Promise<NativeWallet
     }
 
     const networkKey = normalizeNetworkKey(method.network) || "ethereum";
-    const chainId = EVM_CHAIN_BY_NETWORK[networkKey] ?? "0x1";
     const tokenMeta = EVM_TOKEN_META[chainId]?.[method.asset];
     if (!tokenMeta) {
       return { ok: false, error: `No token contract mapping for ${method.asset.toUpperCase()} on ${networkKey || "current chain"}.` };
@@ -260,29 +284,20 @@ async function sendEvmPayment(method: StreamPaymentMethod): Promise<NativeWallet
 }
 
 async function sendLightningPayment(method: StreamPaymentMethod): Promise<NativeWalletSendResult> {
-  if (typeof window === "undefined") return { ok: false, error: "Web environment required." };
-  const webln = (window as any).webln;
-  if (!webln || typeof webln.enable !== "function") {
-    return { ok: false, error: "WebLN provider not found (install Alby/ZEUS browser integration)." };
-  }
-
   const raw = method.address.trim();
   const invoice = raw.replace(/^lightning:/i, "").trim();
   if (!/^lnbc|^lntb|^lnbcrt|^lnsb|^lntbs/i.test(invoice)) {
     return { ok: false, error: "In-app Lightning send requires a BOLT11 invoice address." };
   }
-  try {
-    await webln.enable();
-    const result = await webln.sendPayment(invoice);
-    return { ok: true, provider: "webln", txId: result?.preimage ?? undefined };
-  } catch (error: any) {
-    return { ok: false, error: error?.message ?? "Lightning payment failed." };
-  }
+  const result = await payLightningInvoice(invoice);
+  return { ok: result.ok, provider: result.provider, txId: result.preimage, error: result.error };
 }
 
 async function sendPhantomSolPayment(method: StreamPaymentMethod): Promise<NativeWalletSendResult> {
   if (typeof window === "undefined") return { ok: false, error: "Web environment required." };
-  if (method.asset !== "sol") return { ok: false, error: "Only SOL is supported for Phantom in-app send right now." };
+  if (method.asset !== "sol" && method.asset !== "usdc" && method.asset !== "usdt") {
+    return { ok: false, error: "Unsupported Solana asset." };
+  }
   const amountRaw = (method.amount ?? "").trim();
   if (!amountRaw) return { ok: false, error: "Amount is required for in-app wallet send." };
 
@@ -297,22 +312,42 @@ async function sendPhantomSolPayment(method: StreamPaymentMethod): Promise<Nativ
     if (!publicKey) return { ok: false, error: "No Phantom account connected." };
     const sender = new web3.PublicKey(publicKey.toString());
     const recipient = new web3.PublicKey(method.address.trim());
-    const lamportsBig = parseAmountToUnits(amountRaw, 9);
-    if (!lamportsBig) return { ok: false, error: "Invalid SOL amount." };
-    if (lamportsBig > BigInt(Number.MAX_SAFE_INTEGER)) {
-      return { ok: false, error: "Amount is too large for wallet send." };
-    }
-
     const network = normalizeNetworkKey(method.network);
-    const cluster = network === "devnet" || network === "testnet" ? network : "mainnet-beta";
+    const mainnetAliases = new Set(["", "solana", "spl", "mainnet", "mainnet-beta", "solana:mainnet-beta"]);
+    const cluster = network === "devnet" || network === "testnet" ? network : mainnetAliases.has(network) ? "mainnet-beta" : null;
+    if (!cluster) return { ok: false, error: `Unsupported Solana network: ${network}.` };
     const connection = new web3.Connection(web3.clusterApiUrl(cluster), "confirmed");
-    const tx = new web3.Transaction().add(
-      web3.SystemProgram.transfer({
-        fromPubkey: sender,
-        toPubkey: recipient,
-        lamports: Number(lamportsBig)
-      })
-    );
+    const tx = new web3.Transaction();
+    if (method.asset === "sol") {
+      const lamportsBig = parseAmountToUnits(amountRaw, 9);
+      if (!lamportsBig) return { ok: false, error: "Invalid SOL amount." };
+      if (lamportsBig > BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { ok: false, error: "Amount is too large for wallet send." };
+      }
+      tx.add(
+        web3.SystemProgram.transfer({
+          fromPubkey: sender,
+          toPubkey: recipient,
+          lamports: Number(lamportsBig)
+        })
+      );
+    } else {
+      const spl = await import("@solana/spl-token");
+      const token = SOLANA_TOKEN_META[method.asset];
+      if (cluster !== "mainnet-beta") return { ok: false, error: `${method.asset.toUpperCase()} mint is configured for Solana mainnet only.` };
+      const amountUnits = parseAmountToUnits(amountRaw, token.decimals);
+      if (!amountUnits) return { ok: false, error: `Invalid ${method.asset.toUpperCase()} amount.` };
+      const mint = new web3.PublicKey(token.mint);
+      const senderToken = await spl.getAssociatedTokenAddress(mint, sender);
+      const recipientToken = await spl.getAssociatedTokenAddress(mint, recipient);
+      if (!(await connection.getAccountInfo(senderToken, "confirmed"))) {
+        return { ok: false, error: `Connected wallet has no ${method.asset.toUpperCase()} token account.` };
+      }
+      if (!(await connection.getAccountInfo(recipientToken, "confirmed"))) {
+        tx.add(spl.createAssociatedTokenAccountInstruction(sender, recipientToken, recipient, mint));
+      }
+      tx.add(spl.createTransferCheckedInstruction(senderToken, mint, recipientToken, sender, amountUnits, token.decimals));
+    }
     const { blockhash } = await connection.getLatestBlockhash("confirmed");
     tx.recentBlockhash = blockhash;
     tx.feePayer = sender;
@@ -457,7 +492,7 @@ export async function sendNativeWalletPayment(method: StreamPaymentMethod): Prom
   if (method.asset === "trx" || (method.asset === "usdt" && isTronNetwork(method.network))) {
     return sendTronPayment(method);
   }
-  if (method.asset === "sol") {
+  if (method.asset === "sol" || ((method.asset === "usdc" || method.asset === "usdt") && isSolanaNetwork(method.network))) {
     return sendPhantomSolPayment(method);
   }
   if (isEvmAsset(method.asset)) {

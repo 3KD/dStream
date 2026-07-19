@@ -1072,6 +1072,8 @@ export async function purchaseVideoAccessPackageClient(input: {
   settlementRef?: string;
   paymentProof?: unknown;
   stakeSessionToken?: string;
+  paymentIntentId?: string;
+  paymentIntentSecret?: string;
   operatorProofEvent?: NostrEvent;
   verifiedByOperator?: boolean;
   metadata?: Record<string, unknown>;
@@ -1102,6 +1104,8 @@ export async function purchaseVideoAccessPackageClient(input: {
       settlementRef: input.settlementRef,
       paymentProof: input.paymentProof,
       stakeSessionToken: input.stakeSessionToken,
+      paymentIntentId: input.paymentIntentId,
+      paymentIntentSecret: input.paymentIntentSecret,
       operatorProofEvent: input.operatorProofEvent,
       verifiedByOperator: input.verifiedByOperator,
       metadata: input.metadata ?? {}

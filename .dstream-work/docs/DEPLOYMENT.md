@@ -73,6 +73,19 @@ See `.env.example`. Quick reference:
 - `DSTREAM_XMR_INIT_TIMEOUT_SECS`: wallet init wait timeout for `xmr-wallet-init` in real-wallet stack (default `300`).
 - `DSTREAM_XMR_INIT_WALLET_RETRY_SECS`: wallet open/create retry window after RPC becomes reachable (default `120`).
 
+**Server-only (multi-rail settlement)**
+- `DSTREAM_BTC_*`, `DSTREAM_DOGE_*`, `DSTREAM_BCH_*`: UTXO node origins, optional Basic auth, network, and confirmation thresholds. Arbitrary transaction lookup generally requires transaction indexing.
+- `DSTREAM_ETH_RPC_ORIGIN`, `DSTREAM_ETH_CHAIN_ID`, `DSTREAM_ETH_CONFIRMATIONS_REQUIRED`: Ethereum RPC used for ETH and allowlisted mainnet USDT/USDC/PEPE verification.
+- `DSTREAM_EVM_NETWORKS_JSON`: optional additional EVM networks with explicit RPC, chain id, aliases, confirmations, and token contract/decimal allowlists.
+- `DSTREAM_TRON_RPC_ORIGIN`, `DSTREAM_TRON_API_KEY`, `DSTREAM_TRON_CONFIRMATIONS_REQUIRED`, `DSTREAM_TRON_USDT_CONTRACT`: TRX/TRC-20 verification.
+- `DSTREAM_SOLANA_*`: Solana RPC, network, finality threshold, and SPL USDC/USDT mint/decimal allowlists.
+- `DSTREAM_XRPL_RPC_ORIGIN`, `DSTREAM_XRPL_NETWORK`: XRP Ledger JSON-RPC.
+- `DSTREAM_CARDANO_API_ORIGIN`, `DSTREAM_CARDANO_API_KEY`, `DSTREAM_CARDANO_NETWORK`, `DSTREAM_CARDANO_CONFIRMATIONS_REQUIRED`: Blockfrost-compatible Cardano chain index.
+- `DSTREAM_PAYMENT_INTENT_STORE_PATH`, `DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH`: durable intent and replay stores. Keep both on persistent storage.
+- `DSTREAM_PAYMENT_RPC_TIMEOUT_MS`: outbound verifier timeout.
+
+An unset provider remains inactive and fails closed. Check the effective status at `GET /api/payments/capabilities` or Settings > Monetization > Wallet Integrations.
+
 **Server-only (origin ladder transcoder)**
 - `TRANSCODER_SOURCE_HLS_BASE`: source HLS base for reading live origin playlists (default `http://mediamtx:8880`).
 - `TRANSCODER_OUTPUT_RTMP_BASE`: RTMP publish base for derived renditions (default `rtmp://mediamtx:1935`).

@@ -44,72 +44,83 @@ export const PAYMENT_RAILS: PaymentRailMeta[] = [
   {
     id: "lightning",
     name: "Lightning",
-    description: "Bitcoin Lightning payouts (BOLT11/LNURL/lightning address) via wallet URI.",
-    execution: "wallet_uri",
-    assets: ["btc"]
+    description: "Bitcoin Lightning payments with NIP-57 receipts and backend settlement verification.",
+    execution: "verified_backend",
+    assets: ["btc"],
+    verifiedAssets: ["btc"]
   },
   {
     id: "utxo",
     name: "UTXO",
-    description: "Bitcoin on-chain supports verified backend settlement; DOGE and BCH use wallet handoff.",
-    execution: "wallet_uri",
+    description: "Verified Bitcoin, Dogecoin, and Bitcoin Cash on-chain settlement.",
+    execution: "verified_backend",
     assets: ["btc", "doge", "bch"],
-    verifiedAssets: ["btc"]
+    verifiedAssets: ["btc", "doge", "bch"]
   },
   {
     id: "evm",
     name: "EVM",
-    description: "Native ETH supports verified backend settlement; tokens use compatible wallet integrations.",
-    execution: "wallet_uri",
+    description: "Verified ETH and allowlisted ERC-20 settlement on configured EVM networks.",
+    execution: "verified_backend",
     assets: ["eth", "usdt", "usdc", "pepe"],
-    verifiedAssets: ["eth"]
+    verifiedAssets: ["eth", "usdt", "usdc", "pepe"]
   },
   {
     id: "tron",
     name: "TRON",
-    description: "Native TRX supports verified backend settlement and TRON-compatible wallet handoff.",
-    execution: "wallet_uri",
-    assets: ["trx"],
-    verifiedAssets: ["trx"]
+    description: "Verified TRX and TRC-20 USDT settlement.",
+    execution: "verified_backend",
+    assets: ["trx", "usdt"],
+    verifiedAssets: ["trx", "usdt"]
   },
   {
     id: "solana",
     name: "Solana",
-    description: "Solana SPL/native flows through Solana wallets.",
-    execution: "wallet_uri",
-    assets: ["sol"]
+    description: "Verified SOL, SPL USDC, and SPL USDT settlement.",
+    execution: "verified_backend",
+    assets: ["sol", "usdc", "usdt"],
+    verifiedAssets: ["sol", "usdc", "usdt"]
   },
   {
     id: "xrpl",
     name: "XRPL",
-    description: "XRP Ledger payments routed with XRP wallet integrations.",
-    execution: "wallet_uri",
-    assets: ["xrp"]
+    description: "Verified finalized XRP Ledger payments.",
+    execution: "verified_backend",
+    assets: ["xrp"],
+    verifiedAssets: ["xrp"]
   },
   {
     id: "cardano",
     name: "Cardano",
-    description: "Cardano address payments through Cardano wallets.",
-    execution: "wallet_uri",
-    assets: ["ada"]
+    description: "Verified Cardano address payments.",
+    execution: "verified_backend",
+    assets: ["ada"],
+    verifiedAssets: ["ada"]
   }
 ];
 
 const PAYMENT_RAIL_BY_ID = new Map<PaymentRailId, PaymentRailMeta>(PAYMENT_RAILS.map((rail) => [rail.id, rail]));
-const PAYMENT_RAIL_BY_ASSET = new Map<StreamPaymentAsset, PaymentRailMeta>();
-
-for (const rail of PAYMENT_RAILS) {
-  for (const asset of rail.assets) {
-    PAYMENT_RAIL_BY_ASSET.set(asset, rail);
-  }
-}
+const DEFAULT_RAIL_BY_ASSET: Record<StreamPaymentAsset, PaymentRailId> = {
+  xmr: "xmr",
+  btc: "utxo",
+  eth: "evm",
+  usdt: "evm",
+  xrp: "xrpl",
+  usdc: "evm",
+  sol: "solana",
+  trx: "tron",
+  doge: "utxo",
+  bch: "utxo",
+  ada: "cardano",
+  pepe: "evm"
+};
 
 export function getPaymentRailById(id: PaymentRailId): PaymentRailMeta {
   return PAYMENT_RAIL_BY_ID.get(id) ?? PAYMENT_RAILS[0]!;
 }
 
 export function getPaymentRailForAsset(asset: StreamPaymentAsset): PaymentRailMeta {
-  return PAYMENT_RAIL_BY_ASSET.get(asset) ?? getPaymentRailById("xmr");
+  return getPaymentRailById(DEFAULT_RAIL_BY_ASSET[asset] ?? "xmr");
 }
 
 export function getPaymentRailForMethod(method: StreamPaymentMethod): PaymentRailMeta {
@@ -119,6 +130,13 @@ export function getPaymentRailForMethod(method: StreamPaymentMethod): PaymentRai
       return getPaymentRailById("lightning");
     }
     return getPaymentRailById("utxo");
+  }
+  const network = (method.network ?? "").trim().toLowerCase();
+  if (method.asset === "usdt" && (network.includes("tron") || network.includes("trc20"))) {
+    return getPaymentRailById("tron");
+  }
+  if ((method.asset === "usdt" || method.asset === "usdc") && (network.includes("solana") || network.includes("spl"))) {
+    return getPaymentRailById("solana");
   }
   return getPaymentRailForAsset(method.asset);
 }

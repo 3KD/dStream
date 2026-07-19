@@ -47,22 +47,18 @@ test("coercePaymentMethods keeps valid methods only", () => {
 
 test("buildPaymentUri emits scheme URIs for supported assets", () => {
   assert.equal(buildPaymentUri({ asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" }), "bitcoin:bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh");
-  assert.equal(buildPaymentUri({ asset: "btc", address: "alice@getalby.com", network: "lightning" }), "lightning:alice@getalby.com");
-  assert.equal(
-    buildPaymentUri({ asset: "btc", address: "alice@getalby.com", network: "lightning", amount: "1200" }),
-    "lightning:alice@getalby.com?amount=1200"
-  );
+  assert.equal(buildPaymentUri({ asset: "btc", address: "alice@getalby.com", network: "lightning" }), null);
   assert.equal(
     buildPaymentUri({ asset: "btc", address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", amount: "0.00025" }),
     "bitcoin:bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh?amount=0.00025"
   );
   assert.equal(
     buildPaymentUri({ asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum" }),
-    "ethereum:0x1111111111111111111111111111111111111111"
+    "ethereum:0x1111111111111111111111111111111111111111@1"
   );
   assert.equal(
     buildPaymentUri({ asset: "eth", address: "0x1111111111111111111111111111111111111111", network: "ethereum", amount: "0.25" }),
-    "ethereum:0x1111111111111111111111111111111111111111?amount=0.25"
+    "ethereum:0x1111111111111111111111111111111111111111@1?value=250000000000000000"
   );
   assert.equal(buildPaymentUri({ asset: "trx", address: "TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF" }), "tron:TXVTmM7in6PZLJ7uH1WfLYv9XKLhFLxnkF");
   assert.equal(
@@ -115,6 +111,50 @@ test("validatePaymentMethodDrafts rejects invalid payment amounts", () => {
   assert.equal(result.errors.length, 2);
 });
 
+test("token address validation follows the selected chain", () => {
+  const solanaAddress = "So11111111111111111111111111111111111111112";
+  const result = validatePaymentMethodDrafts([
+    { asset: "usdt", address: "TH5oqaJWYnVZCCPktHvcsm8aaPUeAXzrTY", network: "tron", label: "", amount: "1" },
+    { asset: "usdc", address: solanaAddress, network: "solana", label: "", amount: "2" }
+  ]);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.methods[1]?.address, solanaAddress);
+});
+
+test("payment URIs preserve token identity and network", () => {
+  const evmRecipient = "0x1111111111111111111111111111111111111111";
+  assert.equal(
+    buildPaymentUri({ asset: "usdt", address: evmRecipient, network: "ethereum", amount: "1.5" }),
+    "ethereum:0xdAC17F958D2ee523a2206206994597C13D831ec7@1/transfer?address=0x1111111111111111111111111111111111111111&uint256=1500000"
+  );
+  assert.equal(
+    buildPaymentUri({ asset: "usdt", address: "TH5oqaJWYnVZCCPktHvcsm8aaPUeAXzrTY", network: "tron", amount: "2" }),
+    "tron:TH5oqaJWYnVZCCPktHvcsm8aaPUeAXzrTY?amount=2&token=USDT"
+  );
+  assert.equal(
+    buildPaymentUri({ asset: "ada", address: `addr1${"q".repeat(54)}`, amount: "3" }),
+    `web+cardano:addr1${"q".repeat(54)}?amount=3000000`
+  );
+  assert.equal(
+    buildPaymentUri({ asset: "xrp", address: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", amount: "4" }),
+    "https://xaman.app/detect/request:rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh?amount=4&network=XRPL"
+  );
+});
+
+test("token amount validation matches six-decimal settlement adapters", () => {
+  const result = validatePaymentMethodDrafts([
+    {
+      asset: "usdt",
+      address: "0x1111111111111111111111111111111111111111",
+      network: "ethereum",
+      label: "",
+      amount: "1.0000001"
+    }
+  ]);
+  assert.equal(result.methods.length, 0);
+  assert.match(result.errors[0] ?? "", /up to 6 decimals/);
+});
+
 test("payment asset default order prioritizes XMR then BTC", () => {
   assert.equal(PAYMENT_ASSET_ORDER[0], "xmr");
   assert.equal(PAYMENT_ASSET_ORDER[1], "btc");
@@ -131,9 +171,9 @@ test("payment rails map expected assets", () => {
   assert.equal(getPaymentRailForAsset("xrp").id, "xrpl");
   assert.equal(getPaymentRailForAsset("ada").id, "cardano");
   assert.ok(PAYMENT_RAILS.length >= 6);
-  assert.deepEqual(getPaymentRailForAsset("btc").verifiedAssets, ["btc"]);
-  assert.deepEqual(getPaymentRailForAsset("eth").verifiedAssets, ["eth"]);
-  assert.deepEqual(getPaymentRailForAsset("trx").verifiedAssets, ["trx"]);
+  assert.deepEqual(getPaymentRailForAsset("btc").verifiedAssets, ["btc", "doge", "bch"]);
+  assert.deepEqual(getPaymentRailForAsset("eth").verifiedAssets, ["eth", "usdt", "usdc", "pepe"]);
+  assert.deepEqual(getPaymentRailForAsset("trx").verifiedAssets, ["trx", "usdt"]);
 });
 
 test("payment rails classify BTC on-chain vs Lightning", () => {

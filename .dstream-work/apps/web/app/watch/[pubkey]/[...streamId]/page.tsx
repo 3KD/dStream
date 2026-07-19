@@ -32,14 +32,14 @@ import {
   sendNativeWalletPayment,
   supportsNativeWalletPayment
 } from "@/lib/payments/nativeWallet";
-import { publishEventDetailed } from "@/lib/publish";
+import { requestLightningZapInvoice } from "@/lib/payments/lightning";
+import { payLightningInvoice } from "@/lib/payments/lightningWallet";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
-import { buildZapRequestUnsigned } from "@/lib/zaps";
 import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
-import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
+import { buildP2PBytesReceiptEvent, makeATag, type StreamPaymentMethod } from "@dstream/protocol";
 
 function base64EncodeUtf8(input: string): string {
   try {
@@ -813,6 +813,17 @@ export default function WatchPage() {
     });
   }, [paymentMethods]);
 
+  const lightningZapMethod = useMemo(
+    () =>
+      paymentMethods.find((method) => {
+        if (method.asset !== "btc") return false;
+        const network = (method.network ?? "").trim().toLowerCase();
+        const address = (method.address ?? "").trim().toLowerCase().replace(/^lightning:/, "");
+        return network.includes("lightning") || network.includes("lnurl") || address.includes("@") || address.startsWith("lnurl");
+      }) ?? null,
+    [paymentMethods]
+  );
+
   const [zapAmountSats, setZapAmountSats] = useState("1000");
   const [zapComment, setZapComment] = useState("");
   const [zapRequestBusy, setZapRequestBusy] = useState(false);
@@ -824,7 +835,11 @@ export default function WatchPage() {
       return;
     }
     if (!identity) {
-      setZapRequestError("Connect identity to publish a zap request.");
+      setZapRequestError("Connect identity to sign a zap payment.");
+      return;
+    }
+    if (!lightningZapMethod) {
+      setZapRequestError("This stream has no NIP-57 Lightning address.");
       return;
     }
     const sats = Number(zapAmountSats);
@@ -836,27 +851,32 @@ export default function WatchPage() {
     setZapRequestError(null);
     setZapRequestNotice(null);
     try {
-      const unsigned = buildZapRequestUnsigned({
+      const invoice = await requestLightningZapInvoice({
+        destination: lightningZapMethod.address,
+        amountSats: BigInt(Math.floor(sats)),
         senderPubkey: identity.pubkey,
         recipientPubkey: pubkey,
-        streamId,
-        amountSats: Math.floor(sats),
         relays,
-        comment: zapComment
+        content: zapComment,
+        eventCoordinate: makeATag(pubkey, streamId),
+        signEvent: async (event) => signEvent(event as any)
       });
-      const signed = await signEvent(unsigned as any);
-      const report = await publishEventDetailed(relays, signed as any, { timeoutMs: 8_000 });
-      if (!report.ok) {
-        setZapRequestError(report.failedRelays[0]?.reason ?? "No relay acknowledged zap request.");
+      const payment = await payLightningInvoice(invoice.invoice);
+      if (!payment.ok) {
+        setZapRequestError(payment.error ?? "Lightning wallet rejected the payment.");
         return;
       }
-      setZapRequestNotice(`Zap request published (${report.okRelays.length}/${relays.length} relays).`);
+      setZapRequestNotice(
+        payment.pendingExternal
+          ? "Invoice opened in your Lightning wallet. The creator's provider will publish the receipt after payment."
+          : `Zap paid via ${payment.provider === "nwc" ? "Nostr Wallet Connect" : "WebLN"}. Waiting for the receipt.`
+      );
     } catch (error: any) {
       setZapRequestError(error?.message ?? "Failed to publish zap request.");
     } finally {
       setZapRequestBusy(false);
     }
-  }, [identity, pubkey, relays, signEvent, streamId, zapAmountSats, zapComment]);
+  }, [identity, lightningZapMethod, pubkey, relays, signEvent, streamId, zapAmountSats, zapComment]);
 
   const [watchReportOpen, setWatchReportOpen] = useState(false);
   const [watchReportBusy, setWatchReportBusy] = useState(false);
@@ -2462,7 +2482,7 @@ export default function WatchPage() {
                   </div>
                 </div>
                 <div className="text-xs text-neutral-500">
-                  Publish a signed zap request (kind 9734). Lightning settlement still happens in the viewer wallet flow.
+                  Pay through Nostr Wallet Connect, WebLN, or an installed Lightning wallet. The recipient provider publishes the receipt.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_auto] gap-2">
                   <input
@@ -2486,7 +2506,7 @@ export default function WatchPage() {
                     disabled={zapRequestBusy}
                     className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
                   >
-                    {zapRequestBusy ? "Publishing…" : "Publish request"}
+                    {zapRequestBusy ? "Requesting invoice…" : "Zap now"}
                   </button>
                 </div>
                 {zapRequestNotice && <div className="text-xs text-emerald-300">{zapRequestNotice}</div>}

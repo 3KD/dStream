@@ -3,7 +3,7 @@ import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protoco
 import { grantAccessEntitlement, listAccessEntitlements } from "./store";
 import type { AccessEntitlement, AccessEntitlementSource } from "./types";
 import { readTextFileWithBackup, writeJsonFileAtomic } from "../storage/jsonFileStore";
-import { isVerifiedNativePaymentAsset, validateNativePaymentAddress } from "../payments/server";
+import { normalizePaymentAddress, validatePaymentAddress } from "../payments/methods";
 
 const STORE_PATH =
   (process.env.DSTREAM_Video_PACKAGE_STORE_PATH ?? "/var/lib/dstream/video-packages.json").trim() ||
@@ -416,10 +416,15 @@ export function upsertVideoAccessPackage(input: {
   if (!title) throw new Error("title is required.");
   if (!paymentAsset) throw new Error("paymentAsset is invalid.");
   if (!paymentAmount) throw new Error("paymentAmount must be a positive decimal string.");
-  const paymentAddress =
-    paymentAddressInput && isVerifiedNativePaymentAsset(paymentAsset)
-      ? validateNativePaymentAddress(paymentAsset, paymentAddressInput)
-      : paymentAddressInput;
+  const paymentNetwork =
+    typeof input.metadata?.paymentNetwork === "string" ? input.metadata.paymentNetwork.trim() : paymentRailId;
+  const paymentAddress = paymentAddressInput
+    ? normalizePaymentAddress(paymentAsset, paymentAddressInput, paymentNetwork)
+    : undefined;
+  if (paymentAddress) {
+    const paymentAddressError = validatePaymentAddress(paymentAsset, paymentAddress, paymentNetwork);
+    if (paymentAddressError) throw new Error(`paymentAddress is invalid: ${paymentAddressError}`);
+  }
   if (!durationHours) throw new Error("durationHours must be a positive integer.");
   if (playlistId && relativePath) throw new Error("Only one package scope is allowed: playlistId or relativePath.");
 

@@ -1,8 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Check, Copy, ExternalLink, Wallet, X, Zap } from "lucide-react";
+import type { StreamPaymentMethod } from "@dstream/protocol";
+import { makeATag } from "@dstream/protocol";
 import { TipDialog as MoneroTipDialog } from "@/components/monero/TipDialog";
+import { useIdentity } from "@/context/IdentityContext";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
+import { getNostrRelays } from "@/lib/config";
+import { PAYMENT_ASSET_META, buildPaymentUri } from "@/lib/payments/catalog";
+import { requestLightningZapInvoice } from "@/lib/payments/lightning";
+import { payLightningInvoice } from "@/lib/payments/lightningWallet";
+import { getNativeWalletCapability, sendNativeWalletPayment } from "@/lib/payments/nativeWallet";
 
 interface UnifiedTipDialogProps {
   open: boolean;
@@ -12,25 +21,89 @@ interface UnifiedTipDialogProps {
   onClose: () => void;
 }
 
-export function UnifiedTipDialog({ open, streamPubkey, streamId, broadcasterName, onClose }: UnifiedTipDialogProps) {
-  const profileRecord = useNostrProfile(streamPubkey);
-  const profile = profileRecord?.profile;
-  const lud16 = profile?.lud16 || profile?.lud06;
-  const btc = profile?.btc;
-  const eth = profile?.eth;
-  const trx = profile?.trx;
-  const xmr = profile?.xmr;
-  const sol = profile?.sol;
-  const ada = profile?.ada;
-  const doge = profile?.doge;
-  const ltc = profile?.ltc;
-  const ton = profile?.ton;
-  const xrp = profile?.xrp;
-  const dot = profile?.dot;
-  
-  const hasAnyAddress = !!(lud16 || btc || eth || trx || xmr || sol || ada || doge || ltc || ton || xrp || dot);
+function methodKey(method: StreamPaymentMethod): string {
+  return `${method.asset}:${method.network ?? ""}:${method.address}`;
+}
 
+export function UnifiedTipDialog({ open, streamPubkey, streamId, broadcasterName, onClose }: UnifiedTipDialogProps) {
+  const profile = useNostrProfile(streamPubkey)?.profile;
+  const { identity, signEvent } = useIdentity();
+  const relays = useMemo(() => getNostrRelays(), []);
   const [showMonero, setShowMonero] = useState(false);
+  const [amountByKey, setAmountByKey] = useState<Record<string, string>>({});
+  const [busyKey, setBusyKey] = useState("");
+  const [statusByKey, setStatusByKey] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [copiedKey, setCopiedKey] = useState("");
+
+  const methods = useMemo(() => {
+    if (!profile) return [];
+    const candidates: Array<StreamPaymentMethod | null> = [
+      profile.lud16 || profile.lud06
+        ? { asset: "btc", network: "lightning", address: (profile.lud16 || profile.lud06)!, label: "Lightning" }
+        : null,
+      profile.xmr ? { asset: "xmr", network: "mainnet", address: profile.xmr, label: "Monero" } : null,
+      profile.btc ? { asset: "btc", network: "bitcoin", address: profile.btc, label: "Bitcoin" } : null,
+      profile.eth ? { asset: "eth", network: "ethereum", address: profile.eth, label: "Ethereum" } : null,
+      profile.trx ? { asset: "trx", network: "tron", address: profile.trx, label: "TRON" } : null,
+      profile.sol ? { asset: "sol", network: "solana", address: profile.sol, label: "Solana" } : null,
+      profile.xrp ? { asset: "xrp", network: "xrpl", address: profile.xrp, label: "XRP" } : null,
+      profile.ada ? { asset: "ada", network: "cardano", address: profile.ada, label: "Cardano" } : null,
+      profile.doge ? { asset: "doge", network: "dogecoin", address: profile.doge, label: "Dogecoin" } : null
+    ];
+    return candidates.filter((method): method is StreamPaymentMethod => !!method);
+  }, [profile]);
+
+  const copyAddress = async (key: string, address: string) => {
+    await navigator.clipboard.writeText(address);
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey(""), 1200);
+  };
+
+  const send = async (method: StreamPaymentMethod) => {
+    const key = methodKey(method);
+    const amount = (amountByKey[key] ?? "").trim();
+    setBusyKey(key);
+    setStatusByKey((current) => ({ ...current, [key]: { ok: false, message: "" } }));
+    try {
+      if (!amount) throw new Error("Enter an amount first.");
+      if (method.asset === "btc" && method.network === "lightning") {
+        if (!identity) throw new Error("Connect a Nostr identity to sign the zap request.");
+        if (!/^\d+$/.test(amount) || BigInt(amount) <= 0n) throw new Error("Lightning amount must be positive sats.");
+        const invoice = await requestLightningZapInvoice({
+          destination: method.address,
+          amountSats: BigInt(amount),
+          senderPubkey: identity.pubkey,
+          recipientPubkey: streamPubkey,
+          relays,
+          eventCoordinate: makeATag(streamPubkey, streamId),
+          signEvent: async (event) => signEvent(event as any)
+        });
+        const paid = await payLightningInvoice(invoice.invoice);
+        if (!paid.ok) throw new Error(paid.error || "Lightning payment failed.");
+        setStatusByKey((current) => ({
+          ...current,
+          [key]: {
+            ok: true,
+            message: paid.pendingExternal ? "Invoice opened in your wallet." : "Zap paid; receipt pending."
+          }
+        }));
+        return;
+      }
+      const result = await sendNativeWalletPayment({ ...method, amount });
+      if (!result.ok) throw new Error(result.error || "Wallet payment failed.");
+      setStatusByKey((current) => ({
+        ...current,
+        [key]: { ok: true, message: result.provider === "wallet_uri" ? "Opened wallet app." : "Payment submitted." }
+      }));
+    } catch (error) {
+      setStatusByKey((current) => ({
+        ...current,
+        [key]: { ok: false, message: error instanceof Error ? error.message : "Payment failed." }
+      }));
+    } finally {
+      setBusyKey("");
+    }
+  };
 
   if (showMonero) {
     return (
@@ -46,169 +119,89 @@ export function UnifiedTipDialog({ open, streamPubkey, streamId, broadcasterName
       />
     );
   }
-
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm flex flex-col rounded-3xl border border-neutral-800 bg-neutral-950 shadow-2xl overflow-hidden max-h-[85vh]">
-        
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 flex-shrink-0">
+      <button type="button" className="absolute inset-0 bg-black/80" onClick={onClose} aria-label="Close tip dialog" />
+      <section className="relative z-10 flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 shadow-2xl">
+        <header className="flex items-center justify-between gap-4 border-b border-neutral-800 px-5 py-4">
           <div>
-            <h3 className="text-sm font-bold text-neutral-100 flex items-center gap-2">
-              <span className="text-yellow-500">💎</span> Support Creator
+            <h3 className="flex items-center gap-2 text-sm font-bold text-neutral-100">
+              <Zap className="h-4 w-4 text-yellow-400" /> Support creator
             </h3>
-            {broadcasterName && (
-              <p className="text-xs text-neutral-400 mt-0.5">To {broadcasterName}</p>
-            )}
+            {broadcasterName ? <p className="mt-1 text-xs text-neutral-500">{broadcasterName}</p> : null}
           </div>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400 transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button type="button" onClick={onClose} className="rounded-md p-2 text-neutral-400 hover:bg-neutral-800" aria-label="Close">
+            <X className="h-4 w-4" />
           </button>
-        </div>
+        </header>
 
-        {/* Body */}
-        <div className="p-6 flex flex-col items-center flex-1 overflow-y-auto space-y-6">
-          
-          {hasAnyAddress ? (
-            <div className="flex flex-col items-center text-center w-full space-y-4">
-              
-              {lud16 && (
-                <div className="w-full bg-neutral-900/40 border border-neutral-800 rounded-2xl p-4">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-500">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                      </svg>
+        <div className="space-y-3 overflow-y-auto p-4">
+          {methods.length ? (
+            methods.map((method) => {
+              const key = methodKey(method);
+              const capability = getNativeWalletCapability(method);
+              const walletUri = buildPaymentUri(method);
+              const status = statusByKey[key];
+              const isLightning = method.asset === "btc" && method.network === "lightning";
+              return (
+                <article key={key} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-100">{PAYMENT_ASSET_META[method.asset].name}</div>
+                      <div className="text-[11px] text-neutral-500">{method.network}</div>
                     </div>
-                    <h4 className="text-sm font-bold text-white">Lightning Zap</h4>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <a 
-                      href={`lightning:${lud16}`}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-bold rounded-xl transition-colors text-sm"
-                    >
-                      Open Wallet Extension
-                    </a>
                     <button
-                      onClick={() => navigator.clipboard.writeText(lud16)}
-                      className="w-full py-2 bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-neutral-300 font-mono rounded-xl text-xs transition-colors truncate px-3"
-                      title="Copy Address"
+                      type="button"
+                      onClick={() => void copyAddress(key, method.address)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-700 text-neutral-300 hover:border-neutral-500"
+                      title="Copy address"
                     >
-                      {lud16}
+                      {copiedKey === key ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                     </button>
                   </div>
-                </div>
-              )}
-
-              {btc && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-500 ml-1">Bitcoin (BTC)</span>
-                  <button onClick={() => navigator.clipboard.writeText(btc)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-orange-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{btc}</button>
-                </div>
-              )}
-
-              {eth && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-purple-400 ml-1">EVM Wrapper (Ethereum, BNB, MATIC, Base)</span>
-                  <button onClick={() => navigator.clipboard.writeText(eth)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-purple-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{eth}</button>
-                </div>
-              )}
-
-              {sol && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 ml-1">Solana (SOL)</span>
-                  <button onClick={() => navigator.clipboard.writeText(sol)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-emerald-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{sol}</button>
-                </div>
-              )}
-
-              {doge && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500 ml-1">Dogecoin (DOGE)</span>
-                  <button onClick={() => navigator.clipboard.writeText(doge)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-amber-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{doge}</button>
-                </div>
-              )}
-
-              {ltc && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-stone-300 ml-1">Litecoin (LTC)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ltc)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-stone-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ltc}</button>
-                </div>
-              )}
-              
-              {ton && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500 ml-1">Toncoin (TON)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ton)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-blue-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ton}</button>
-                </div>
-              )}
-
-              {ada && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-cyan-400 ml-1">Cardano (ADA)</span>
-                  <button onClick={() => navigator.clipboard.writeText(ada)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-cyan-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{ada}</button>
-                </div>
-              )}
-
-              {xrp && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 ml-1">Ripple (XRP)</span>
-                  <button onClick={() => navigator.clipboard.writeText(xrp)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-slate-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{xrp}</button>
-                </div>
-              )}
-
-              {dot && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-pink-500 ml-1">Polkadot (DOT)</span>
-                  <button onClick={() => navigator.clipboard.writeText(dot)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-pink-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{dot}</button>
-                </div>
-              )}
-
-              {trx && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-500 ml-1">TRON (TRX)</span>
-                  <button onClick={() => navigator.clipboard.writeText(trx)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-red-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{trx}</button>
-                </div>
-              )}
-
-              {xmr && (
-                <div className="w-full flex flex-col items-start gap-1 p-3 border border-neutral-800 rounded-xl bg-neutral-900/30">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-500 ml-1">Monero (XMR) Native</span>
-                  <button onClick={() => navigator.clipboard.writeText(xmr)} className="w-full text-left py-1.5 px-2 bg-black/50 border border-neutral-800 hover:border-orange-500/50 text-neutral-400 hover:text-neutral-200 font-mono rounded-lg text-xs truncate transition-colors">{xmr}</button>
-                </div>
-              )}
-
-            </div>
+                  <div className="mt-2 truncate font-mono text-xs text-neutral-400" title={method.address}>{method.address}</div>
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      value={amountByKey[key] ?? ""}
+                      onChange={(event) => setAmountByKey((current) => ({ ...current, [key]: event.target.value }))}
+                      inputMode="decimal"
+                      placeholder={isLightning ? "Sats" : PAYMENT_ASSET_META[method.asset].symbol}
+                      className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void send(method)}
+                      disabled={busyKey === key || (!isLightning && !capability.supported)}
+                      className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      <Wallet className="h-4 w-4" />
+                      {busyKey === key ? "Sending" : "Pay"}
+                    </button>
+                    {walletUri ? (
+                      <a href={walletUri} className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-neutral-700 text-neutral-300 hover:border-neutral-500" title="Open wallet">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ) : null}
+                  </div>
+                  {status?.message ? <p className={`mt-2 text-xs ${status.ok ? "text-emerald-300" : "text-red-300"}`}>{status.message}</p> : null}
+                </article>
+              );
+            })
           ) : (
-            <div className="flex flex-col items-center text-center w-full text-neutral-500 py-4">
-              <svg className="w-10 h-10 mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm">This creator does not have any public wallet addresses configured on their Nostr profile.</p>
-            </div>
+            <p className="py-6 text-center text-sm text-neutral-500">This creator has no supported payment address.</p>
           )}
 
-          <div className="w-full h-px bg-neutral-800/60" />
-
-          <div className="flex flex-col items-center text-center w-full pb-2">
-            <p className="text-xs text-neutral-500 mb-3 max-w-[260px]">
-              Or generate a temporary dStream escrow address for absolute privacy.
-            </p>
-            <button
-              onClick={() => setShowMonero(true)}
-              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold rounded-full text-xs flex items-center gap-2 border border-neutral-700 transition-colors"
-            >
-              <span className="text-orange-500 font-black">XMR</span> Private Proxy
-            </button>
-          </div>
-
+          <button
+            type="button"
+            onClick={() => setShowMonero(true)}
+            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-200 hover:bg-neutral-800"
+          >
+            Create private Monero payment
+          </button>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

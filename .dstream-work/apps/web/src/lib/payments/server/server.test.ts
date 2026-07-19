@@ -87,7 +87,7 @@ test("Ethereum verifier rejects reverted or under-confirmed transactions and acc
   assert.equal(result.amountAtomic, "1000000000000000000");
   assert.equal(result.confirmations, 13);
   assert.equal(result.blockHeight, 100);
-  assert.equal(result.settlementKey, `eth:0x1:${txId}`);
+  assert.equal(result.settlementKey, `eth:eip155:1:${txId}:native`);
 
   headBlock = "0x6a";
   await assert.rejects(
@@ -100,7 +100,7 @@ test("TRON verifier accepts only a successful native TransferContract", async ()
   process.env.DSTREAM_TRON_RPC_ORIGIN = "https://tron-rpc.example";
   process.env.DSTREAM_TRON_CONFIRMATIONS_REQUIRED = "20";
   const txId = "d".repeat(64);
-  const address = `T${"A".repeat(33)}`;
+  const address = "TH5oqaJWYnVZCCPktHvcsm8aaPUeAXzrTY";
   globalThis.fetch = async (url) => {
     const path = new URL(String(url)).pathname;
     if (path.endsWith("/walletsolidity/gettransactionbyid")) {
@@ -121,7 +121,7 @@ test("TRON verifier accepts only a successful native TransferContract", async ()
   const result = await verifyNativePayment({ asset: "trx", address, amount: "2", txId, paymentRailId: "tron" });
   assert.equal(result.amountAtomic, "2500000");
   assert.equal(result.confirmations, 20);
-  assert.equal(result.settlementKey, `trx:mainnet:${txId}`);
+  assert.equal(result.settlementKey, `trx:tron:mainnet:${txId}`);
 });
 
 test("settlement store is idempotent for one purchase and rejects cross-purchase replay", async () => {
@@ -135,7 +135,8 @@ test("settlement store is idempotent for one purchase and rejects cross-purchase
     recipient: "bc1qrecipient",
     amountAtomic: "10000",
     confirmations: 3,
-    blockHeight: 900000
+    blockHeight: 900000,
+    finality: "confirmed" as const
   };
   const first = recordNativePaymentSettlement({ payment, packageId: "package-a", buyerPubkey: "1".repeat(64) });
   const second = recordNativePaymentSettlement({ payment, packageId: "package-a", buyerPubkey: "1".repeat(64) });
@@ -163,7 +164,8 @@ test("settlement store fails closed instead of resetting an invalid schema", asy
           recipient: `T${"A".repeat(33)}`,
           amountAtomic: "1000000",
           confirmations: 20,
-          blockHeight: 100
+          blockHeight: 100,
+          finality: "confirmed"
         },
         packageId: "package-c",
         buyerPubkey: "3".repeat(64)

@@ -13,7 +13,7 @@ npm run dev
 Copy `.env.example` to `.env.local` if you want to override relays/origin/ICE servers.
 Set support addresses (`NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`, `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`, optional `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`, `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`, `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`) to expose platform donation rails on `/donate`.
 
-BTC on-chain, native ETH, and native TRX have built-in noncustodial settlement verifiers for paid access. Configure their server-only RPC variables from `.env.example`; an unset verifier fails closed and is reported as disabled by `/api/payments/capabilities`. Lightning, ERC-20, TRC-20, and the remaining catalog assets currently provide wallet handoff only.
+All advertised payment assets now have native noncustodial settlement adapters: Monero wallet RPC, NIP-57 Lightning receipts, BTC/DOGE/BCH UTXO RPC, ETH/ERC-20 logs, TRX/TRC-20 calls, SOL/SPL balances, finalized XRP Ledger payments, and Cardano UTXOs. Payment intents bind a buyer, recipient, amount, network, scope, expiry, and one-time settlement reference before paid access is granted. Configure the server-only RPC/indexer variables from `.env.example`; an unset verifier fails closed and is reported as inactive by `/api/payments/capabilities`.
 
 ## Docker (all-in-one)
 

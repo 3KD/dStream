@@ -311,23 +311,23 @@ A rail adapter must emit a settlement record, then grant entitlement:
 
 Current state:
 
-- Monero: verified backend settlement available now.
+- Monero, NIP-57 Lightning, UTXO, EVM/ERC-20, TRON/TRC-20, Solana/SPL, XRPL, and Cardano adapters are implemented.
+- Durable payment intents bind buyer, package revision, recipient, amount, network, expiry, and settlement key before entitlement issuance.
 - Monero stake session verify route now supports automatic verified entitlement grants (`purchase_verified`) when confirmed stake is observed.
 - Monero refund/slash routes now revoke matching stake-session entitlements automatically.
-- Lightning and other assets: wallet URI/copy flows; no backend verification yet.
 
-So paid gating should currently be:
+Paid gating should be:
 
-- **strict mode**: only Monero-verified purchases can auto-grant.
-- **compat mode**: non-verified rails can grant manual/provisional entitlement.
+- **strict mode**: only a settled, unexpired payment intent from an active verifier can auto-grant.
+- **compat mode**: operator/external verifier overrides remain policy-controlled and auditable.
 
 ## Rollout Plan (Safe)
 
 1. Introduce evaluator + tables (no behavior change).
 2. Make `POST /api/playback-access/issue` call evaluator.
 3. Add admin grant/revoke/list UI in Settings. ✅
-4. Attach Monero verified settlement to automatic grants.
-5. Add other rail verifiers (Lightning/UTXO/EVM) per rail ADRs.
+4. Attach Monero verified settlement to automatic grants. ✅
+5. Add native multi-rail verifiers and intent replay protection. ✅
 
 ## Backward Compatibility
 

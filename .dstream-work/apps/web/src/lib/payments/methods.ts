@@ -9,9 +9,9 @@ const PAYMENT_AMOUNT_MAX_DECIMALS: Record<StreamPaymentAsset, number> = {
   xmr: 12,
   eth: 18,
   btc: 8,
-  usdt: 8,
+  usdt: 6,
   xrp: 6,
-  usdc: 8,
+  usdc: 6,
   sol: 9,
   trx: 6,
   doge: 8,
@@ -76,11 +76,17 @@ export function paymentMethodToDraft(input: StreamPaymentMethod): PaymentMethodD
   };
 }
 
-export function normalizePaymentAddress(asset: StreamPaymentAsset, addressRaw: string): string {
+export function normalizePaymentAddress(asset: StreamPaymentAsset, addressRaw: string, networkRaw?: string): string {
   const address = addressRaw.trim();
   if (!address) return "";
   if (asset === "btc") return stripScheme(address, "lightning").trim();
-  if (asset === "eth" || asset === "usdt" || asset === "usdc" || asset === "pepe") return address.toLowerCase();
+  const network = (networkRaw ?? "").trim().toLowerCase();
+  const tokenUsesNonEvmAddress =
+    (asset === "usdt" || asset === "usdc") &&
+    (network.includes("tron") || network.includes("trc20") || network.includes("solana") || network.includes("spl"));
+  if (asset === "eth" || asset === "pepe" || ((asset === "usdt" || asset === "usdc") && !tokenUsesNonEvmAddress)) {
+    return address.toLowerCase();
+  }
   return address;
 }
 
@@ -158,9 +164,21 @@ export function validatePaymentAddress(asset: StreamPaymentAsset, addressRaw: st
     case "xmr":
       if (/^[48][1-9A-HJ-NP-Za-km-z]{94,105}$/.test(address)) return null;
       return "Monero address format is invalid.";
-    case "eth":
     case "usdt":
-    case "usdc":
+    case "usdc": {
+      const network = (networkRaw ?? "").trim().toLowerCase();
+      if (network.includes("tron") || network.includes("trc20")) {
+        if (asset === "usdt" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) return null;
+        return asset === "usdt" ? "TRON address format is invalid." : "USDC is not configured on the TRON rail.";
+      }
+      if (network.includes("solana") || network.includes("spl")) {
+        if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) return null;
+        return "Solana address format is invalid.";
+      }
+      if (/^0x[a-fA-F0-9]{40}$/.test(address)) return null;
+      return "EVM address must be 0x + 40 hex chars.";
+    }
+    case "eth":
     case "pepe":
       if (/^0x[a-fA-F0-9]{40}$/.test(address)) return null;
       return "EVM address must be 0x + 40 hex chars.";
@@ -202,7 +220,7 @@ export function toPaymentMethod(input: PaymentMethodDraft): { method: StreamPaym
   const asset = normalizePaymentAsset(input.asset);
   if (!asset) return { method: null, error: "Asset is required." };
 
-  const address = normalizePaymentAddress(asset, input.address);
+  const address = normalizePaymentAddress(asset, input.address, input.network);
   const addressError = validatePaymentAddress(asset, address, input.network);
   if (addressError) return { method: null, error: addressError };
   const amount = input.amount.trim() ? normalizePaymentAmount(asset, input.amount, input.network, address) : null;

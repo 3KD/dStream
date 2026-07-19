@@ -8,11 +8,14 @@ import { validatePaymentAddress } from "@/lib/payments/methods";
 
 const fallbackSupportXmrAddress =
   "49zL3oidgJbD6DeMheen873myfW1Jkp2tHiQJWXD7L64gjMjQ2pjFmjeksziP3CGKA1rfeLMCtgEqbUWBmhzL9YGP6X5w42";
+const fallbackSupportBtcAddress = "bc1qtldhxtrcahn0xlxxydfaf4czww0rdmaeltyca9";
+const fallbackSupportEthAddress = "0xEBC2943b39fbb47a461C21aaB49c482CF23e0699";
+const fallbackSupportTrxAddress = "TH5oqaJWYnVZCCPktHvcsm8aaPUeAXzrTY";
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? fallbackSupportXmrAddress).trim();
-const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
+const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? fallbackSupportBtcAddress).trim();
 const supportBtcLightning = (process.env.NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING ?? "").trim();
-const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
-const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
+const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? fallbackSupportEthAddress).trim();
+const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? fallbackSupportTrxAddress).trim();
 
 interface SupportPayment {
   method: StreamPaymentMethod;
@@ -49,7 +52,10 @@ const configuredPayments = [
   supportPayment("btc", supportBtcAddress, "bitcoin", "Bitcoin mainnet", "bg-amber-500"),
   supportPayment("btc", supportBtcLightning, "lightning", "Bitcoin Lightning", "bg-yellow-500", "dStream Lightning"),
   supportPayment("eth", supportEthAddress, "ethereum", "Ethereum mainnet", "bg-indigo-600"),
-  supportPayment("trx", supportTrxAddress, "tron", "TRON mainnet", "bg-red-600")
+  supportPayment("usdt", supportEthAddress, "ethereum", "USDT on Ethereum", "bg-emerald-600"),
+  supportPayment("usdc", supportEthAddress, "ethereum", "USDC on Ethereum", "bg-blue-600"),
+  supportPayment("trx", supportTrxAddress, "tron", "TRON mainnet", "bg-red-600"),
+  supportPayment("usdt", supportTrxAddress, "tron", "USDT on TRON", "bg-teal-600")
 ].filter((payment): payment is SupportPayment => payment !== null);
 
 const configuredAssets = new Set(configuredPayments.map((payment) => payment.method.asset));
@@ -97,7 +103,7 @@ export default function DonatePage() {
             Match the asset and network shown above. dStream will never ask for your wallet seed phrase or private key.
           </p>
           <div className="flex shrink-0 gap-4">
-            <Link href="/settings#wallet-integrations" className="text-blue-400 hover:text-blue-300">
+            <Link href="/settings/monetization#wallet-integrations" className="text-blue-400 hover:text-blue-300">
               Wallet settings
             </Link>
             <Link href="/docs" className="text-blue-400 hover:text-blue-300">

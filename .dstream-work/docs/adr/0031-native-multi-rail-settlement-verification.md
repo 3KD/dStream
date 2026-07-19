@@ -11,22 +11,27 @@ dStream advertised several payment assets, but only Monero had server-side verif
 
 Add built-in, noncustodial settlement adapters for:
 
-- BTC on-chain through a configured Bitcoin Core JSON-RPC endpoint.
-- Native ETH through a configured Ethereum JSON-RPC endpoint.
-- Native TRX through a configured TRON HTTP API endpoint.
+- XMR through unique wallet-RPC subaddress sessions.
+- BTC Lightning through signed NIP-57 requests, BOLT11 description hashes, and provider-signed kind `9735` receipts.
+- BTC, DOGE, and BCH through configured UTXO-node JSON-RPC endpoints.
+- ETH, USDT, USDC, and PEPE through configured EVM JSON-RPC endpoints and allowlisted ERC-20 `Transfer` logs.
+- TRX and TRC-20 USDT through a configured TRON HTTP API endpoint.
+- SOL and SPL USDC/USDT through finalized Solana transaction and owner-balance data.
+- XRP through validated XRP Ledger transaction results and delivered-amount metadata.
+- ADA through a Blockfrost-compatible Cardano transaction/UTXO index.
 
-Video access packages may store a trusted `paymentAddress`. The purchase API verifies the submitted transaction against the package asset, address, amount, and rail before granting access. Verified blockchain references are recorded in a durable, lock-protected settlement store. One chain settlement may be reused only idempotently for the same package and buyer; cross-purchase replay is rejected.
+Video access packages may store a trusted `paymentAddress`. The purchase API verifies the submitted transaction against the package asset, address, amount, and rail before granting access. A durable payment intent binds the signed buyer and current package revision to exact payment terms and expires after a bounded window. Verified references are recorded in lock-protected intent and settlement stores. Cross-intent and cross-purchase replay is rejected.
 
 Every adapter fails closed when its RPC is absent, unavailable, on the wrong network, malformed, reverted, underpaid, sent to another recipient, or below the configured confirmation threshold. Runtime availability is exposed without credentials through `/api/payments/capabilities`.
 
 The adapters do not custody funds, create wallets, hold private keys, issue refunds, or operate chain nodes. Deployment supplies its own authenticated RPC services or providers.
 
-Lightning, ERC-20, TRC-20, DOGE, BCH, SOL, XRP, and ADA remain wallet-handoff rails until dedicated verification adapters exist. Native ETH verification must not be used to claim ERC-20 settlement, and native TRX verification must not be used to claim TRC-20 settlement.
+Wallet execution remains noncustodial: NWC/WebLN or wallet handoff for Lightning, browser providers for EVM/TRON/Solana, and standards-based wallet requests for UTXO, XRP, and Cardano. A wallet handoff is not itself settlement proof; the corresponding backend adapter must independently verify the resulting receipt or transaction.
 
 ## Consequences
 
-- BTC, ETH, and TRX purchases can receive a cryptographically grounded verified-settlement decision once their RPCs are configured.
-- The web service needs a persistent `/var/lib/dstream` volume for settlement replay protection and existing access stores.
+- Every advertised asset can receive a verifier-grounded settlement decision once its required provider is configured.
+- The web service needs a persistent `/var/lib/dstream` volume for intent, settlement replay protection, and existing access stores.
 - Bitcoin Core generally needs transaction indexing for arbitrary transaction lookup.
 - RPC service security, availability, and chain correctness become production dependencies.
-- Additional assets require separate ADRs or extensions that define token contracts, decimals, event/log checks, finality, and replay keys.
+- Token contracts and mints are explicit allowlists; additional networks require explicit operator configuration.

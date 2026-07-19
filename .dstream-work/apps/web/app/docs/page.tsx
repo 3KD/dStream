@@ -17,7 +17,7 @@ const quickStart = [
   },
   {
     title: "Verify Economics",
-    body: "Run verified Monero tip/stake flow and confirm wallet-rpc session status from watch page."
+    body: "Check rail status in Settings, execute a wallet payment, and verify its durable payment intent before granting paid access."
   }
 ];
 
@@ -36,7 +36,7 @@ const runtimePlanes = [
   },
   {
     name: "Payments",
-    details: "Monero wallet-rpc for verified flows; additional asset methods exposed as addresses + wallet URI hints."
+    details: "Noncustodial wallet execution plus backend verification for Monero, Lightning, UTXO, EVM/TRON/Solana tokens, XRP, and Cardano."
   }
 ];
 
@@ -44,7 +44,7 @@ const protocolLandscape = [
   {
     title: "dStream",
     notes:
-      "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + Monero verified payment backend."
+      "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + intent-bound multi-rail settlement."
   },
   {
     title: "zap.stream",
@@ -71,6 +71,8 @@ const apiSurface = [
   { route: "/api/xmr/stake/session(/:token)", role: "Stake gate + refund lifecycle", auth: "Signed control requests." },
   { route: "/api/xmr/escrow/session/*", role: "Escrow-v3 multisig orchestration", auth: "Coordinator/participant scoped actions." },
   { route: "/api/payments/catalog", role: "Asset + wallet integration metadata", auth: "Public read." },
+  { route: "/api/payments/intents(/:intentId)", role: "Bound payment intent lifecycle", auth: "Signed buyer proof + one-time intent secret." },
+  { route: "/api/payments/intents/:intentId/verify", role: "Rail receipt or transaction verification", auth: "Intent secret; provider configuration stays server-only." },
   { route: "/api/payments/validate", role: "Server-side payment method validator", auth: "Schema guard only." },
   { route: "/api/moderation/reports", role: "Abuse report intake + operator queue actions", auth: "Signed report/operator proof scopes." }
 ];

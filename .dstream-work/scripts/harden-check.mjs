@@ -280,6 +280,78 @@ function checkProdRules(options = {}) {
   if (whepProxy && !isHttpUrl(whepProxy)) errors.push("DSTREAM_WHEP_PROXY_ORIGIN must be a valid http(s) URL when set.");
   if (!isHttpUrl(hlsProxy)) errors.push("DSTREAM_HLS_PROXY_ORIGIN must be a valid http(s) URL.");
 
+  const paymentProviders = [
+    ["Bitcoin", "DSTREAM_BTC_RPC_ORIGIN", "DSTREAM_BTC_CONFIRMATIONS_REQUIRED", "3"],
+    ["Dogecoin", "DSTREAM_DOGE_RPC_ORIGIN", "DSTREAM_DOGE_CONFIRMATIONS_REQUIRED", "12"],
+    ["Bitcoin Cash", "DSTREAM_BCH_RPC_ORIGIN", "DSTREAM_BCH_CONFIRMATIONS_REQUIRED", "6"],
+    ["Ethereum", "DSTREAM_ETH_RPC_ORIGIN", "DSTREAM_ETH_CONFIRMATIONS_REQUIRED", "12"],
+    ["TRON", "DSTREAM_TRON_RPC_ORIGIN", "DSTREAM_TRON_CONFIRMATIONS_REQUIRED", "20"],
+    ["Solana", "DSTREAM_SOLANA_RPC_ORIGIN", "DSTREAM_SOLANA_CONFIRMATIONS_REQUIRED", "1"],
+    ["XRPL", "DSTREAM_XRPL_RPC_ORIGIN", null, null],
+    ["Cardano", "DSTREAM_CARDANO_API_ORIGIN", "DSTREAM_CARDANO_CONFIRMATIONS_REQUIRED", "15"],
+  ];
+  for (const [label, originName, confirmationsName, confirmationsDefault] of paymentProviders) {
+    const origin = readEnv(originName).trim();
+    if (!origin) {
+      warnings.push(`${originName} is not set; verified ${label} settlements will be unavailable.`);
+      continue;
+    }
+    if (!isHttpUrl(origin)) errors.push(`${originName} must be a valid http(s) URL.`);
+    if (strictExternal && isExampleHost(hostName(origin))) {
+      errors.push(`Deploy mode forbids placeholder ${originName} host.`);
+    }
+    if (confirmationsName) {
+      const confirmationsRaw = readEnv(confirmationsName).trim() || confirmationsDefault;
+      if (!isDigits(confirmationsRaw)) {
+        errors.push(`${confirmationsName} must be digits.`);
+      } else if (Number(confirmationsRaw) < 1) {
+        warnings.push(`${confirmationsName} < 1 reduces payment finality.`);
+      }
+    }
+  }
+
+  const evmNetworksRaw = readEnv("DSTREAM_EVM_NETWORKS_JSON").trim();
+  if (evmNetworksRaw) {
+    try {
+      const networks = JSON.parse(evmNetworksRaw);
+      if (!Array.isArray(networks) || networks.length === 0) {
+        errors.push("DSTREAM_EVM_NETWORKS_JSON must be a non-empty JSON array when set.");
+      } else {
+        for (const [index, network] of networks.entries()) {
+          if (!network || typeof network !== "object") {
+            errors.push(`DSTREAM_EVM_NETWORKS_JSON[${index}] must be an object.`);
+            continue;
+          }
+          if (!isHttpUrl(String(network.rpcOrigin || ""))) {
+            errors.push(`DSTREAM_EVM_NETWORKS_JSON[${index}].rpcOrigin must be a valid http(s) URL.`);
+          } else if (strictExternal && isExampleHost(hostName(String(network.rpcOrigin)))) {
+            errors.push(`Deploy mode forbids placeholder DSTREAM_EVM_NETWORKS_JSON[${index}].rpcOrigin host.`);
+          }
+          if (!String(network.chainId || "").trim()) {
+            errors.push(`DSTREAM_EVM_NETWORKS_JSON[${index}].chainId is required.`);
+          }
+        }
+      }
+    } catch {
+      errors.push("DSTREAM_EVM_NETWORKS_JSON must contain valid JSON.");
+    }
+  }
+
+  const paymentTimeout = readEnv("DSTREAM_PAYMENT_RPC_TIMEOUT_MS").trim() || "8000";
+  if (!isDigits(paymentTimeout) || Number(paymentTimeout) < 1000) {
+    errors.push("DSTREAM_PAYMENT_RPC_TIMEOUT_MS must be digits and at least 1000.");
+  }
+  const paymentStores = [
+    ["DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH", "/var/lib/dstream/payment-settlements.json"],
+    ["DSTREAM_PAYMENT_INTENT_STORE_PATH", "/var/lib/dstream/payment-intents.json"],
+  ];
+  for (const [storeName, defaultPath] of paymentStores) {
+    const storePath = readEnv(storeName).trim() || defaultPath;
+    if (!storePath.startsWith("/")) {
+      errors.push(`${storeName} must be an absolute path.`);
+    }
+  }
+
   const walletOrigin = readEnv("DSTREAM_XMR_WALLET_RPC_ORIGIN").trim();
   if (walletOrigin) {
     if (!isHttpUrl(walletOrigin)) errors.push("DSTREAM_XMR_WALLET_RPC_ORIGIN must be a valid http(s) URL.");

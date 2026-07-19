@@ -164,7 +164,7 @@ export const WALLET_INTEGRATIONS: WalletIntegration[] = [
     id: "cake",
     name: "Cake Wallet",
     mode: "native_app",
-    assets: ["xmr", "btc", "eth", "usdc", "trx"],
+    assets: ["xmr", "btc", "eth", "usdt", "usdc", "trx"],
     website: "https://cakewallet.com"
   },
   {
@@ -227,7 +227,7 @@ export const WALLET_INTEGRATIONS: WalletIntegration[] = [
     id: "phantom",
     name: "Phantom",
     mode: "browser_extension",
-    assets: ["sol", "usdc", "eth"],
+    assets: ["sol", "usdt", "usdc", "eth"],
     website: "https://phantom.app"
   },
   {
@@ -309,6 +309,24 @@ function withQuery(base: string, params: Record<string, string | null | undefine
   return query ? `${base}?${query}` : base;
 }
 
+function decimalToAtomicString(input: string | undefined, decimals: number): string | undefined {
+  const match = (input ?? "").trim().match(/^(\d+)(?:\.(\d+))?$/);
+  if (!match || (match[2]?.length ?? 0) > decimals) return undefined;
+  const value = BigInt(match[1] ?? "0") * 10n ** BigInt(decimals) + BigInt((match[2] ?? "").padEnd(decimals, "0") || "0");
+  return value > 0n ? value.toString() : undefined;
+}
+
+const EVM_MAINNET_TOKENS: Partial<Record<StreamPaymentAsset, { contract: string; decimals: number }>> = {
+  usdt: { contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+  usdc: { contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
+  pepe: { contract: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", decimals: 18 }
+};
+
+const SOLANA_MAINNET_TOKENS: Partial<Record<StreamPaymentAsset, string>> = {
+  usdt: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+};
+
 export function buildPaymentUri(method: StreamPaymentMethod): string | null {
   const asset = method.asset;
   const address = method.address.trim();
@@ -326,9 +344,8 @@ export function buildPaymentUri(method: StreamPaymentMethod): string | null {
       const isLightning = (isBtcLightningNetwork(method.network) || isBtcLightningPayload(lightningPayload)) && isBtcLightningPayload(lightningPayload);
       if (isLightning) {
         const isBolt11 = BTC_LIGHTNING_INVOICE_RE.test(lightningPayload);
-        return withQuery(`lightning:${lightningPayload}`, {
-          amount: !isBolt11 ? method.amount : undefined
-        });
+        if (!isBolt11 && !BTC_LIGHTNING_LNURL_RE.test(lightningPayload)) return null;
+        return `lightning:${lightningPayload}`;
       }
       return withQuery(`bitcoin:${address}`, { label: method.label, amount: method.amount });
     }
@@ -337,19 +354,42 @@ export function buildPaymentUri(method: StreamPaymentMethod): string | null {
     case "bch":
       return withQuery(address.startsWith("bitcoincash:") ? address : `bitcoincash:${address}`, { label: method.label, amount: method.amount });
     case "ada":
-      return `cardano:${address}`;
+      return withQuery(`web+cardano:${address}`, { amount: decimalToAtomicString(method.amount, 6) });
     case "xrp":
-      return `xrpl:${address}`;
+      return withQuery(`https://xaman.app/detect/request:${address}`, { amount: method.amount, network: "XRPL" });
     case "sol":
-      return `solana:${address}`;
+      return withQuery(`solana:${address}`, { amount: method.amount, label: method.label });
     case "trx":
       return withQuery(`tron:${address}`, { amount: method.amount });
     case "eth":
-      return withQuery(`ethereum:${address}`, { amount: method.amount });
+      return withQuery(`ethereum:${address}@1`, { value: decimalToAtomicString(method.amount, 18) });
     case "usdt":
-    case "usdc":
-    case "pepe":
-      return withQuery(`ethereum:${address}`, { chain: method.network, label: method.label });
+    case "usdc": {
+      const network = (method.network ?? "").toLowerCase();
+      if (network.includes("solana") || network.includes("spl")) {
+        return withQuery(`solana:${address}`, {
+          amount: method.amount,
+          "spl-token": SOLANA_MAINNET_TOKENS[asset],
+          label: method.label
+        });
+      }
+      if (network.includes("tron") || network.includes("trc20")) {
+        return withQuery(`tron:${address}`, { amount: method.amount, token: asset.toUpperCase() });
+      }
+      const token = EVM_MAINNET_TOKENS[asset];
+      if (!token) return null;
+      return withQuery(`ethereum:${token.contract}@1/transfer`, {
+        address,
+        uint256: decimalToAtomicString(method.amount, token.decimals)
+      });
+    }
+    case "pepe": {
+      const token = EVM_MAINNET_TOKENS.pepe!;
+      return withQuery(`ethereum:${token.contract}@1/transfer`, {
+        address,
+        uint256: decimalToAtomicString(method.amount, token.decimals)
+      });
+    }
     default:
       return null;
   }

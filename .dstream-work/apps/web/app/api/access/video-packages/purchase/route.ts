@@ -4,13 +4,12 @@ import { hasExternalPurchaseVerifier, verifyExternalPurchase } from "@/lib/acces
 import type { VideoCheckoutVerificationMode } from "@/lib/access/videoCheckout";
 import { getVideoPurchasePolicyFromMetadata } from "@/lib/access/videoPackagePolicy";
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
-import { getStakeTotals } from "@/lib/monero/stakeVerify";
-import { getXmrConfirmationsRequired, getXmrWalletRpcClient } from "@/lib/monero/server";
+import { getXmrWalletRpcClient } from "@/lib/monero/server";
 import {
-  isVerifiedNativePaymentAsset,
   NativePaymentVerificationError,
-  verifyNativePayment
+  verifyPayment
 } from "@/lib/payments/server";
+import { authorizePaymentIntent } from "@/lib/payments/server/intentStore";
 import { recordNativePaymentSettlement } from "@/lib/payments/server/settlementStore";
 import { asString, authorizeAccessAdmin, parseBoolean } from "../../_lib";
 
@@ -43,13 +42,6 @@ function purchasePolicyError(policy: "operator_or_verified" | "verified_only" | 
   return "This package requires verified settlement or host operator confirmation.";
 }
 
-function getPaymentTransactionId(input: unknown): string | null {
-  if (typeof input === "string") return input.trim() || null;
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const proof = input as Record<string, unknown>;
-  return asString(proof.txId) || asString(proof.txid) || asString(proof.transactionHash) || null;
-}
-
 export async function POST(req: Request): Promise<Response> {
   let body: unknown = null;
   try {
@@ -74,11 +66,11 @@ export async function POST(req: Request): Promise<Response> {
 
   const buyerProofEvent = payload.buyerProofEvent as { tags?: string[][] } | undefined;
   const proofHostTag = getFirstTagValue(buyerProofEvent?.tags, "host");
-  if (proofHostTag && proofHostTag !== pkg.hostPubkey) {
+  if (proofHostTag !== pkg.hostPubkey) {
     return Response.json({ ok: false, error: "Signed purchase proof host does not match package host." }, { status: 403 });
   }
   const proofPackageTag = getFirstTagValue(buyerProofEvent?.tags, "pkg");
-  if (proofPackageTag && proofPackageTag !== pkg.id) {
+  if (proofPackageTag !== pkg.id) {
     return Response.json({ ok: false, error: "Signed purchase proof package id does not match package." }, { status: 403 });
   }
 
@@ -96,7 +88,52 @@ export async function POST(req: Request): Promise<Response> {
   metadata.purchasePolicyEnforcedAtSec = Math.floor(Date.now() / 1000);
 
   const stakeSessionToken = asString(payload.stakeSessionToken);
-  if (stakeSessionToken) {
+  const paymentIntentId = asString(payload.paymentIntentId);
+  const paymentIntentSecret = asString(payload.paymentIntentSecret);
+  if (paymentIntentId || paymentIntentSecret) {
+    if (!paymentIntentId || !paymentIntentSecret) {
+      return Response.json({ ok: false, error: "Both payment intent id and secret are required." }, { status: 400 });
+    }
+    try {
+      const intent = authorizePaymentIntent(paymentIntentId, paymentIntentSecret).intent;
+      if (intent.status !== "settled" || !intent.payment || !intent.settlementKey) {
+        return Response.json({ ok: false, error: "Payment intent has not settled yet." }, { status: 402 });
+      }
+      if (intent.scope.type !== "video_package" || intent.scope.id !== pkg.id) {
+        return Response.json({ ok: false, error: "Payment intent does not belong to this Video package." }, { status: 403 });
+      }
+      if (intent.scope.packageUpdatedAtSec !== pkg.updatedAtSec) {
+        return Response.json({ ok: false, error: "Video package payment terms changed; create a new payment intent." }, { status: 409 });
+      }
+      if (intent.buyerPubkey !== buyerProof.pubkey) {
+        return Response.json({ ok: false, error: "Payment intent belongs to another buyer." }, { status: 403 });
+      }
+      source = "purchase_verified";
+      sourceRef = `payment_intent:${intent.id}`;
+      settlementRef = intent.settlementKey;
+      verificationMode = intent.railId === "xmr" ? "stake_verified" : "native_verified";
+      Object.assign(metadata, {
+        verificationMode,
+        paymentIntentId: intent.id,
+        railId: intent.railId,
+        asset: intent.asset,
+        network: intent.network,
+        txId: intent.payment.txId,
+        recipient: intent.payment.recipient,
+        amountAtomic: intent.payment.amountAtomic,
+        confirmations: intent.payment.confirmations,
+        blockHeight: intent.payment.blockHeight,
+        finality: intent.payment.finality
+      });
+    } catch (error) {
+      const status = error instanceof NativePaymentVerificationError ? error.status : 502;
+      const message = error instanceof Error ? error.message : "Payment intent validation failed.";
+      return Response.json({ ok: false, error: message }, { status });
+    }
+  } else if (stakeSessionToken) {
+    if (pkg.paymentAsset !== "xmr") {
+      return Response.json({ ok: false, error: "A Monero stake session cannot settle this package asset." }, { status: 400 });
+    }
     const session = verifyStakeSession(stakeSessionToken);
     if (!session) return Response.json({ ok: false, error: "Invalid stake session token." }, { status: 400 });
     if (session.viewerPubkey !== buyerProof.pubkey) {
@@ -110,84 +147,45 @@ export async function POST(req: Request): Promise<Response> {
     if (!client) return Response.json({ ok: false, error: "xmr wallet rpc not configured" }, { status: 503 });
 
     try {
-      const totals = await getStakeTotals({
-        client,
-        accountIndex: session.accountIndex,
-        addressIndex: session.addressIndex,
-        confirmationsRequired: getXmrConfirmationsRequired()
+      const addresses = await client.getAddress({ accountIndex: session.accountIndex });
+      const address = addresses.addresses.find((row) => row.addressIndex === session.addressIndex)?.address;
+      if (!address) throw new Error("Monero payment subaddress is unavailable.");
+      const payment = await verifyPayment({
+        asset: "xmr",
+        address,
+        amount: pkg.paymentAmount,
+        paymentRailId: "xmr",
+        recipientPubkey: pkg.hostPubkey,
+        proof: { xmrSessionToken: stakeSessionToken, xmrSessionKind: "stake" }
       });
-      const confirmedAtomic = BigInt(totals.confirmedAtomic);
-      if (confirmedAtomic <= 0n) {
-        return Response.json(
-          {
-            ok: false,
-            error: "No confirmed stake payment found for this session.",
-            confirmedAtomic: totals.confirmedAtomic
-          },
-          { status: 402 }
-        );
-      }
+      const settlement = recordNativePaymentSettlement({ payment, packageId: pkg.id, buyerPubkey: buyerProof.pubkey });
       source = "purchase_verified";
-      sourceRef = sourceRef || `xmr_stake_session:${stakeSessionToken}:${totals.lastTxid ?? "unknown"}`;
-      settlementRef = settlementRef || `xmr_stake_session:${stakeSessionToken}`;
+      sourceRef = sourceRef || `payment_settlement:${payment.settlementKey}`;
+      settlementRef = settlementRef || payment.settlementKey;
       metadata.railId = "xmr";
       metadata.asset = "xmr";
-      metadata.confirmedAtomic = totals.confirmedAtomic;
-      metadata.transferCount = totals.transferCount;
-      metadata.lastTxid = totals.lastTxid;
-      metadata.lastObservedAtMs = totals.lastObservedAtMs;
+      metadata.confirmedAtomic = payment.amountAtomic;
+      metadata.lastTxid = payment.txId;
       metadata.accountIndex = session.accountIndex;
       metadata.addressIndex = session.addressIndex;
+      metadata.settlementRecordId = settlement.record.id;
+      metadata.settlementRecordExisting = settlement.existing;
       verificationMode = "stake_verified";
       metadata.verificationMode = verificationMode;
-    } catch (error: any) {
+    } catch (error) {
+      const status = error instanceof NativePaymentVerificationError ? error.status : 502;
+      const detail = error instanceof Error ? error.message : "unknown";
       return Response.json(
-        { ok: false, error: `xmr stake verification error (${error?.message ?? "unknown"})` },
-        { status: 502 }
+        { ok: false, error: `xmr stake verification error (${detail})` },
+        { status }
       );
     }
   } else {
-    if (isVerifiedNativePaymentAsset(pkg.paymentAsset) && paymentProof) {
-      const txId = getPaymentTransactionId(paymentProof);
-      if (!txId) return Response.json({ ok: false, error: "paymentProof must include a transaction ID." }, { status: 400 });
-      if (!pkg.paymentAddress) {
-        return Response.json({ ok: false, error: "This package has no trusted payment recipient configured." }, { status: 400 });
-      }
-      try {
-        const payment = await verifyNativePayment({
-          asset: pkg.paymentAsset,
-          address: pkg.paymentAddress,
-          amount: pkg.paymentAmount,
-          txId,
-          paymentRailId: pkg.paymentRailId
-        });
-        const settlement = recordNativePaymentSettlement({
-          payment,
-          packageId: pkg.id,
-          buyerPubkey: buyerProof.pubkey
-        });
-        source = "purchase_verified";
-        sourceRef = `native_settlement:${payment.settlementKey}`;
-        settlementRef = payment.settlementKey;
-        verificationMode = "native_verified";
-        Object.assign(metadata, {
-          verificationMode,
-          railId: payment.railId,
-          asset: payment.asset,
-          network: payment.network,
-          txId: payment.txId,
-          recipient: payment.recipient,
-          amountAtomic: payment.amountAtomic,
-          confirmations: payment.confirmations,
-          blockHeight: payment.blockHeight,
-          settlementRecordId: settlement.record.id,
-          settlementRecordExisting: settlement.existing
-        });
-      } catch (error) {
-        const status = error instanceof NativePaymentVerificationError ? error.status : 502;
-        const message = error instanceof Error ? error.message : "Native payment verification failed.";
-        return Response.json({ ok: false, error: message }, { status });
-      }
+    if (paymentProof && pkg.paymentAsset !== "xmr") {
+      return Response.json(
+        { ok: false, error: "Create and settle a one-time payment intent before granting package access." },
+        { status: 400 }
+      );
     } else {
       const verifiedByOperator = parseBoolean(payload.verifiedByOperator);
       const externalVerifierConfigured = hasExternalPurchaseVerifier();

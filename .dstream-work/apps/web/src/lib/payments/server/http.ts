@@ -37,6 +37,37 @@ export async function postJson<T>(input: {
   }
 }
 
+export async function getJson<T>(input: {
+  url: string;
+  headers?: Record<string, string>;
+  label: string;
+}): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getTimeoutMs());
+  try {
+    const response = await fetch(input.url, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        ...(input.headers ?? {})
+      },
+      cache: "no-store",
+      redirect: "error",
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new NativePaymentVerificationError(`${input.label} returned HTTP ${response.status}.`, 502);
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof NativePaymentVerificationError) throw error;
+    const detail = error instanceof Error && error.name === "AbortError" ? "timed out" : "failed";
+    throw new NativePaymentVerificationError(`${input.label} ${detail}.`, 502);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function joinOriginPath(origin: string, path: string): string {
   return `${origin.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
