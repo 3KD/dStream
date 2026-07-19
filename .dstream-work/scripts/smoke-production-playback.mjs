@@ -431,6 +431,13 @@ async function main() {
             : null;
         const contentTimelineContinuous =
           programDateDelta !== null && programDateDelta >= -2 && programDateDelta <= elapsedSeconds + 4;
+        const sourceFragmentAdvancedWhileHidden =
+          run.background &&
+          timeAdvanced &&
+          next.fragment !== null &&
+          run.last.fragment !== null &&
+          next.fragment !== run.last.fragment;
+        const sourceTimelineAdvanced = framesAdvanced || sourceFragmentAdvancedWhileHidden;
         if (timeAdvanced || framesAdvanced) run.lastProgressAt = Date.now();
         if (next.ended) fail(`${run.scenario}/${run.title}: live media entered ended state (${runDetails(run, next)})`);
         if (run.last.session && next.session && run.last.session !== next.session) {
@@ -440,7 +447,7 @@ async function main() {
           );
         }
         if (mediaDelta < -2) {
-          if (contentTimelineContinuous && framesAdvanced) {
+          if (contentTimelineContinuous && sourceTimelineAdvanced) {
             run.sourceTimelineEpochChanges += 1;
           } else {
             fail(
@@ -450,7 +457,7 @@ async function main() {
           }
         }
         if (mediaDelta > elapsedSeconds + 4) {
-          if (contentTimelineContinuous && framesAdvanced) {
+          if (contentTimelineContinuous && sourceTimelineAdvanced) {
             run.sourceTimelineEpochChanges += 1;
           } else {
             fail(

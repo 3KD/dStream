@@ -203,7 +203,7 @@ function formatPlaybackTime(seconds: number): string {
 }
 
 function getHlsPlaybackTuning(options: { lowLatencyEnabled: boolean; backgroundPlayEnabled: boolean }) {
-  const lowLatencyMode = options.lowLatencyEnabled && !options.backgroundPlayEnabled;
+  const lowLatencyMode = options.lowLatencyEnabled;
   const stableLiveSyncDuration = options.backgroundPlayEnabled ? 30 : 24;
   return {
     lowLatencyMode,
@@ -339,7 +339,7 @@ export function Player({
   const effectiveAutoplayMuted = effectiveBackgroundPlayEnabled ? false : isMobilePlayback ? true : (autoplayMuted ?? true);
   const playbackStartupPolicyReady =
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
-  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
+  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
@@ -616,29 +616,30 @@ export function Player({
           return;
         }
 
-        backgroundRecoveryAttempts += 1;
-        const reason = "Background playback paused. Retrying at the current position.";
-        setError(null);
-        setStatus("Reconnecting…");
-        setNote(reason);
-        video.dataset.dstreamPlaybackRecoveryReason = reason;
-
-        const hls = hlsRef.current;
-        if (playbackModeRef.current === "hls" && hls) {
-          try {
-            hls.stopLoad();
-            hls.startLoad(pausedAt, true);
-          } catch {
-            // A later visible-page watchdog can rebuild the session if this retry fails.
-          }
-        }
         attemptBackgroundPlay(true);
         scheduleBestEffortRetry();
+        backgroundRecoveryAttempts += 1;
+        if (readBufferedAheadSeconds(video) < 0.25 && video.readyState <= 2) {
+          const reason = "Background playback ran out of buffered media. Retrying the current position.";
+          setError(null);
+          setStatus("Reconnecting…");
+          setNote(reason);
+          video.dataset.dstreamPlaybackRecoveryReason = reason;
+          const hls = hlsRef.current;
+          if (playbackModeRef.current === "hls" && hls) {
+            try {
+              hls.stopLoad();
+              hls.startLoad(currentTime, true);
+            } catch {
+              // The next bounded retry can resume the existing session.
+            }
+          }
+        }
         if (backgroundRecoveryAttempts < 3) {
-          progressCheckTimer = setTimeout(checkBackgroundProgress, 5_000);
+          progressCheckTimer = setTimeout(checkBackgroundProgress, 6_000);
         }
       };
-      progressCheckTimer = setTimeout(checkBackgroundProgress, 5_000);
+      progressCheckTimer = setTimeout(checkBackgroundProgress, 6_000);
     };
 
     const onVisibleLifecycle = () => {
@@ -679,6 +680,7 @@ export function Player({
     let lastProgressAt = Date.now();
     let hasObservedPlaybackProgress = lastObservedTime > 0.25 || (lastObservedFrames ?? 0) > 0;
     let inSessionRecoveryAttempts = 0;
+    let lastInSessionRecoveryAt = 0;
 
     const markHealthy = (now: number, currentTime: number, frameCount: number | null) => {
       lastObservedTime = currentTime;
@@ -706,6 +708,7 @@ export function Player({
       if (timeAdvanced || framesAdvanced || timelineChanged) {
         hasObservedPlaybackProgress = true;
         inSessionRecoveryAttempts = 0;
+        lastInSessionRecoveryAt = 0;
         markHealthy(now, currentTime, frameCount);
         return;
       }
@@ -727,10 +730,13 @@ export function Player({
       const hls = hlsRef.current;
       const tryInSessionRecovery = (reason: string) => {
         if (playbackModeRef.current !== "hls" || !hls || inSessionRecoveryAttempts >= 3) return false;
+        if (lastInSessionRecoveryAt > 0 && now - lastInSessionRecoveryAt < 5_000) return true;
         inSessionRecoveryAttempts += 1;
+        lastInSessionRecoveryAt = now;
         setError(null);
         setStatus("Reconnecting…");
         setNote(reason);
+        video.dataset.dstreamPlaybackRecoveryReason = reason;
         try {
           if (selectedQualityRef.current < 0 && hls.levels.length > 1) {
             const activeLevel = Math.max(hls.currentLevel, hls.loadLevel, hls.nextLoadLevel);
@@ -742,7 +748,7 @@ export function Player({
             }
           }
           hls.stopLoad();
-          hls.startLoad();
+          hls.startLoad(currentTime, true);
         } catch {
           // The next watchdog pass can escalate if the HLS instance cannot restart.
         }
@@ -750,11 +756,9 @@ export function Player({
           setStatus("Click to play");
           setNeedsClick(true);
         });
-        markHealthy(now, currentTime, frameCount);
         return true;
       };
-      const starvationRecoveryThresholdMs =
-        typeof document !== "undefined" && document.visibilityState === "hidden" ? 12_000 : 6_000;
+      const starvationRecoveryThresholdMs = 6_000;
       if (
         hasObservedPlaybackProgress &&
         stalledForMs >= starvationRecoveryThresholdMs &&
@@ -777,6 +781,7 @@ export function Player({
       const bufferedDecoderFrozen = hasObservedPlaybackProgress && bufferAhead >= 0.5 && video.readyState >= 3;
       if (stalledForMs >= stallThresholdMs && (mediaFeedStale || bufferedDecoderFrozen)) {
         if (tryInSessionRecovery("Live playback stopped advancing. Retrying without resetting the player.")) return;
+        if (hidden) return;
         requestLivePlaybackReload("Live playback stopped advancing. Reconnected to the current live window.");
         markHealthy(now, currentTime, frameCount);
       }
@@ -1346,15 +1351,18 @@ export function Player({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
         capLevelToPlayerSize: true,
+        manifestLoadingTimeOut: 6_000,
         manifestLoadingMaxRetry: 6,
-        manifestLoadingRetryDelay: 500,
-        manifestLoadingMaxRetryTimeout: 5000,
-        levelLoadingMaxRetry: 6,
-        levelLoadingRetryDelay: 500,
-        levelLoadingMaxRetryTimeout: 5000,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 500,
-        fragLoadingMaxRetryTimeout: 5000,
+        manifestLoadingRetryDelay: 250,
+        manifestLoadingMaxRetryTimeout: 2_000,
+        levelLoadingTimeOut: 6_000,
+        levelLoadingMaxRetry: 8,
+        levelLoadingRetryDelay: 250,
+        levelLoadingMaxRetryTimeout: 2_000,
+        fragLoadingTimeOut: 10_000,
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 250,
+        fragLoadingMaxRetryTimeout: 2_000,
         ...(needsDstreamFragmentLoader ? { fLoader: P2PFragmentLoader } : {}),
         ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
@@ -1446,7 +1454,7 @@ export function Player({
                   networkRecoveryTimer = null;
                   if (cancelled || hlsRef.current !== hls) return;
                   try {
-                    hls.startLoad();
+                    hls.startLoad(Number.isFinite(video.currentTime) ? video.currentTime : -1, true);
                   } catch {
                     return;
                   }
