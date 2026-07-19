@@ -24,11 +24,11 @@ export interface StreamChatFeedMessage extends StreamChatMessage {
   whisperRecipients?: string[];
 }
 
-const STREAM_CHAT_HISTORY_LOOKBACK_SEC = 30 * 24 * 60 * 60;
-const STREAM_CHAT_HISTORY_LIMIT = 2_000;
-const STREAM_CHAT_ANNOUNCE_LOOKBACK_SEC = 90 * 24 * 60 * 60;
-const STREAM_CHAT_ANNOUNCE_LIMIT = 2_000;
-const STREAM_CHAT_RELATED_STREAM_LIMIT = 64;
+const STREAM_CHAT_HISTORY_LOOKBACK_SEC = 7 * 24 * 60 * 60;
+const STREAM_CHAT_HISTORY_LIMIT = 500;
+const STREAM_CHAT_ANNOUNCE_LOOKBACK_SEC = 14 * 24 * 60 * 60;
+const STREAM_CHAT_ANNOUNCE_LIMIT = 320;
+const STREAM_CHAT_RELATED_STREAM_LIMIT = 16;
 const STREAM_CHAT_HISTORY_TIMEOUT_MS = 5_000;
 const PUBLIC_CHAT_KINDS: [number, number] = [NOSTR_KINDS.STREAM_CHAT, 1];
 
@@ -226,8 +226,8 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; l
 
     const aTag = makeATag(streamPubkey, streamId);
     const filter: Filter[] = [
-      { kinds: [4], "#p": [identity.pubkey], since: Math.floor(Date.now() / 1000) - 3600, limit: 1000 },
-      { kinds: [4], authors: [identity.pubkey], since: Math.floor(Date.now() / 1000) - 3600, limit: 1000 }
+      { kinds: [4], "#p": [identity.pubkey], since: Math.floor(Date.now() / 1000) - 3600, limit: 250 },
+      { kinds: [4], authors: [identity.pubkey], since: Math.floor(Date.now() / 1000) - 3600, limit: 250 }
     ];
 
     const sub = subscribeMany(relays, filter, {

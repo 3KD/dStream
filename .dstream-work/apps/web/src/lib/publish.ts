@@ -76,17 +76,26 @@ export async function publishEvent(relays: string[], event: NostrEvent, options?
   const fallbackTimeoutMs = options?.fallbackTimeoutMs ?? 4000;
 
   const pubs = getPool().publish(relays, event);
+  const acceptedPubs = pubs.map((publication) =>
+    Promise.resolve(publication).then((reason) => {
+      const message = String(reason ?? "");
+      if (/^connection failure:/i.test(message) || /^connection skipped/i.test(message)) {
+        throw new Error(message);
+      }
+      return reason;
+    })
+  );
   try {
     await Promise.race([
-      Promise.any(pubs as any),
+      Promise.any(acceptedPubs),
       new Promise((_, reject) => setTimeout(() => reject(new Error("Publish timeout")), poolTimeoutMs))
     ]);
     return true;
   } catch {
-    const fallbackResults = await Promise.all(
-      relays.map((relay) => publishViaRelayWebSocket(relay, event, fallbackTimeoutMs))
-    );
-    return fallbackResults.some(Boolean);
+    for (const relay of relays.slice(0, 2)) {
+      if (await publishViaRelayWebSocket(relay, event, fallbackTimeoutMs)) return true;
+    }
+    return false;
   }
 }
 

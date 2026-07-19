@@ -337,7 +337,8 @@ export default function WatchPage() {
 
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
-  const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>(() => detectWatchLayoutMode());
+  // Keep the server and first client render identical; responsive mode is applied after hydration.
+  const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>("portrait");
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
   const [scrollY, setScrollY] = useState(0);
   const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
@@ -359,9 +360,7 @@ export default function WatchPage() {
     window.visualViewport?.addEventListener("resize", updateLayout);
     window.screen.orientation?.addEventListener?.("change", updateLayout);
     document.addEventListener("visibilitychange", updateLayout);
-    const interval = window.setInterval(updateLayout, 900);
     return () => {
-      window.clearInterval(interval);
       window.removeEventListener("resize", updateLayout);
       window.removeEventListener("orientationchange", updateLayout);
       window.visualViewport?.removeEventListener("resize", updateLayout);
@@ -1828,7 +1827,7 @@ export default function WatchPage() {
 	                data-testid="watch-player-panel"
 	                className={`${
 	                  mobilePortraitLayout
-	                    ? "order-0"
+	                    ? "order-0 aspect-video w-full"
 	                    : "h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]"
 	                }`}
 	              >

@@ -17,7 +17,7 @@ interface UseStreamAnnouncesOptions {
 }
 
 const LIVE_STALE_SEC = 6 * 60 * 60;
-const LIVE_HINT_GRACE_DEFAULT_SEC = 45 * 24 * 60 * 60;
+const LIVE_HINT_GRACE_DEFAULT_SEC = 12 * 60 * 60;
 const LIVE_HINT_GRACE_SEC = (() => {
   const raw = Number(process.env.NEXT_PUBLIC_STREAM_LIVE_HINT_GRACE_SEC ?? "");
   if (!Number.isFinite(raw)) return LIVE_HINT_GRACE_DEFAULT_SEC;
@@ -209,13 +209,6 @@ function normalizeStaleLiveStatus(stream: StreamAnnounce, staleCutoffSec: number
     return { ...stream, status: "ended" };
   }
 
-  // Promote "ended" to "live" ONLY when event has a live URL AND was announced
-  // within the hint grace window. This prevents oscillation for very old events
-  // that would immediately get demoted on the next prune cycle.
-  if (stream.status === "ended" && hasStreamingHint && stream.createdAt >= hintGraceCutoffSec) {
-    return { ...stream, status: "live" };
-  }
-
   return stream;
 }
 
@@ -302,15 +295,12 @@ function applyStreamSnapshot() {
   for (const [streamKey, stream] of streamDirectoryStore.streamsByKey) {
     let normalized = normalizeStaleLiveStatus(stream, staleCutoff, hintGraceCutoff);
 
-    // If the server recently confirmed this stream as live, trust it over the
-    // client-side heuristic.  The server sees the full relay picture with
-    // generous timeouts; the browser may have stale data.
-    if (
-      !serverLiveStale &&
-      normalized.status !== "live" &&
-      streamDirectoryStore.serverLiveKeys.has(streamKey)
-    ) {
-      normalized = { ...normalized, status: "live" };
+    // A recent server snapshot includes an actual manifest/segment probe and is
+    // authoritative in both directions.
+    if (!serverLiveStale) {
+      const serverSaysLive = streamDirectoryStore.serverLiveKeys.has(streamKey);
+      if (serverSaysLive && normalized.status !== "live") normalized = { ...normalized, status: "live" };
+      if (!serverSaysLive && normalized.status === "live") normalized = { ...normalized, status: "ended" };
     }
 
     if (normalized !== stream) {
@@ -447,16 +437,9 @@ function mergeFallbackStreams(streams: StreamAnnounce[]) {
     if (!Number.isFinite(parsed.createdAt)) continue;
     const streamKey = makeStreamKey(parsed.pubkey, parsed.streamId);
     const prevCreatedAt = streamDirectoryStore.seen.get(streamKey);
-    // Allow the server snapshot to promote "ended" → "live" even when createdAt
-    // matches.  Relays may serve stale "ended" events that the server-side
-    // aggregation (fresh SimplePool with longer per-relay timeout) has already
-    // superseded.  Without this, the relay data wins and the stream stays hidden.
     const existingStream = streamDirectoryStore.streamsByKey.get(streamKey);
-    const serverPromotion =
-      parsed.status === "live" &&
-      existingStream &&
-      existingStream.status !== "live";
-    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverPromotion) continue;
+    const serverStatusChange = existingStream && parsed.status !== existingStream.status;
+    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverStatusChange) continue;
     streamDirectoryStore.seen.set(streamKey, Math.max(prevCreatedAt ?? 0, parsed.createdAt));
     if (!streamDirectoryStore.orderMeta.has(streamKey)) {
       streamDirectoryStore.orderMeta.set(streamKey, {

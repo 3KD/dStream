@@ -274,6 +274,7 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                        prefetch={false}
                         key={`live:${streamCanonicalId(stream)}`}
                         className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
@@ -283,8 +284,9 @@ export default function BrowseClient() {
                             streamPubkey={stream.pubkey}
                             streamId={stream.streamId}
                             title={stream.title || "Live stream preview"}
+                            streamingUrl={stream.streaming}
                             fallbackImage={stream.image}
-                            enabled={index < 16}
+                            enabled={index < 6 && !stream.image}
                           />
                           </div>
                           {stream.contentWarningReason && (

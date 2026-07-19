@@ -18,15 +18,23 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
   const portalsRef = useRef<Record<string, HTMLElement>>({});
   const [activeRequest, setActiveRequest] = useState<{ id: string; props: any } | null>(null);
   const [playerHost, setPlayerHost] = useState<HTMLDivElement | null>(null);
+  const playerHostRef = useRef<HTMLDivElement | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
-  const fallbackContainerRef = useRef<HTMLDivElement | null>(null);
+  const permanentHostRootRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
     const host = document.createElement("div");
     host.setAttribute("data-global-player-host", "true");
-    host.className = "w-full h-full relative z-0";
+    host.className = "fixed overflow-hidden";
+    host.style.left = "-10000px";
+    host.style.top = "0";
+    host.style.width = "1px";
+    host.style.height = "1px";
+    permanentHostRootRef.current?.appendChild(host);
+    playerHostRef.current = host;
     setPlayerHost(host);
     return () => {
+      playerHostRef.current = null;
       host.remove();
     };
   }, []);
@@ -77,13 +85,46 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    if (!playerHost) return;
-    const fallback = fallbackContainerRef.current;
-    const target = activeRequest ? portalsRef.current[activeRequest.id] ?? fallback : fallback;
-    if (!target) return;
-    if (playerHost.parentElement !== target) {
-      target.appendChild(playerHost);
+    const host = playerHostRef.current;
+    if (!host || !playerHost) return;
+    if (!activeRequest) {
+      host.style.left = "-10000px";
+      host.style.width = "1px";
+      host.style.height = "1px";
+      return;
     }
+
+    const target = portalsRef.current[activeRequest.id];
+    if (!target?.isConnected) {
+      host.style.left = "-10000px";
+      host.style.width = "1px";
+      host.style.height = "1px";
+      return;
+    }
+
+    const syncPosition = () => {
+      if (!target.isConnected) return;
+      const rect = target.getBoundingClientRect();
+      host.style.left = `${rect.left}px`;
+      host.style.top = `${rect.top}px`;
+      host.style.width = `${Math.max(1, rect.width)}px`;
+      host.style.height = `${Math.max(1, rect.height)}px`;
+      host.style.zIndex = activeRequest.id === "quickplay-dock" ? "9999" : "1";
+      host.style.pointerEvents = getComputedStyle(target).pointerEvents;
+    };
+
+    syncPosition();
+    const resizeObserver = new ResizeObserver(syncPosition);
+    resizeObserver.observe(target);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+    const positionInterval = window.setInterval(syncPosition, 250);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+      window.clearInterval(positionInterval);
+    };
   }, [activeRequest, forceTick, playerHost]);
 
   const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal, clearRequest }), [registerPortal, unregisterPortal, requestPortal, clearRequest]);
@@ -92,18 +133,9 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     <GlobalPlayerContext.Provider value={contextValue}>
       {children}
       <div
-        ref={fallbackContainerRef}
-        style={{
-          position: "fixed",
-          left: -10000,
-          top: 0,
-          width: 1,
-          height: 1,
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none"
-        }}
-        aria-hidden="true"
+        ref={permanentHostRootRef}
+        data-global-player-root="true"
+        className="fixed left-0 top-0 h-0 w-0"
       />
       {playerHost && activeRequest ? createPortal(<Player {...(activeRequest.props || {})} />, playerHost) : null}
     </GlobalPlayerContext.Provider>

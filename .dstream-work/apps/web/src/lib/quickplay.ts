@@ -1,5 +1,5 @@
 import type { StreamRendition } from "@dstream/protocol";
-import { makeOriginStreamId } from "@/lib/origin";
+import { makeOriginStreamId } from "./origin";
 
 interface QuickPlaySourceInput {
   pubkey: string;

@@ -10,11 +10,15 @@ import { useStreamPresence } from "@/hooks/useStreamPresence";
 import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
-import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
+import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
 import { buildWatchHref } from "@/lib/watchHref";
+import {
+  readBackgroundPlayPreference,
+  subscribeBackgroundPlayPreference,
+  writeBackgroundPlayPreference
+} from "@/lib/backgroundPlayback";
 
 const STORAGE_KEY = "dstream_mini_player_layout_v3";
-const BACKGROUND_PLAY_PREF_KEY = "dstream_player_background_play_v1";
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 960;
 const DEFAULT_WIDTH = 320;
@@ -122,24 +126,6 @@ function isDragBlockedTarget(target: EventTarget | null): boolean {
   return !!target.closest(DRAG_BLOCK_SELECTOR);
 }
 
-function readBackgroundPlayPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(BACKGROUND_PLAY_PREF_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeBackgroundPlayPreference(enabled: boolean): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(BACKGROUND_PLAY_PREF_KEY, enabled ? "1" : "0");
-  } catch {
-    // ignore
-  }
-}
-
 export function GlobalQuickPlayDock() {
   const pathname = usePathname();
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
@@ -209,9 +195,14 @@ export function GlobalQuickPlayDock() {
   const whepSrc = useMemo(() => {
     const explicit = quickPlayStream?.whepUrl?.trim();
     if (explicit) return explicit;
-    if (!originStreamId) return null;
-    return `/api/whep/${encodeURIComponent(originStreamId)}/whep`;
-  }, [originStreamId, quickPlayStream?.whepUrl]);
+    if (!quickPlayStream || !hlsSrc) return null;
+    return (
+      deriveQuickPlayWhepUrl(
+        { pubkey: quickPlayStream.streamPubkey, streamId: quickPlayStream.streamId },
+        hlsSrc
+      ) ?? null
+    );
+  }, [hlsSrc, quickPlayStream]);
 
   const watchHref = quickPlayStream
     ? buildWatchHref(quickPlayStream.streamPubkey, quickPlayStream.streamId)
@@ -272,12 +263,8 @@ export function GlobalQuickPlayDock() {
     setTouchDevice(isTouchDevice());
     setBackgroundPlayEnabled(readBackgroundPlayPreference());
     setBackgroundPlayPreferenceLoaded(true);
+    return subscribeBackgroundPlayPreference(setBackgroundPlayEnabled);
   }, []);
-
-  useEffect(() => {
-    if (!backgroundPlayPreferenceLoaded) return;
-    writeBackgroundPlayPreference(backgroundPlayEnabled);
-  }, [backgroundPlayEnabled, backgroundPlayPreferenceLoaded]);
 
   useEffect(() => {
     if (!backgroundPlayEnabled) return;
@@ -671,6 +658,7 @@ export function GlobalQuickPlayDock() {
 
   const enableBackgroundPlayFromGesture = useCallback(() => {
     setBackgroundPlayEnabled(true);
+    writeBackgroundPlayPreference(true);
     configureAudioSessionForPlayback();
 
     const video = videoRef.current as PipCapableVideo | null;
@@ -697,6 +685,7 @@ export function GlobalQuickPlayDock() {
   const handleToggleBackgroundPlay = useCallback(() => {
     if (backgroundPlayEnabled) {
       setBackgroundPlayEnabled(false);
+      writeBackgroundPlayPreference(false);
       return;
     }
     enableBackgroundPlayFromGesture();
@@ -706,7 +695,6 @@ export function GlobalQuickPlayDock() {
     src: hlsSrc,
     whepSrc,
     autoplayMuted: !backgroundPlayEnabled,
-    backgroundPlayEnabledOverride: backgroundPlayEnabled,
     isLiveStream: true,
     showTimelineControls: false,
     showAuxControls: false,
@@ -727,7 +715,7 @@ export function GlobalQuickPlayDock() {
       onMouseDown={handleContainerMouseDown}
       onTouchStart={handleContainerMouseDown}
       style={{ left: position.x, top: position.y, width, height, position: "fixed", touchAction: "none" }}
-      className={`z-[9999] bg-black rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col group backdrop-blur-xl ring-1 ring-white/20 select-none ${
+      className={`z-[10000] bg-transparent rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col group ring-1 ring-white/20 select-none ${
         interactionMode === "drag" ? "cursor-grabbing" : interactionMode === "resize" ? "cursor-move" : "cursor-grab"
       }`}
       aria-label="Floating mini player"

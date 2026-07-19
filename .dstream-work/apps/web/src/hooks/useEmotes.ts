@@ -45,7 +45,7 @@ async function verifyAndCacheEmote(emote: EmoteDefinition): Promise<string | nul
     const localUrl = URL.createObjectURL(blob);
     BLOB_URL_CACHE[cacheKey] = localUrl;
     return localUrl;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -53,12 +53,12 @@ async function verifyAndCacheEmote(emote: EmoteDefinition): Promise<string | nul
 export function useEmotes(pubkeyInput: string | (string | null | undefined)[] | null) {
   const [emotes, setEmotes] = useState<BlobPointerMap>({});
   const relays = useMemo(() => getNostrRelays(), []);
+  const pubkeysKey =
+    typeof pubkeyInput === "string" ? pubkeyInput : (pubkeyInput ?? []).filter((pubkey): pubkey is string => !!pubkey).join(",");
 
   const validPubkeys = useMemo(() => {
-    if (!pubkeyInput) return [];
-    if (typeof pubkeyInput === "string") return [pubkeyInput];
-    return pubkeyInput.filter((p): p is string => !!p);
-  }, [JSON.stringify(pubkeyInput)]);
+    return pubkeysKey ? pubkeysKey.split(",") : [];
+  }, [pubkeysKey]);
 
   useEffect(() => {
     if (validPubkeys.length === 0) return;
@@ -103,7 +103,7 @@ export function useEmotes(pubkeyInput: string | (string | null | undefined)[] | 
         // ignore
       }
     };
-  }, [validPubkeys.join(","), relays]);
+  }, [validPubkeys, relays]);
 
   return emotes;
 }

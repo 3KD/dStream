@@ -148,8 +148,7 @@ export function isLikelyPublicPlaybackUrl(input: string | null | undefined): boo
     const parsed = new URL(value);
     if (!/^https?:$/i.test(parsed.protocol)) return false;
     if (isLocalOnlyHost(parsed.hostname)) return false;
-    // Relaxed mixed-content check to restore global HTTP-only broadcast relays.
-    // if (isMixedContentRisk(parsed)) return false;
+    if (isMixedContentRisk(parsed)) return false;
     return true;
   } catch {
     return false;

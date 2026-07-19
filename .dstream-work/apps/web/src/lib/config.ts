@@ -1,16 +1,11 @@
 const DEFAULT_NOSTR_RELAYS_DEV: string[] = [];
 const DEFAULT_NOSTR_RELAYS_PROD = [
   "wss://relay.damus.io",
-  "wss://nos.lol",
   "wss://relay.primal.net",
-  "wss://nostr.wine",
-  "wss://relay.nostr.band",
   "wss://relay.snort.social",
-  "wss://nostr.mom",
-  "wss://offchain.pub",
-  "wss://purplepag.es",
-  "wss://relay.nostr.wirednet.jp"
+  "wss://purplepag.es"
 ];
+const MAX_ACTIVE_NOSTR_RELAYS = 6;
 const DEFAULT_NIP05_POLICY = "badge";
 export const NOSTR_RELAY_OVERRIDE_STORAGE_KEY = "dstream_nostr_relays_override_v1";
 
@@ -80,16 +75,16 @@ function getRelayOverrideFromStorage(): string[] {
 export function getNostrRelays(): string[] {
   const configuredRelays = parseRelayList(process.env.NEXT_PUBLIC_NOSTR_RELAYS);
   const override = getRelayOverrideFromStorage();
-  
-  let base = DEFAULT_NOSTR_RELAYS;
-  if (configuredRelays.length > 0) base = [...configuredRelays, ...base];
-  if (override.length > 0) base = [...override, ...base];
+
+  // An explicit user or deployment list is authoritative. Appending defaults
+  // silently multiplies every subscription and keeps retired relays in use.
+  let base = override.length > 0 ? override : configuredRelays.length > 0 ? configuredRelays : DEFAULT_NOSTR_RELAYS;
 
   if (process.env.NODE_ENV === "production") {
     base = base.filter((r) => !r.includes("localhost") && !r.includes("127.0.0.1"));
   }
 
-  return uniq(base);
+  return uniq(base).slice(0, MAX_ACTIVE_NOSTR_RELAYS);
 }
 
 export function getNip05Policy(): Nip05Policy {

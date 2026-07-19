@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Hls from "hls.js";
 import { makeOriginStreamId } from "@/lib/origin";
+import { inferMediaUrlKind } from "@/lib/mediaUrl";
 
 interface LiveStreamPreviewProps {
   streamPubkey: string;
   streamId: string;
   title: string;
+  streamingUrl?: string | null;
   fallbackImage?: string;
   enabled?: boolean;
 }
@@ -23,14 +25,16 @@ const INITIAL_CAPTURE_MAX_MS = 3400;
 const REFRESH_CAPTURE_MIN_MS = 12000;
 const REFRESH_CAPTURE_MAX_MS = 28000;
 
-export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage, enabled = true }: LiveStreamPreviewProps) {
+export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl, fallbackImage, enabled = true }: LiveStreamPreviewProps) {
   const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
 
   const hlsPreviewUrl = useMemo(() => {
+    const explicit = streamingUrl?.trim();
+    if (explicit && inferMediaUrlKind(explicit) !== "unknown") return explicit;
     const originStreamId = makeOriginStreamId(streamPubkey, streamId);
     if (!originStreamId) return null;
     return `/api/hls/${encodeURIComponent(originStreamId)}/index.m3u8`;
-  }, [streamId, streamPubkey]);
+  }, [streamId, streamPubkey, streamingUrl]);
 
   useEffect(() => {
     if (!enabled || !hlsPreviewUrl) return;
@@ -38,6 +42,8 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
     let cancelled = false;
     let captureTimer: ReturnType<typeof setTimeout> | null = null;
     let hls: Hls | null = null;
+    let hasCapturedFrame = false;
+    const startedAt = Date.now();
 
     const video = document.createElement("video");
     video.muted = true;
@@ -59,6 +65,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
       clearTimer();
       captureTimer = setTimeout(() => {
         if (cancelled) return;
+        if (!hasCapturedFrame && Date.now() - startedAt > 15_000) return;
         if (video.readyState < 2 || video.videoWidth < 32 || video.videoHeight < 32) {
           scheduleCapture(INITIAL_CAPTURE_MIN_MS, INITIAL_CAPTURE_MAX_MS);
           return;
@@ -73,7 +80,10 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
         try {
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           const nextFrame = canvas.toDataURL("image/jpeg", 0.78);
-          if (!cancelled) setFrameDataUrl(nextFrame);
+          if (!cancelled) {
+            hasCapturedFrame = true;
+            setFrameDataUrl(nextFrame);
+          }
         } catch {
           // ignore draw errors (usually cross-origin/tainting or decode transitions)
         }
@@ -91,7 +101,8 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
     video.addEventListener("loadeddata", onPlayable);
     video.addEventListener("playing", onPlayable);
 
-    if (Hls.isSupported()) {
+    const sourceKind = inferMediaUrlKind(hlsPreviewUrl);
+    if (sourceKind === "hls" && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -104,7 +115,9 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, fallbackImage
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         onPlayable();
       });
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    } else if (sourceKind === "hls" && video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = hlsPreviewUrl;
+    } else if (sourceKind === "direct") {
       video.src = hlsPreviewUrl;
     }
 

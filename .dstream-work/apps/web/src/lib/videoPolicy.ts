@@ -42,11 +42,17 @@ export function resolveVideoPolicy(stream: StreamAnnounce): StreamVideoPolicy {
 export function isReplayEligibleStream(stream: StreamAnnounce): boolean {
   if (stream.status !== "ended") return false;
   if (stream.videoVisibility === "private") return false;
-  
+
   const policy = resolveVideoPolicy(stream);
   if (policy.mode === "off") return false;
 
-  return true;
+  const playbackUrl = stream.streaming;
+  if (!isLikelyPublicPlayableMediaUrl(playbackUrl)) return false;
+  if (isLikelyLivePlaybackUrl(playbackUrl)) return false;
+
+  // Legacy archive flags only prove that recording was requested. Generic
+  // media URLs require the explicit Video policy before entering the library.
+  return isLikelyVideoPlaybackUrl(playbackUrl) || stream.video !== undefined;
 }
 
 export function videoModeLabel(policy: StreamVideoPolicy): string {

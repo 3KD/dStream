@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildStreamPresenceEvent } from "@dstream/protocol";
 import { useIdentity } from "@/context/IdentityContext";
 import { getNostrRelays } from "@/lib/config";
@@ -16,17 +16,19 @@ export function usePublishPresence(scope: {
 }) {
   const { identity, signEvent } = useIdentity();
   const relays = useMemo(() => getNostrRelays(), []);
+  const { enabled, streamId, streamPubkey } = scope;
   const intervalMs = scope.intervalMs ?? 30_000;
+  const sendInFlightRef = useRef(false);
 
   const [status, setStatus] = useState<PublishStatus>("idle");
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
 
   const sendOnce = useCallback(async () => {
-    if (!scope.enabled) return false;
+    if (!enabled || sendInFlightRef.current) return false;
     if (!identity) return false;
-    const { streamPubkey, streamId } = scope;
     if (!streamPubkey || !streamId) return false;
 
+    sendInFlightRef.current = true;
     setStatus((previous) => (previous === "ok" ? "ok" : "sending"));
     try {
       const createdAt = Math.floor(Date.now() / 1000);
@@ -45,21 +47,23 @@ export function usePublishPresence(scope: {
     } catch {
       setStatus("fail");
       return false;
+    } finally {
+      sendInFlightRef.current = false;
     }
-  }, [identity, relays, scope, signEvent]);
+  }, [enabled, identity, relays, signEvent, streamId, streamPubkey]);
 
   useEffect(() => {
-    if (!scope.enabled) return;
+    if (!enabled) return;
     if (!identity) return;
-    if (!scope.streamPubkey || !scope.streamId) return;
+    if (!streamPubkey || !streamId) return;
 
     void sendOnce();
     const interval = setInterval(() => void sendOnce(), intervalMs);
     return () => clearInterval(interval);
-  }, [identity, intervalMs, scope.enabled, scope.streamId, scope.streamPubkey, sendOnce]);
+  }, [enabled, identity, intervalMs, sendOnce, streamId, streamPubkey]);
 
   return {
-    canPublish: scope.enabled && !!identity,
+    canPublish: enabled && !!identity,
     status,
     lastSentAt,
     sendOnce

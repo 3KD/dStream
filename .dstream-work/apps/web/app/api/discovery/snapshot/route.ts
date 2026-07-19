@@ -2,13 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import { probeStreamSource } from "@/lib/streamHealth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LOOKBACK_DAYS = 45;
-const MIN_LOOKBACK_DAYS = 1;
-const MAX_LOOKBACK_DAYS = 120;
 const DEFAULT_LIMIT = 360;
 const MIN_LIMIT = 40;
 const MAX_LIMIT = 600;
@@ -21,6 +20,15 @@ const DISCOVERY_POLICY_LIMIT = 2000;
 // The GET handler returns whatever is cached — never blocks on relay I/O.
 // ---------------------------------------------------------------------------
 const REFRESH_INTERVAL_MS = 60_000;
+const HEALTH_PROBE_CONCURRENCY = 12;
+const HEALTH_PROBE_LIMIT = 80;
+
+interface SourceHealthState {
+  failures: number;
+  checkedAt: number;
+}
+
+const sourceHealth = new Map<string, SourceHealthState>();
 
 interface CachedSnapshot {
   streams: StreamAnnounce[];
@@ -33,6 +41,40 @@ let refreshInFlight = false;
 
 /** Read cache without TS narrowing (module-level var changes between awaits). */
 function getCached(): CachedSnapshot | null { return cached; }
+
+async function applySourceHealth(streams: StreamAnnounce[]): Promise<StreamAnnounce[]> {
+  const liveCandidates = streams
+    .filter((stream) => stream.status === "live" && !!stream.streaming)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, HEALTH_PROBE_LIMIT);
+  const results = new Map<string, StreamAnnounce>();
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < liveCandidates.length) {
+      const index = cursor++;
+      const stream = liveCandidates[index];
+      const source = (stream.streaming ?? "").trim();
+      const health = await probeStreamSource(source);
+      if (health.ok) {
+        sourceHealth.set(source, { failures: 0, checkedAt: Date.now() });
+        results.set(makeStreamKey(stream.pubkey, stream.streamId), stream);
+        continue;
+      }
+      const previous = sourceHealth.get(source);
+      const failures = (previous?.failures ?? 0) + 1;
+      sourceHealth.set(source, { failures, checkedAt: Date.now() });
+      const shouldDemote = health.definitive || failures >= 2;
+      results.set(
+        makeStreamKey(stream.pubkey, stream.streamId),
+        shouldDemote ? { ...stream, status: "ended" } : stream
+      );
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(HEALTH_PROBE_CONCURRENCY, liveCandidates.length) }, () => worker()));
+  return streams.map((stream) => results.get(makeStreamKey(stream.pubkey, stream.streamId)) ?? stream);
+}
 
 /** Query all relays and rebuild the cached snapshot. */
 async function refreshCache(): Promise<void> {
@@ -116,7 +158,7 @@ async function refreshCache(): Promise<void> {
       }
     }
 
-    const streams = Array.from(byStreamKey.values())
+    const discoverableStreams = Array.from(byStreamKey.values())
       .filter((stream) => {
         if (!stream.discoverable) return false;
         
@@ -127,7 +169,8 @@ async function refreshCache(): Promise<void> {
         const streamPolicy = hiddenStreams.get(makeStreamKey(stream.pubkey.toLowerCase(), stream.streamId));
         if (streamPolicy?.hidden) return false;
         return true;
-      })
+      });
+    const streams = (await applySourceHealth(discoverableStreams))
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, DEFAULT_LIMIT);
 

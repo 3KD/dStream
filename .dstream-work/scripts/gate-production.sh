@@ -58,6 +58,10 @@ echo
   echo
   echo "🔹 smoke:prod:runtime"
   SSH_TARGET="${TARGET_INPUT}" DSTREAM_DEPLOY_DOMAIN="${DOMAIN}" bash scripts/smoke-production-runtime.sh "${TARGET_INPUT}"
+
+  echo
+  echo "🔹 smoke:prod:playback"
+  EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL}" npm run smoke:prod:playback
 )
 
 echo

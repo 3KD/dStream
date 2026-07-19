@@ -71,6 +71,7 @@ async function collectLayout(page) {
         height: window.innerHeight
       },
       player: getRect('[data-testid="watch-player-panel"]'),
+      playerHost: getRect('[data-global-player-host="true"]'),
       details: getRect('[data-testid="watch-details-panel"]'),
       chatDesktopOrLandscape: getRect('[data-testid="watch-chat-panel"]'),
       chatMobilePortrait: getRect('[data-testid="watch-chat-panel-mobile-portrait"]'),
@@ -81,7 +82,13 @@ async function collectLayout(page) {
 
 function validateScenario(name, expect, layout) {
   check(!!layout.player, `${name}: player panel missing`);
+  check(!!layout.playerHost, `${name}: persistent player host missing`);
   check(!!layout.details, `${name}: details panel missing`);
+  check(layout.player.width >= 240 && layout.player.height >= 135, `${name}: player panel collapsed`);
+  check(Math.abs(layout.playerHost.left - layout.player.left) <= 3, `${name}: player host left edge does not match its slot`);
+  check(Math.abs(layout.playerHost.top - layout.player.top) <= 3, `${name}: player host top edge does not match its slot`);
+  check(Math.abs(layout.playerHost.width - layout.player.width) <= 3, `${name}: player host width does not match its slot`);
+  check(Math.abs(layout.playerHost.height - layout.player.height) <= 3, `${name}: player host height does not match its slot`);
 
   if (expect === "desktop") {
     check(!!layout.chatDesktopOrLandscape, `${name}: desktop chat panel missing`);
@@ -115,6 +122,15 @@ async function main() {
     for (const scenario of scenarios) {
       const context = await browser.newContext(scenario.context);
       const page = await context.newPage();
+      const runtimeErrors = [];
+      page.on("pageerror", (error) => runtimeErrors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() !== "error") return;
+        const text = message.text();
+        if (/hydration|server rendered html|did not match|react error #418/i.test(text)) {
+          runtimeErrors.push(text);
+        }
+      });
       await page.goto(WATCH_URL, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(WAIT_MS);
 
@@ -142,6 +158,9 @@ async function main() {
         }
         if (errorMessage) {
           throw new Error(errorMessage);
+        }
+        if (runtimeErrors.length > 0) {
+          throw new Error(`${scenario.key}: runtime error: ${runtimeErrors[0]}`);
         }
         results.push({ key: scenario.key, status: "PASS", screenshotPath });
       } catch (error) {
