@@ -375,6 +375,7 @@ export function Player({
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
   const [volume, setVolume] = useState(() => (effectiveAutoplayMuted ? 0 : 1));
+  const desiredVolumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(1);
   const userPausedPlaybackRef = useRef(false);
   const startupGatePendingRef = useRef(false);
@@ -414,7 +415,7 @@ export function Player({
         return;
       }
       if (effectiveBackgroundPlayEnabled) {
-        setVolume(Math.max(0.05, persistedVolume || 1));
+        setVolume(persistedMuted ? 0 : Math.max(0.05, persistedVolume || 1));
         return;
       }
       setVolume(persistedMuted ? 0 : persistedVolume);
@@ -464,16 +465,17 @@ export function Player({
   }, [selectedQuality]);
 
   useEffect(() => {
+    const nextVolume = Math.min(1, Math.max(0, volume));
+    desiredVolumeRef.current = nextVolume;
     const video = videoRef.current;
     if (!video) return;
     try {
-      const nextVolume = effectiveBackgroundPlayEnabled && volume === 0 ? 1 : Math.min(1, Math.max(0, volume));
       video.volume = nextVolume;
       video.muted = nextVolume === 0;
     } catch {
       // ignore
     }
-  }, [effectiveBackgroundPlayEnabled, volume]);
+  }, [volume]);
 
   useEffect(() => {
     if (volume > 0) {
@@ -586,15 +588,14 @@ export function Player({
     let progressCheckTimer: ReturnType<typeof setTimeout> | null = null;
     let backgroundRecoveryAttempts = 0;
 
-    const restoreAudiblePlayback = () => {
-      const nextVolume = Math.max(0.05, Math.min(1, lastAudibleVolumeRef.current || 1));
+    const restorePreferredPlaybackVolume = () => {
+      const nextVolume = Math.min(1, Math.max(0, desiredVolumeRef.current));
       try {
-        video.muted = false;
-        if (video.volume === 0) video.volume = nextVolume;
+        video.muted = nextVolume === 0;
+        if (video.volume !== nextVolume) video.volume = nextVolume;
       } catch {
         // ignore unsupported media writes
       }
-      setVolume((current) => (current === 0 ? nextVolume : current));
     };
 
     const attemptBackgroundPlay = (allowVisibleResume = false) => {
@@ -603,7 +604,7 @@ export function Player({
       backgroundPlaybackRequested = true;
       if (startupGatePendingRef.current) return;
       configureAudioSessionForPlayback();
-      restoreAudiblePlayback();
+      restorePreferredPlaybackVolume();
       void video.play().catch(() => {
         // ignore browser policy failures
       });
@@ -2151,7 +2152,7 @@ export function Player({
           className={`relative z-0 block h-full w-full cursor-pointer object-contain ${!nsfwConsented ? 'opacity-0' : 'opacity-100'}`}
           playsInline
           controls={effectiveNativeControls && nsfwConsented}
-          muted={volume === 0 && !effectiveBackgroundPlayEnabled}
+          muted={volume === 0}
           onClick={handleVideoSurfaceInteraction}
         >
           {captionTrackList.map((track, index) => (

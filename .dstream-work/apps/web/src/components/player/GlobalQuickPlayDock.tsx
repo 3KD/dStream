@@ -130,7 +130,7 @@ export function GlobalQuickPlayDock() {
   const pathname = usePathname();
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
   const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
-  const { clearRequest } = useGlobalPlayer();
+  const { clearRequest, playerHost } = useGlobalPlayer();
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [position, setPosition] = useState({
@@ -174,7 +174,6 @@ export function GlobalQuickPlayDock() {
   } | null>(null);
   const pipActiveRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const playerHostRef = useRef<HTMLDivElement | null>(null);
   const autoPipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPipAttemptsRef = useRef(0);
   const autoPipAttemptKeyRef = useRef<string | null>(null);
@@ -315,7 +314,7 @@ export function GlobalQuickPlayDock() {
 
   useEffect(() => {
     if (!ready || !backgroundPlayPreferenceLoaded || isWatchRoute || !quickPlayStream || !hlsSrc) return;
-    const host = playerHostRef.current;
+    const host = playerHost;
     if (!host) return;
 
     let attachedVideo: HTMLVideoElement | null = null;
@@ -427,7 +426,7 @@ export function GlobalQuickPlayDock() {
       observer.disconnect();
       detachVideo();
     };
-  }, [backgroundPlayPreferenceLoaded, hlsSrc, isWatchRoute, quickPlayStream, ready, whepSrc]);
+  }, [backgroundPlayPreferenceLoaded, hlsSrc, isWatchRoute, playerHost, quickPlayStream, ready]);
 
   useEffect(() => {
     pipActiveRef.current = pipActive;
@@ -720,7 +719,7 @@ export function GlobalQuickPlayDock() {
       }`}
       aria-label="Floating mini player"
     >
-      <div ref={playerHostRef} className="h-full relative pointer-events-none select-none">
+      <div className="h-full relative pointer-events-none select-none">
         <GlobalPlayerSlot
           id="quickplay-dock"
           playerProps={globalPlayerProps}

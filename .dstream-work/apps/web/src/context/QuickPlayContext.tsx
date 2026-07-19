@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export interface QuickPlayStreamRef {
   streamPubkey: string;
@@ -19,18 +19,6 @@ interface QuickPlayContextValue {
 const QuickPlayContext = createContext<QuickPlayContextValue | null>(null);
 export const QUICK_PLAY_STORAGE_KEY = "dstream_quick_play_stream_v1";
 const STORAGE_KEY = QUICK_PLAY_STORAGE_KEY;
-const QUICK_PLAY_STORAGE_TTL_MS = 20 * 60 * 1000;
-
-function isValidStreamRef(input: unknown): input is QuickPlayStreamRef {
-  if (!input || typeof input !== "object") return false;
-  const value = input as Partial<QuickPlayStreamRef>;
-  if (typeof value.streamPubkey !== "string" || value.streamPubkey.trim().length === 0) return false;
-  if (typeof value.streamId !== "string" || value.streamId.trim().length === 0) return false;
-  if (typeof value.title !== "string") return false;
-  if (value.hlsUrl !== undefined && typeof value.hlsUrl !== "string") return false;
-  if (value.whepUrl !== undefined && typeof value.whepUrl !== "string") return false;
-  return true;
-}
 
 function normalizePlaybackUrl(input: string | undefined): string | undefined {
   if (typeof input !== "string") return undefined;
@@ -52,64 +40,14 @@ function normalizeStreamRef(value: QuickPlayStreamRef): QuickPlayStreamRef {
 
 export function QuickPlayProvider({ children }: { children: ReactNode }) {
   const [quickPlayStream, setQuickPlayStreamState] = useState<QuickPlayStreamRef | null>(null);
-  const quickPlayStreamRef = useRef<QuickPlayStreamRef | null>(null);
 
-  const persistQuickPlay = useCallback((next: QuickPlayStreamRef | null) => {
+  useEffect(() => {
     try {
-      if (!next) {
-        localStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: next, savedAt: Date.now() }));
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       // ignore storage failures
     }
   }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      
-      let payload = parsed;
-      if (parsed && typeof parsed === "object" && "data" in parsed && typeof parsed.savedAt === "number") {
-        const age = Date.now() - parsed.savedAt;
-        if (age > QUICK_PLAY_STORAGE_TTL_MS) {
-          localStorage.removeItem(STORAGE_KEY);
-          return;
-        }
-        payload = parsed.data;
-      }
-
-      if (!isValidStreamRef(payload)) return;
-      setQuickPlayStreamState(normalizeStreamRef(payload));
-    } catch {
-      // ignore malformed storage
-    }
-  }, []);
-
-  useEffect(() => {
-    quickPlayStreamRef.current = quickPlayStream;
-    persistQuickPlay(quickPlayStream);
-  }, [persistQuickPlay, quickPlayStream]);
-
-  useEffect(() => {
-    const flushNow = () => persistQuickPlay(quickPlayStreamRef.current);
-    const onVisibility = () => {
-      if (document.visibilityState !== "hidden") return;
-      flushNow();
-    };
-
-    window.addEventListener("pagehide", flushNow);
-    window.addEventListener("beforeunload", flushNow);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("pagehide", flushNow);
-      window.removeEventListener("beforeunload", flushNow);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [persistQuickPlay]);
 
   const setQuickPlayStream = useCallback((next: QuickPlayStreamRef) => {
     setQuickPlayStreamState(normalizeStreamRef(next));
@@ -117,6 +55,11 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
 
   const clearQuickPlayStream = useCallback(() => {
     setQuickPlayStreamState(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
   }, []);
 
   const value = useMemo<QuickPlayContextValue>(

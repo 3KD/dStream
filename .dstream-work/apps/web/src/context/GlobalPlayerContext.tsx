@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Player } from "@/components/Player";
 
 interface GlobalPlayerContextValue {
+  playerHost: HTMLDivElement | null;
   registerPortal: (id: string, el: HTMLElement) => void;
   unregisterPortal: (id: string) => void;
   requestPortal: (id: string, props: any) => void;
@@ -127,7 +128,10 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [activeRequest, forceTick, playerHost]);
 
-  const contextValue = useMemo(() => ({ registerPortal, unregisterPortal, requestPortal, clearRequest }), [registerPortal, unregisterPortal, requestPortal, clearRequest]);
+  const contextValue = useMemo(
+    () => ({ playerHost, registerPortal, unregisterPortal, requestPortal, clearRequest }),
+    [clearRequest, playerHost, registerPortal, requestPortal, unregisterPortal]
+  );
 
   return (
     <GlobalPlayerContext.Provider value={contextValue}>

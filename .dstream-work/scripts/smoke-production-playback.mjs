@@ -14,6 +14,10 @@ const SOURCE_LIMIT = Math.floor(positiveNumber(process.env.PLAYBACK_SOURCE_LIMIT
 const START_TIMEOUT_MS = positiveNumber(process.env.PLAYBACK_START_TIMEOUT_MS, 45_000);
 const STALL_LIMIT_MS = positiveNumber(process.env.PLAYBACK_STALL_LIMIT_MS, 30_000);
 const STARTUP_STABILITY_MS = positiveNumber(process.env.PLAYBACK_STARTUP_STABILITY_MS, 15_000);
+const ROUTE_HANDOFF_AFTER_MS = positiveNumber(
+  process.env.PLAYBACK_ROUTE_HANDOFF_AFTER_MS,
+  Math.min(45_000, Math.max(5_000, Math.floor(SOAK_MS / 2)))
+);
 const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
@@ -401,6 +405,8 @@ async function verifyRouteHandoff(run) {
   await homeLink.click();
   await run.page.waitForURL(`${BASE_URL}/`, { timeout: 20_000 });
   await run.page.locator("video").first().waitFor({ state: "attached", timeout: 20_000 });
+  const miniPlayer = run.page.getByLabel("Floating mini player");
+  await miniPlayer.waitFor({ state: "visible", timeout: 20_000 });
   await run.page.waitForTimeout(3_000);
   let after = await sampleVideo(run.page);
   if (after.marker !== run.marker) fail(`${run.scenario}/${run.title}: player DOM was remounted during route handoff`);
@@ -412,6 +418,47 @@ async function verifyRouteHandoff(run) {
     );
   }
   if (after.paused || after.ended) fail(`${run.scenario}/${run.title}: playback stopped during route handoff`);
+
+  await miniPlayer.hover();
+  const pauseButton = miniPlayer.getByRole("button", { name: "Pause", exact: true });
+  await pauseButton.waitFor({ state: "visible", timeout: 5_000 });
+  await pauseButton.click();
+  await run.page
+    .waitForFunction(() => document.querySelector("video")?.paused === true, null, { timeout: 5_000 })
+    .catch(() => fail(`${run.scenario}/${run.title}: mini-player pause control did not pause media`));
+
+  const playButton = miniPlayer.getByRole("button", { name: "Play", exact: true });
+  await playButton.waitFor({ state: "visible", timeout: 5_000 });
+  await playButton.click();
+  await run.page
+    .waitForFunction(() => document.querySelector("video")?.paused === false, null, { timeout: 5_000 })
+    .catch(() => fail(`${run.scenario}/${run.title}: mini-player play control did not resume media`));
+
+  const mutedBefore = await run.page.locator("video").first().evaluate((video) => video.muted || video.volume === 0);
+  const volumeButton = miniPlayer.getByRole("button", { name: mutedBefore ? "Unmute" : "Mute", exact: true });
+  await volumeButton.click();
+  await run.page
+    .waitForFunction(
+      (wasMuted) => {
+        const video = document.querySelector("video");
+        return !!video && (video.muted || video.volume === 0) !== wasMuted;
+      },
+      mutedBefore,
+      { timeout: 5_000 }
+    )
+    .catch(() => fail(`${run.scenario}/${run.title}: mini-player volume control did not toggle mute`));
+  await miniPlayer.getByRole("button", { name: mutedBefore ? "Mute" : "Unmute", exact: true }).click();
+  await run.page
+    .waitForFunction(
+      (wasMuted) => {
+        const video = document.querySelector("video");
+        return !!video && (video.muted || video.volume === 0) === wasMuted;
+      },
+      mutedBefore,
+      { timeout: 5_000 }
+    )
+    .catch(() => fail(`${run.scenario}/${run.title}: mini-player volume control did not restore mute state`));
+
   if (run.background) {
     const preferenceEnabled = await run.page.evaluate(() => localStorage.getItem("dstream_player_background_play_v1") === "1");
     if (!preferenceEnabled) {
@@ -427,6 +474,49 @@ async function verifyRouteHandoff(run) {
   run.last = after;
   run.lastSampledAt = Date.now();
   run.lastProgressAt = Date.now();
+}
+
+async function verifyMiniPlayerClose(run) {
+  const miniPlayer = run.page.getByLabel("Floating mini player");
+  await miniPlayer.hover();
+  await miniPlayer.getByRole("button", { name: "Close mini player", exact: true }).click();
+  await miniPlayer.waitFor({ state: "detached", timeout: 5_000 });
+  await run.page
+    .waitForFunction(
+      () =>
+        document.querySelector("[data-global-player-host] video") === null &&
+        localStorage.getItem("dstream_quick_play_stream_v1") === null,
+      null,
+      { timeout: 5_000 }
+    )
+    .catch(() => fail(`${run.scenario}/${run.title}: closing mini-player did not tear down media and storage`));
+}
+
+async function verifyNoColdMiniPlayerRestore(run) {
+  await run.page.evaluate(() => {
+    localStorage.setItem(
+      "dstream_quick_play_stream_v1",
+      JSON.stringify({
+        data: {
+          streamPubkey: "0".repeat(64),
+          streamId: "stale-mini-player",
+          title: "Stale mini player",
+          hlsUrl: "https://example.invalid/stale.m3u8"
+        },
+        savedAt: Date.now()
+      })
+    );
+  });
+  await run.page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+  await run.page
+    .waitForFunction(() => localStorage.getItem("dstream_quick_play_stream_v1") === null, null, { timeout: 5_000 })
+    .catch(() => fail(`${run.scenario}/${run.title}: cold load retained stale mini-player storage`));
+  if ((await run.page.getByLabel("Floating mini player").count()) > 0) {
+    fail(`${run.scenario}/${run.title}: cold load restored a stale mini-player`);
+  }
+  if ((await run.page.locator("[data-global-player-host] video").count()) > 0) {
+    fail(`${run.scenario}/${run.title}: cold load restored stale mini-player media`);
+  }
 }
 
 async function main() {
@@ -559,10 +649,14 @@ async function main() {
         run.last = next;
         run.lastSampledAt = sampledAt;
       }
-      if (Date.now() - startedAt > 45_000) {
+      if (Date.now() - startedAt >= ROUTE_HANDOFF_AFTER_MS) {
         for (const run of runs.filter((candidate) => !candidate.routed)) await verifyRouteHandoff(run);
       }
     }
+
+    for (const run of runs.filter((candidate) => !candidate.routed)) await verifyRouteHandoff(run);
+    for (const run of runs) await verifyMiniPlayerClose(run);
+    for (const run of runs) await verifyNoColdMiniPlayerRestore(run);
 
     for (const run of runs) {
       console.log(
