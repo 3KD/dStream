@@ -734,6 +734,7 @@ export function Player({
     let lastObservedTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
     let lastObservedFrames = readVideoFrameCount(video);
     let lastProgressAt = Date.now();
+    let lastPlayableMediaAt = Date.now();
 
     const markHealthy = (now: number, currentTime: number, frameCount: number | null) => {
       lastObservedTime = currentTime;
@@ -835,11 +836,12 @@ export function Player({
         return;
       }
 
-      const timeAdvanced = currentTime > lastObservedTime + 0.35;
+      const bufferAhead = readBufferedAheadSeconds(video);
+      const hasPlayableMedia = video.readyState >= 3 || bufferAhead > 0.25;
+      const timeAdvanced = currentTime > lastObservedTime + 0.35 && hasPlayableMedia;
       const framesAdvanced =
         frameCount !== null && lastObservedFrames !== null && frameCount > lastObservedFrames + 2;
       const jumpedBackward = lastObservedTime > 5 && currentTime + 1.25 < lastObservedTime;
-      const bufferAhead = readBufferedAheadSeconds(video);
       const nextBufferedStart = readNextBufferedRangeStart(video);
       const hlsActivity = liveHlsActivityRef.current;
       const lastHlsActivityAt = Math.max(
@@ -861,6 +863,7 @@ export function Player({
       }
 
       if (timeAdvanced || framesAdvanced) {
+        lastPlayableMediaAt = now;
         markHealthy(now, currentTime, frameCount);
         if (hlsActivityStale) {
           recoverLivePlayback("Live stream stopped receiving new media. Reconnected to the live stream.");
@@ -884,6 +887,21 @@ export function Player({
         liveRecoveryTarget !== null &&
         stalledForMs >= 2500 &&
         now - lastLivePlaybackRecoveryAtRef.current >= 2500;
+      const noPlayableMediaForMs = now - lastPlayableMediaAt;
+      const hasNoPlayableMedia =
+        playbackModeRef.current === "hls" && !!hlsRef.current && video.readyState <= 1 && bufferAhead < 0.25;
+      if (hasNoPlayableMedia && noPlayableMediaForMs >= 30000) {
+        try {
+          hlsRef.current?.stopLoad();
+        } catch {
+          // ignore
+        }
+        setStatus("Stream unavailable");
+        setNeedsClick(false);
+        setError("Live stream source is not producing playable media. Upstream HLS segments are failing or malformed.");
+        setNote("The upstream HLS manifest is reachable, but the media segments are failing or malformed.");
+        return;
+      }
       if (shouldRecoverBufferedGap) {
         const target = (bufferedRecoveryTarget ?? 0) + (bufferedRecoveryTarget === nextBufferedStart ? 0.05 : 0);
         try {
