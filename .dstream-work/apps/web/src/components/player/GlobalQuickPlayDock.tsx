@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HandCoins, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause, Users } from "lucide-react";
+import { HandCoins, Headphones, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause, Users } from "lucide-react";
 import { GlobalPlayerSlot, useGlobalPlayer } from "@/context/GlobalPlayerContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
@@ -161,6 +161,7 @@ export function GlobalQuickPlayDock() {
   const [timelineDuration, setTimelineDuration] = useState(0);
   const [isAtLiveEdge, setIsAtLiveEdge] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioOnlyMode, setAudioOnlyMode] = useState(false);
 
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const resizeRef = useRef<{
@@ -329,9 +330,16 @@ export function GlobalQuickPlayDock() {
 
     const attachVideo = () => {
       const found = host.querySelector("video");
-      if (!(found instanceof HTMLVideoElement)) return;
+      if (!(found instanceof HTMLVideoElement)) {
+        setAudioOnlyMode(false);
+        return;
+      }
+      const syncSourceMode = () => {
+        setAudioOnlyMode(found.dataset.dstreamSourceMode === "zap-audio-fallback");
+      };
       if (attachedVideo === found) {
         setIsPlaying(!found.paused && !found.ended);
+        syncSourceMode();
         return;
       }
 
@@ -414,12 +422,18 @@ export function GlobalQuickPlayDock() {
       onVolumeChange();
       onTimeUpdate();
       onPlayState();
+      syncSourceMode();
       syncPip();
     };
 
     attachVideo();
     const observer = new MutationObserver(attachVideo);
-    observer.observe(host, { childList: true, subtree: true });
+    observer.observe(host, {
+      attributes: true,
+      attributeFilter: ["data-dstream-source-mode"],
+      childList: true,
+      subtree: true
+    });
     const syncInterval = window.setInterval(attachVideo, 500);
     return () => {
       window.clearInterval(syncInterval);
@@ -747,7 +761,18 @@ export function GlobalQuickPlayDock() {
                 title="Open full stream page"
                 aria-label="Open full stream page"
               >
-                <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
+                <div className="mb-1 flex min-w-0 items-center gap-2 leading-none">
+                  <p className="truncate text-[10px] font-bold text-white">NOW WATCHING</p>
+                  {audioOnlyMode && (
+                    <span
+                      data-testid="mini-player-audio-mode-indicator"
+                      className="inline-flex shrink-0 items-center gap-1 text-[9px] font-semibold text-white/70"
+                    >
+                      <Headphones className="h-2.5 w-2.5" />
+                      Audio mode
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 max-w-full">
                   <p className="truncate text-xs font-medium leading-none text-white/70">
                     {quickPlayStream.title || "Live stream"}
@@ -762,7 +787,18 @@ export function GlobalQuickPlayDock() {
               </Link>
             ) : (
               <div className="min-w-0 flex-1 px-1 py-0.5">
-                <p className="text-[10px] font-bold text-white truncate leading-none mb-1">NOW WATCHING</p>
+                <div className="mb-1 flex min-w-0 items-center gap-2 leading-none">
+                  <p className="truncate text-[10px] font-bold text-white">NOW WATCHING</p>
+                  {audioOnlyMode && (
+                    <span
+                      data-testid="mini-player-audio-mode-indicator"
+                      className="inline-flex shrink-0 items-center gap-1 text-[9px] font-semibold text-white/70"
+                    >
+                      <Headphones className="h-2.5 w-2.5" />
+                      Audio mode
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 max-w-full">
                   <p className="truncate text-xs font-medium leading-none text-white/70">
                     {quickPlayStream.title || "Live stream"}
