@@ -136,7 +136,7 @@ export function ChatMessage({
   }, [actionsOpen]);
 
   return (
-    <div className={`flex gap-2 py-1.5 px-3 hover:bg-neutral-800/50 ${isWhisper ? "bg-purple-950/10" : ""}`}>
+    <div className={`group/message relative py-1.5 px-3 hover:bg-neutral-800/50 ${isWhisper ? "bg-purple-950/10" : ""}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <Link href={profileHref} className={`font-medium text-sm truncate hover:underline ${isBroadcaster ? "text-red-400" : "text-neutral-200"}`}>
@@ -197,11 +197,16 @@ export function ChatMessage({
       </div>
 
       {showActions && (
-        <div ref={actionsMenuRef} className="relative flex items-start gap-1 pt-0.5">
+        <div
+          ref={actionsMenuRef}
+          className={`absolute right-1 top-1 z-10 transition-opacity duration-150 group-hover/message:opacity-100 group-focus-within/message:opacity-100 ${
+            actionsOpen ? "opacity-100" : "opacity-0"
+          }`}
+        >
           <button
             type="button"
             onClick={() => setActionsOpen((current) => !current)}
-            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border bg-neutral-950/30 border-neutral-800 text-neutral-400 hover:text-white"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-700 bg-neutral-950/90 text-neutral-400 shadow-sm hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             title="Message actions"
             aria-label="Message actions"
             aria-expanded={actionsOpen}
@@ -211,7 +216,7 @@ export function ChatMessage({
           </button>
 
           {actionsOpen && (
-            <div className="absolute right-0 top-10 z-20 min-w-[12rem] rounded-xl border border-neutral-800 bg-neutral-950/95 shadow-xl overflow-hidden">
+            <div className="absolute right-0 top-9 z-20 min-w-[12rem] overflow-hidden rounded-md border border-neutral-800 bg-neutral-950/95 shadow-xl">
               {showReply && (
                 <button
                   type="button"
