@@ -162,7 +162,9 @@ export class P2PSwarm {
     this.swarmId = await deriveSwarmId({ streamPubkey: this.streamPubkey, streamId: this.streamId });
 
     const sub = this.signal.subscribe((msg) => {
-      void this.onSignal(msg.fromPubkey, msg.payload);
+      void this.onSignal(msg.fromPubkey, msg.payload).catch(() => {
+        this.closePeer(msg.fromPubkey);
+      });
     });
     this.subClose = sub.close;
   }
@@ -205,7 +207,9 @@ export class P2PSwarm {
     for (const pk of trimmed) {
       if (this.peers.has(pk)) continue;
       if (this.identity.pubkey.localeCompare(pk) < 0) {
-        void this.initiate(pk);
+        void this.initiate(pk).catch(() => {
+          this.closePeer(pk);
+        });
       }
     }
 

@@ -214,7 +214,7 @@ async function openRun(context, scenario, stream, index) {
   });
   const diagnostics = { errors: [], relayErrors: 0, relayMessages: [] };
   const title = String(stream.title || stream.streamId);
-  page.on("pageerror", (error) => diagnostics.errors.push(error.message));
+  page.on("pageerror", (error) => diagnostics.errors.push(error.stack || error.message));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
