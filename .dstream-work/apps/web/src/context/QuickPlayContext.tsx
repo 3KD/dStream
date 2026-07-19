@@ -19,7 +19,7 @@ interface QuickPlayContextValue {
 const QuickPlayContext = createContext<QuickPlayContextValue | null>(null);
 export const QUICK_PLAY_STORAGE_KEY = "dstream_quick_play_stream_v1";
 const STORAGE_KEY = QUICK_PLAY_STORAGE_KEY;
-const QUICK_PLAY_STORAGE_TTL_MS = 12 * 60 * 60 * 1000;
+const QUICK_PLAY_STORAGE_TTL_MS = 20 * 60 * 1000;
 
 function isValidStreamRef(input: unknown): input is QuickPlayStreamRef {
   if (!input || typeof input !== "object") return false;

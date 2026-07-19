@@ -82,6 +82,7 @@ export function getNostrRelays(): string[] {
 
   if (process.env.NODE_ENV === "production") {
     base = base.filter((r) => !r.includes("localhost") && !r.includes("127.0.0.1"));
+    if (base.length === 0) base = DEFAULT_NOSTR_RELAYS_PROD;
   }
 
   return uniq(base).slice(0, MAX_ACTIVE_NOSTR_RELAYS);
