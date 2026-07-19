@@ -692,14 +692,16 @@ export function GlobalQuickPlayDock() {
 
   const globalPlayerProps = useMemo(() => ({
     src: hlsSrc,
+    posterSrc: announce?.image ?? null,
     whepSrc,
     autoplayMuted: !backgroundPlayEnabled,
     isLiveStream: true,
     showTimelineControls: false,
     showAuxControls: false,
     showNativeControls: false,
-    playbackStateKey
-  }), [backgroundPlayEnabled, hlsSrc, playbackStateKey, whepSrc]);
+    playbackStateKey,
+    overlayTitle: quickPlayStream?.title || announce?.title || "Live stream"
+  }), [announce?.image, announce?.title, backgroundPlayEnabled, hlsSrc, playbackStateKey, quickPlayStream?.title, whepSrc]);
 
   useEffect(() => {
     if (!quickPlayStream) {

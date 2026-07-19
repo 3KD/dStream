@@ -19,6 +19,7 @@ import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, 
 interface PlayerProps {
   src: string;
   fallbackSrc?: string | null;
+  posterSrc?: string | null;
   whepSrc?: string | null;
   p2pSwarm?: P2PSwarm | null;
   integrity?: IntegritySession | null;
@@ -276,6 +277,7 @@ function applyHlsPlaybackTuning(hls: Hls, options: HlsPlaybackTuningOptions): vo
 export function Player({
   src,
   fallbackSrc,
+  posterSrc,
   whepSrc,
   p2pSwarm,
   integrity,
@@ -332,6 +334,7 @@ export function Player({
   const [needsClick, setNeedsClick] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
+  const [audioOnlyFallbackActive, setAudioOnlyFallbackActive] = useState(false);
   const [isMobilePlayback, setIsMobilePlayback] = useState(false);
   const [isFirefoxPlayback, setIsFirefoxPlayback] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -998,6 +1001,7 @@ export function Player({
     playbackSessionGenerationRef.current += 1;
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
     video.dataset.dstreamSourceMode = "primary";
+    setAudioOnlyFallbackActive(false);
     video.dataset.dstreamPlaybackSignature = JSON.stringify({
       isMobilePlayback,
       isFirefoxPlayback,
@@ -1537,6 +1541,7 @@ export function Player({
         setNote("The source video timeline is malformed. Playing its stable audio rendition.");
         setQualityOptions([]);
         setQualityIndicator("Audio");
+        setAudioOnlyFallbackActive(true);
         video.dataset.dstreamSourceMode = "zap-audio-fallback";
         setTimeout(() => {
           if (cancelled || hlsRef.current !== hls) return;
@@ -2151,6 +2156,7 @@ export function Player({
           ref={videoRef}
           className={`relative z-0 block h-full w-full cursor-pointer object-contain ${!nsfwConsented ? 'opacity-0' : 'opacity-100'}`}
           playsInline
+          poster={posterSrc || undefined}
           controls={effectiveNativeControls && nsfwConsented}
           muted={volume === 0}
           onClick={handleVideoSurfaceInteraction}
@@ -2166,6 +2172,27 @@ export function Player({
             />
           ))}
         </video>
+
+        {audioOnlyFallbackActive && nsfwConsented && (
+          <div
+            data-testid="audio-fallback-visual"
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-neutral-950"
+          >
+            {posterSrc ? (
+              <img
+                src={posterSrc}
+                alt={`${overlayTitleLabel || "Live stream"} artwork`}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <img src="/logo_trimmed.png" alt="dStream" className="h-20 w-20 object-contain opacity-40" />
+            )}
+            <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 border border-white/15 bg-black/80 px-3 py-2 text-xs font-semibold text-white shadow-lg">
+              <Headphones className="h-4 w-4" />
+              <span>Audio mode</span>
+            </div>
+          </div>
+        )}
 
         {needsClick && !error && (
           <button

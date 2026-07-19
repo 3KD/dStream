@@ -1604,6 +1604,7 @@ export default function WatchPage() {
   const globalPlayerProps = useMemo(() => ({
     src: playbackStreamUrl,
     fallbackSrc: announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null,
+    posterSrc: announce?.image ?? null,
     whepSrc: whepSrc,
     p2pSwarm: p2pSwarm,
     integrity: integritySession,
@@ -1649,6 +1650,7 @@ export default function WatchPage() {
     e2e,
     social,
     mobilePortraitLayout,
+    announce?.image,
     announce?.title,
     pubkey,
     streamId

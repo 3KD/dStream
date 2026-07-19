@@ -215,12 +215,17 @@ async function observeStartupStability(page, label) {
     const interruptions = firstPlaying < 0
       ? []
       : events.slice(firstPlaying + 1).filter((entry) => entry.event === "waiting" || entry.event === "stalled" || entry.event === "error");
+    const fallbackVisual = document.querySelector('[data-testid="audio-fallback-visual"]');
+    const fallbackArtwork = fallbackVisual?.querySelector("img");
+    const fallbackRect = fallbackVisual?.getBoundingClientRect();
     return {
       events,
       interruptions,
       sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
       startupBuffer: Number(video.dataset.dstreamStartupBuffer),
-      startupGate: video.dataset.dstreamStartupGate ?? "unknown"
+      startupGate: video.dataset.dstreamStartupGate ?? "unknown",
+      fallbackVisualVisible: !!fallbackVisual && !!fallbackRect && fallbackRect.width > 0 && fallbackRect.height > 0,
+      fallbackArtworkLoaded: fallbackArtwork instanceof HTMLImageElement && fallbackArtwork.complete && fallbackArtwork.naturalWidth > 0
     };
   });
   if (result.interruptions.length > 0) {
@@ -229,6 +234,15 @@ async function observeStartupStability(page, label) {
   if (result.startupGate !== "released") fail(`${label}: startup gate remained ${result.startupGate}`);
   if (EXPECTED_SOURCE_MODE && result.sourceMode !== EXPECTED_SOURCE_MODE) {
     fail(`${label}: expected source mode ${EXPECTED_SOURCE_MODE}, received ${result.sourceMode}`);
+  }
+  if (
+    EXPECTED_SOURCE_MODE === "zap-audio-fallback" &&
+    (!result.fallbackVisualVisible || !result.fallbackArtworkLoaded)
+  ) {
+    fail(
+      `${label}: audio fallback visual is not ready ` +
+        `(visible=${result.fallbackVisualVisible}, artwork=${result.fallbackArtworkLoaded})`
+    );
   }
   return result;
 }
