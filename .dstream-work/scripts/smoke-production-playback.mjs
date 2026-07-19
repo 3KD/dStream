@@ -17,6 +17,7 @@ const STARTUP_STABILITY_MS = positiveNumber(process.env.PLAYBACK_STARTUP_STABILI
 const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
+const EXPECTED_SOURCE_MODE = String(process.env.PLAYBACK_EXPECT_SOURCE_MODE || "").trim();
 const REQUESTED_SCENARIOS = new Set(
   String(process.env.PLAYBACK_SCENARIOS || "chromium-desktop,chromium-mobile,firefox-desktop")
     .split(",")
@@ -213,6 +214,7 @@ async function observeStartupStability(page, label) {
     return {
       events,
       interruptions,
+      sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
       startupBuffer: Number(video.dataset.dstreamStartupBuffer),
       startupGate: video.dataset.dstreamStartupGate ?? "unknown"
     };
@@ -221,6 +223,9 @@ async function observeStartupStability(page, label) {
     fail(`${label}: playback was interrupted during the startup stability window (${JSON.stringify(result.interruptions)})`);
   }
   if (result.startupGate !== "released") fail(`${label}: startup gate remained ${result.startupGate}`);
+  if (EXPECTED_SOURCE_MODE && result.sourceMode !== EXPECTED_SOURCE_MODE) {
+    fail(`${label}: expected source mode ${EXPECTED_SOURCE_MODE}, received ${result.sourceMode}`);
+  }
   return result;
 }
 
@@ -284,7 +289,7 @@ async function openRun(context, scenario, stream, index) {
     await startPlayback(page);
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
     console.log(
-      `  startup ${scenario} / ${title}: buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
+      `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
     );
     if (background) {
       const toggle = page.getByTitle("Keep audio playing when the app is backgrounded");

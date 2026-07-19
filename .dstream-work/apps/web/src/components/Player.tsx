@@ -996,6 +996,7 @@ export function Player({
     };
     playbackSessionGenerationRef.current += 1;
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
+    video.dataset.dstreamSourceMode = "primary";
     video.dataset.dstreamPlaybackSignature = JSON.stringify({
       isMobilePlayback,
       isFirefoxPlayback,
@@ -1440,6 +1441,8 @@ export function Player({
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
       const useMonotonicPlaylistGuard = !isFirefoxPlayback && !isZapStreamHlsUrl(hlsSource);
+      let malformedZapTimingDetected = false;
+      let switchMalformedZapSourceToAudio = () => false;
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         enableWorker: true,
@@ -1462,6 +1465,10 @@ export function Player({
         dstreamRefs: dstreamRefs,
         dstreamMonotonicPlaylistGuard: useMonotonicPlaylistGuard,
         dstreamInvalidPlaylistTiming: false,
+        dstreamOnInvalidPlaylistTiming: () => {
+          malformedZapTimingDetected = true;
+          setTimeout(() => switchMalformedZapSourceToAudio(), 0);
+        },
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
       applyHlsPlaybackTuning(hls, {
@@ -1514,9 +1521,9 @@ export function Player({
         }
         if (data.frag?.sn !== undefined) video.dataset.dstreamHlsFragment = String(data.frag.sn);
       });
-      const switchMalformedZapSourceToAudio = () => {
+      switchMalformedZapSourceToAudio = () => {
         if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
-        if (!(hls.config as any).dstreamInvalidPlaylistTiming) return false;
+        if (!malformedZapTimingDetected && !(hls.config as any).dstreamInvalidPlaylistTiming) return false;
         const audioTrackUrl = hls.audioTracks.find(
           (track) => typeof track.url === "string" && track.url.length > 0
         )?.url;
@@ -1529,6 +1536,7 @@ export function Player({
         setNote("The source video timeline is malformed. Playing its stable audio rendition.");
         setQualityOptions([]);
         setQualityIndicator("Audio");
+        video.dataset.dstreamSourceMode = "zap-audio-fallback";
         setTimeout(() => {
           if (cancelled || hlsRef.current !== hls) return;
           try {
@@ -1552,6 +1560,7 @@ export function Player({
         markLiveHlsActivity("lastLevelUpdatedAt");
         switchMalformedZapSourceToAudio();
       });
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => switchMalformedZapSourceToAudio());
       hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
