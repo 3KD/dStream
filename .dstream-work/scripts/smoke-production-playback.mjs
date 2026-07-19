@@ -408,6 +408,11 @@ async function main() {
     }
 
     if (runs.length === 0) fail("no valid playback scenarios selected");
+    for (const run of runs) {
+      run.last = await sampleVideo(run.page);
+      run.lastSampledAt = Date.now();
+      run.lastProgressAt = Date.now();
+    }
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < SOAK_MS) {

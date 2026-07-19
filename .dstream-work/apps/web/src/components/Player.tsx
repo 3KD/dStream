@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
+import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
@@ -1363,6 +1364,7 @@ export function Player({
         fragLoadingMaxRetry: 8,
         fragLoadingRetryDelay: 250,
         fragLoadingMaxRetryTimeout: 2_000,
+        pLoader: MonotonicPlaylistLoader,
         ...(needsDstreamFragmentLoader ? { fLoader: P2PFragmentLoader } : {}),
         ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
