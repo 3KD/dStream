@@ -52,8 +52,8 @@ Refresh/new tokens always re-check current entitlement state.
 
 Payment rails produce settlement records; entitlement grants are a separate explicit step.
 
-- Monero remains the only verified backend settlement rail in current stack.
-- Other rails remain wallet URI/copy until dedicated verifiers are implemented.
+- Settlement is accepted only through a settled, intent-bound verifier described in ADR 0031.
+- Wallet URI/copy handoff alone never grants an entitlement.
 
 ### 5) Preserve backward compatibility
 
@@ -64,7 +64,7 @@ Existing announce allowlist/private/public semantics remain valid and are mapped
 - Access behavior becomes deterministic and auditable.
 - Revocation/expiry works consistently across live, Video, and chat.
 - Paid access packages (per-item/per-playlist/time-window) become implementable without custom one-off logic.
-- Non-verified rails can be supported with explicit provisional/manual grant policy instead of implicit trust.
+- Unconfigured rails fail closed and cannot create an irreversible checkout intent.
 
 ## References
 

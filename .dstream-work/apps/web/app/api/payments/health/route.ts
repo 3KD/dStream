@@ -7,13 +7,15 @@ export const dynamic = "force-dynamic";
 export async function GET(): Promise<Response> {
   const readiness = evaluatePaymentCapabilities(getPaymentRailCapabilities());
   const storage = getPaymentStorageHealth();
-  return Response.json({
-    ok: true,
-    ready: readiness.ready && storage.every((store) => store.ok),
-    required: readiness.required,
-    missing: readiness.missing,
-    settlement: readiness.capabilities,
-    nativeSettlement: readiness.capabilities,
-    storage
-  });
+  const ready = readiness.ready && storage.every((store) => store.ok);
+  return Response.json(
+    {
+      ok: ready,
+      ready,
+      required: readiness.required,
+      missing: readiness.missing,
+      storage
+    },
+    { status: ready ? 200 : 503 }
+  );
 }

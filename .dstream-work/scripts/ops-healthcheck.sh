@@ -86,6 +86,11 @@ if [[ "${settings_code}" != "200" ]]; then
   record_failure "internal /settings health expected 200, got ${settings_code:-000}"
 fi
 
+payments_code="$(run_cmd "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5656/api/payments/health" 2>/dev/null || true)"
+if [[ "${payments_code}" != "200" ]]; then
+  record_failure "payment rails/storage health expected 200, got ${payments_code:-000}"
+fi
+
 mediamtx_code="$(run_cmd "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9990/v3/paths/list" 2>/dev/null || true)"
 if [[ "${mediamtx_code}" != "200" ]]; then
   record_failure "mediamtx API expected 200, got ${mediamtx_code:-000}"

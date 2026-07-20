@@ -4,6 +4,7 @@ import { Users, ArrowDownToLine, Bitcoin } from "lucide-react";
 
 import { useEffect, useRef } from "react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import type { StreamPaymentMethod } from "@dstream/protocol";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useStreamModeration } from "@/hooks/useStreamModeration";
 import { useIdentity } from "@/context/IdentityContext";
@@ -41,6 +42,7 @@ export function ChatBox({
   onClearWindowRequestHandled,
   onMessageCountChange,
   headerRightSlot,
+  paymentMethods,
   className
 }: {
   streamPubkey: string;
@@ -53,6 +55,7 @@ export function ChatBox({
   onClearWindowRequestHandled?: (ok: boolean) => void;
   onMessageCountChange?: (count: number) => void;
   headerRightSlot?: ReactNode;
+  paymentMethods?: StreamPaymentMethod[];
   className?: string;
 }) {
   const { identity, signEvent } = useIdentity();
@@ -618,6 +621,7 @@ export function ChatBox({
         open={tipDialogOpen} 
         streamPubkey={streamPubkey} 
         streamId={streamId} 
+        paymentMethods={paymentMethods}
         onClose={() => setTipDialogOpen(false)} 
       />
     </div>

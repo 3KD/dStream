@@ -20,7 +20,6 @@ export type WalletIntegrationId =
   | "alby"
   | "blink"
   | "metamask"
-  | "walletconnect"
   | "phantom"
   | "xaman"
   | "tronlink"
@@ -215,13 +214,6 @@ export const WALLET_INTEGRATIONS: WalletIntegration[] = [
     mode: "browser_extension",
     assets: ["eth", "usdt", "usdc", "pepe"],
     website: "https://metamask.io"
-  },
-  {
-    id: "walletconnect",
-    name: "WalletConnect",
-    mode: "browser_extension",
-    assets: ["eth", "usdt", "usdc", "pepe", "sol"],
-    website: "https://walletconnect.com"
   },
   {
     id: "phantom",

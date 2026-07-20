@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import type { Event as NostrEvent, Filter } from "nostr-tools";
 import { parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 
 export function useStreamAnnounce(pubkey: string, streamId: string) {
   const [announce, setAnnounce] = useState<StreamAnnounce | null>(null);
+  const [announceEvent, setAnnounceEvent] = useState<NostrEvent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const latestRef = useRef<number>(0);
 
@@ -16,12 +17,14 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
   useEffect(() => {
     if (!pubkey || !streamId) {
       setAnnounce(null);
+      setAnnounceEvent(null);
       setIsLoading(false);
       latestRef.current = 0;
       return;
     }
     setIsLoading(true);
     setAnnounce(null);
+    setAnnounceEvent(null);
     latestRef.current = 0;
 
     const filter: Filter = {
@@ -40,6 +43,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
         if (parsed.createdAt < latestRef.current) return;
         latestRef.current = parsed.createdAt;
         setAnnounce(parsed);
+        setAnnounceEvent(event as NostrEvent);
       },
       oneose: () => setIsLoading(false)
     });
@@ -56,5 +60,5 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
     };
   }, [relays, pubkey, streamId]);
 
-  return { announce, isLoading };
+  return { announce, announceEvent, isLoading };
 }

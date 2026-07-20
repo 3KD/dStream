@@ -1,6 +1,6 @@
 # ADR 0021: Monero (Verified Tips + Receipts)
 
-- Status: Accepted
+- Status: Superseded in part by ADR 0031
 - Date: 2026-02-06
 
 ## Context
@@ -16,7 +16,7 @@ JRNY’s vision requires:
 
 ### 1) Monero-first verification boundary
 
-For v1 “everything”, **verified** tipping is Monero-only. Other payment rails can be exposed as address/URI payout methods, but they are not treated as verified settlement events unless covered by a dedicated ADR.
+For v1 “everything”, **verified** tipping was Monero-only. ADR 0031 expands verified settlement to explicitly configured Lightning, UTXO, EVM, TRON, Solana, XRPL, and Cardano providers while preserving this Monero session model.
 
 ### 2) Verified tips use wallet RPC + subaddresses
 

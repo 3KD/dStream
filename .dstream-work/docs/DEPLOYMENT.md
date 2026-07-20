@@ -33,6 +33,11 @@ See `.env.example`. Quick reference:
 - `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`: optional Lightning destination (`bolt11`, `lnurl`, or `name@domain`) shown on `/donate`.
 - `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`: optional platform ETH address shown on `/donate` and footer support chips.
 - `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`: optional platform TRX address shown on `/donate` and footer support chips.
+- `NEXT_PUBLIC_SUPPORT_SOL_ADDRESS`: optional SOL address also used for SPL USDC/USDT donation links.
+- `NEXT_PUBLIC_SUPPORT_XRP_ADDRESS`: optional XRP Ledger donation address.
+- `NEXT_PUBLIC_SUPPORT_DOGE_ADDRESS`: optional Dogecoin donation address.
+- `NEXT_PUBLIC_SUPPORT_BCH_ADDRESS`: optional Bitcoin Cash donation address.
+- `NEXT_PUBLIC_SUPPORT_ADA_ADDRESS`: optional Cardano donation address.
 
 **TURN (bundled compose service)**
 - `TURN_REALM`: TURN realm (default `dstream.stream`).
@@ -46,6 +51,7 @@ See `.env.example`. Quick reference:
 - `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
 - `DSTREAM_WHEP_PROXY_ORIGIN`: where `/api/whep/*` proxies to (defaults to `DSTREAM_WHIP_PROXY_ORIGIN`).
 - `DSTREAM_HLS_PROXY_ORIGIN`: where `/api/hls/*` proxies to.
+- `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. Production currently requires `btc:lightning,xmr:xmr`; add other rails only with authenticated production providers.
 
 **Server-only (Monero verified tips)**
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN`: Monero wallet RPC origin (expects `POST <origin>/json_rpc`).

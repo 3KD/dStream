@@ -10,6 +10,12 @@ import { signVideoAccessToken } from "@/lib/video/accessToken";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function legacyVideoCookie(req: Request, originStreamId: string, token: string, expiresAtMs: number): string {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  const maxAge = Math.max(1, Math.floor((expiresAtMs - Date.now()) / 1000));
+  return `dstream_video_access=${encodeURIComponent(token)}; Path=/api/video/file/${encodeURIComponent(originStreamId)}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
 function parseAtomic(input: string | undefined): bigint | null {
   if (!input || !/^\d+$/.test(input)) return null;
   try {
@@ -109,7 +115,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       expMs: expiresAtMs
     });
 
-    return Response.json({
+    const response = Response.json({
       ok: true,
       unlocked: true,
       token,
@@ -121,6 +127,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       amountAtomic: match.amountAtomic,
       txid: match.txid ?? null
     });
+    response.headers.append(
+      "set-cookie",
+      legacyVideoCookie(req, `${tipSession.streamPubkey}--${tipSession.streamId}`, token, expiresAtMs)
+    );
+    return response;
   } catch (err: any) {
     return new Response(`video unlock error (${err?.message ?? "unknown"})`, {
       status: 502,

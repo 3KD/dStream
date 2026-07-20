@@ -12,6 +12,7 @@ interface DonationWalletCardProps {
   address: string;
   walletUri: string;
   symbolClassName: string;
+  walletLabel?: string;
 }
 
 async function copyText(text: string) {
@@ -37,7 +38,8 @@ export function DonationWalletCard({
   network,
   address,
   walletUri,
-  symbolClassName
+  symbolClassName,
+  walletLabel = "Configured wallet"
 }: DonationWalletCardProps) {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -86,7 +88,7 @@ export function DonationWalletCard({
           </div>
         </div>
         <span className="shrink-0 rounded border border-emerald-700/50 bg-emerald-950/40 px-2 py-1 text-[11px] font-medium text-emerald-300">
-          Cake Wallet
+          {walletLabel}
         </span>
       </div>
 

@@ -7,6 +7,7 @@ import { getVideoCatalogEntry } from "@/lib/videoCatalog";
 import { evaluateAccess } from "@/lib/access/evaluator";
 import { buildVideoAccessResourceCandidates } from "@/lib/access/packages";
 import { authorizeVideoProxyRequest, verifyPlaybackAccessToken } from "@/lib/playback-access";
+import { verifyVideoAccessToken } from "@/lib/video/accessToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,43 @@ function getAccessToken(req: Request): string | null {
 
   const authHeader = req.headers.get("authorization") ?? "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
+  if (match?.[1]?.trim()) return match[1].trim();
+  return getCookie(req, "dstream_playback_access");
+}
+
+function getCookie(req: Request, name: string): string | null {
+  const cookies = req.headers.get("cookie") ?? "";
+  for (const part of cookies.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(separator + 1).trim()) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function getLegacyVideoAccessToken(req: Request): string | null {
+  const fromQuery = new URL(req.url).searchParams.get("vat");
+  if (fromQuery?.trim()) return fromQuery.trim();
+  return getCookie(req, "dstream_video_access");
+}
+
+function legacyTokenAuthorizes(input: {
+  token: string | null;
+  hostPubkey: string;
+  streamId: string;
+  relativePath: string;
+}): boolean {
+  if (!input.token) return false;
+  const verified = verifyVideoAccessToken(input.token);
+  if (!verified || verified.expMs <= Date.now()) return false;
+  if (verified.streamPubkey.toLowerCase() !== input.hostPubkey || verified.streamId !== input.streamId) return false;
+  if (verified.accessScope !== "playlist" || !verified.playlistId) return true;
+  if (input.relativePath.toLowerCase().endsWith(".m3u8")) return true;
+  return input.relativePath.split("/")[0] === verified.playlistId;
 }
 
 function parseOriginStreamIdentity(originStreamId: string): { hostPubkey: string; streamId: string } | null {
@@ -130,17 +167,26 @@ export async function GET(
   const { originStreamId, filePath } = await ctx.params;
   const normalized = decodeURIComponent(String(originStreamId ?? "")).trim();
   if (!isValidOriginStreamId(normalized)) return new NextResponse("Invalid stream id", { status: 400 });
+  const parsedOrigin = parseOriginStreamIdentity(normalized);
+  if (!parsedOrigin) return new NextResponse("Invalid stream identity.", { status: 400 });
+  const relativePath = normalizeRelativeVideoPath(filePath ?? []);
+  if (!relativePath) return new NextResponse("Invalid file path", { status: 400 });
   const accessToken = getAccessToken(req);
-  const authz = authorizeVideoProxyRequest(normalized, accessToken, filePath ?? []);
-  if (!authz.ok) {
-    return new NextResponse(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+  const legacyAuthorized = legacyTokenAuthorizes({
+    token: getLegacyVideoAccessToken(req),
+    hostPubkey: parsedOrigin.hostPubkey,
+    streamId: parsedOrigin.streamId,
+    relativePath
+  });
+  if (!legacyAuthorized) {
+    const authz = authorizeVideoProxyRequest(normalized, accessToken, filePath ?? []);
+    if (!authz.ok) {
+      return new NextResponse(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
   }
 
   const targetFile = resolveVideoFile(normalized, filePath ?? []);
   if (!targetFile) return new NextResponse("Not found", { status: 404 });
-  const relativePath = normalizeRelativeVideoPath(filePath ?? []);
-  if (!relativePath) return new NextResponse("Invalid file path", { status: 400 });
-
   const catalogEntry = getVideoCatalogEntry(normalized, relativePath);
   if (!catalogEntry || !catalogEntry.publishedAtSec) {
     return new NextResponse("Video is not available.", { status: 404 });
@@ -149,10 +195,8 @@ export async function GET(
     return new NextResponse("Video is still processing.", { status: 409 });
   }
 
-  if (catalogEntry.visibility === "private") {
+  if (catalogEntry.visibility === "private" && !legacyAuthorized) {
     if (!accessToken) return new NextResponse("Video access denied.", { status: 403 });
-    const parsedOrigin = parseOriginStreamIdentity(normalized);
-    if (!parsedOrigin) return new NextResponse("Invalid stream identity.", { status: 400 });
     const verified = verifyPlaybackAccessToken(accessToken, normalized);
     if (!verified.ok) return new NextResponse(`Video access denied: ${verified.error}.`, { status: 403 });
     const subjectPubkey = verified.payload.v.trim() ? verified.payload.v.trim().toLowerCase() : undefined;

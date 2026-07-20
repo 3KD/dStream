@@ -503,11 +503,6 @@ export function authorizeVideoProxyRequest(
     return { ok: false, status: 400, error: "Video access denied: invalid stream id." };
   }
 
-  const verified = verifyPlaybackAccessToken(accessToken, normalizedOriginStreamId);
-  if (!verified.ok) {
-    return { ok: false, status: 403, error: `Video access denied: ${verified.error}.` };
-  }
-
   const policy = getPlaybackPolicy(normalizedOriginStreamId);
   if (!policy) return { ok: true };
 
@@ -520,6 +515,31 @@ export function authorizeVideoProxyRequest(
     streamId: policy.streamId,
     relativePath
   });
+  if (!accessToken?.trim()) {
+    const anonymousDecisions = resourceCandidates.map((resourceId) =>
+      evaluateAccess({
+        hostPubkey: policy.streamPubkey,
+        resourceId,
+        action: "watch_video",
+        announce: buildAnnounceContext(policy),
+        skipAudit: true
+      })
+    );
+    const anonymousHardDeny = anonymousDecisions.find(
+      (decision) => decision.reasonCode === "deny_explicit" || decision.reasonCode === "deny_video_archive_disabled"
+    );
+    if (anonymousHardDeny) return { ok: false, status: 403, error: decisionToVideoError(anonymousHardDeny) };
+    if (anonymousDecisions.some((decision) => decision.allowed)) return { ok: true };
+    const anonymousLast =
+      anonymousDecisions[anonymousDecisions.length - 1] ??
+      ({ allowed: false, reasonCode: "deny_no_matching_entitlement" } as ReturnType<typeof evaluateAccess>);
+    return { ok: false, status: 403, error: decisionToVideoError(anonymousLast) };
+  }
+
+  const verified = verifyPlaybackAccessToken(accessToken, normalizedOriginStreamId);
+  if (!verified.ok) {
+    return { ok: false, status: 403, error: `Video access denied: ${verified.error}.` };
+  }
   const decisions = resourceCandidates.map((resourceId) =>
     evaluateAccess({
       hostPubkey: policy.streamPubkey,

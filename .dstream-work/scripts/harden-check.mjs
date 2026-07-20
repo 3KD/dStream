@@ -350,6 +350,9 @@ function checkProdRules(options = {}) {
     if (!storePath.startsWith("/")) {
       errors.push(`${storeName} must be an absolute path.`);
     }
+    if (strictExternal && !storePath.startsWith("/var/lib/dstream/")) {
+      errors.push(`Deploy mode requires ${storeName} inside the persistent /var/lib/dstream volume.`);
+    }
   }
 
   const walletOrigin = readEnv("DSTREAM_XMR_WALLET_RPC_ORIGIN").trim();
@@ -452,6 +455,54 @@ function checkProdRules(options = {}) {
       errors.push("Deploy mode requires DSTREAM_XMR_WALLET_RPC_ORIGIN for Monero backend readiness.");
     } else {
       warnings.push("DSTREAM_XMR_WALLET_RPC_ORIGIN is not set; verified Monero flows will be unavailable.");
+    }
+  }
+
+  const knownPaymentCapabilities = new Set([
+    "btc:lightning",
+    "xmr:xmr",
+    "btc:utxo",
+    "doge:utxo",
+    "bch:utxo",
+    "eth:evm",
+    "usdt:evm",
+    "usdc:evm",
+    "pepe:evm",
+    "trx:tron",
+    "usdt:tron",
+    "sol:solana",
+    "usdc:solana",
+    "usdt:solana",
+    "xrp:xrpl",
+    "ada:cardano",
+  ]);
+  const configuredPaymentCapabilities = new Set(["btc:lightning"]);
+  if (walletOrigin) configuredPaymentCapabilities.add("xmr:xmr");
+  const providerCapabilityMap = [
+    ["DSTREAM_BTC_RPC_ORIGIN", ["btc:utxo"]],
+    ["DSTREAM_DOGE_RPC_ORIGIN", ["doge:utxo"]],
+    ["DSTREAM_BCH_RPC_ORIGIN", ["bch:utxo"]],
+    ["DSTREAM_ETH_RPC_ORIGIN", ["eth:evm", "usdt:evm", "usdc:evm", "pepe:evm"]],
+    ["DSTREAM_TRON_RPC_ORIGIN", ["trx:tron", "usdt:tron"]],
+    ["DSTREAM_SOLANA_RPC_ORIGIN", ["sol:solana", "usdc:solana", "usdt:solana"]],
+    ["DSTREAM_XRPL_RPC_ORIGIN", ["xrp:xrpl"]],
+    ["DSTREAM_CARDANO_API_ORIGIN", ["ada:cardano"]],
+  ];
+  for (const [originName, keys] of providerCapabilityMap) {
+    if (!readEnv(originName).trim()) continue;
+    for (const key of keys) configuredPaymentCapabilities.add(key);
+  }
+  const requiredPaymentCapabilities = parseCsvOrJsonList(readEnv("DSTREAM_REQUIRED_PAYMENT_CAPABILITIES")).map((value) =>
+    value.toLowerCase()
+  );
+  if (strictExternal && requiredPaymentCapabilities.length === 0) {
+    errors.push("Deploy mode requires DSTREAM_REQUIRED_PAYMENT_CAPABILITIES to prevent silent rail regressions.");
+  }
+  for (const key of requiredPaymentCapabilities) {
+    if (!knownPaymentCapabilities.has(key)) {
+      errors.push(`DSTREAM_REQUIRED_PAYMENT_CAPABILITIES contains unknown capability: ${key}`);
+    } else if (!configuredPaymentCapabilities.has(key)) {
+      errors.push(`Required payment capability is not configured: ${key}`);
     }
   }
 

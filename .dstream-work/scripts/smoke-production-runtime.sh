@@ -42,6 +42,13 @@ if [[ "${local_web_code}" != "200" ]]; then
   fail "internal web health check failed (expected 200, got ${local_web_code})"
 fi
 
+payments_code="$(
+  ssh "${TARGET}" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5656/api/payments/health"
+)"
+if [[ "${payments_code}" != "200" ]]; then
+  fail "payment rails/storage health failed (expected 200, got ${payments_code})"
+fi
+
 echo "🔹 Inspecting remote production env..."
 remote_env="$(
   ssh "${TARGET}" "cd '${REMOTE_DIR}' && sed -n '1,260p' .env.production"
@@ -67,7 +74,7 @@ fi
 
 echo
 echo "🔹 Checking public endpoints..."
-for path in / /browse /broadcast /settings /analytics /docs /donate; do
+for path in / /browse /broadcast /settings /analytics /docs /donate /api/payments/capabilities; do
   code="$(curl -k -s -o /dev/null -w '%{http_code}' "https://${DOMAIN}${path}")"
   echo "  ${path} ${code}"
   if [[ "${code}" != "200" ]]; then

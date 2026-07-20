@@ -16,6 +16,11 @@ const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? fallba
 const supportBtcLightning = (process.env.NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING ?? "").trim();
 const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? fallbackSupportEthAddress).trim();
 const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? fallbackSupportTrxAddress).trim();
+const supportSolAddress = (process.env.NEXT_PUBLIC_SUPPORT_SOL_ADDRESS ?? "").trim();
+const supportXrpAddress = (process.env.NEXT_PUBLIC_SUPPORT_XRP_ADDRESS ?? "").trim();
+const supportDogeAddress = (process.env.NEXT_PUBLIC_SUPPORT_DOGE_ADDRESS ?? "").trim();
+const supportBchAddress = (process.env.NEXT_PUBLIC_SUPPORT_BCH_ADDRESS ?? "").trim();
+const supportAdaAddress = (process.env.NEXT_PUBLIC_SUPPORT_ADA_ADDRESS ?? "").trim();
 
 interface SupportPayment {
   method: StreamPaymentMethod;
@@ -23,6 +28,7 @@ interface SupportPayment {
   networkLabel: string;
   symbolClassName: string;
   walletUri: string;
+  walletLabel: string;
 }
 
 function supportPayment(
@@ -31,7 +37,8 @@ function supportPayment(
   network: string,
   networkLabel: string,
   symbolClassName: string,
-  label = "dStream"
+  label = "dStream",
+  walletLabel = "Configured wallet"
 ): SupportPayment | null {
   if (!address) return null;
 
@@ -44,22 +51,36 @@ function supportPayment(
   const walletUri = buildPaymentUri(method);
   if (!walletUri) throw new Error(`No wallet URI is configured for ${asset.toUpperCase()} support.`);
 
-  return { method, name: PAYMENT_ASSET_META[asset].name, networkLabel, symbolClassName, walletUri };
+  return { method, name: PAYMENT_ASSET_META[asset].name, networkLabel, symbolClassName, walletUri, walletLabel };
 }
 
 const configuredPayments = [
-  supportPayment("xmr", supportXmrAddress, "mainnet", "Monero mainnet", "bg-orange-600"),
-  supportPayment("btc", supportBtcAddress, "bitcoin", "Bitcoin mainnet", "bg-amber-500"),
+  supportPayment("xmr", supportXmrAddress, "mainnet", "Monero mainnet", "bg-orange-600", "dStream", "Cake Wallet"),
+  supportPayment("btc", supportBtcAddress, "bitcoin", "Bitcoin mainnet", "bg-amber-500", "dStream", "Cake Wallet"),
   supportPayment("btc", supportBtcLightning, "lightning", "Bitcoin Lightning", "bg-yellow-500", "dStream Lightning"),
-  supportPayment("eth", supportEthAddress, "ethereum", "Ethereum mainnet", "bg-indigo-600"),
-  supportPayment("usdt", supportEthAddress, "ethereum", "USDT on Ethereum", "bg-emerald-600"),
-  supportPayment("usdc", supportEthAddress, "ethereum", "USDC on Ethereum", "bg-blue-600"),
-  supportPayment("trx", supportTrxAddress, "tron", "TRON mainnet", "bg-red-600"),
-  supportPayment("usdt", supportTrxAddress, "tron", "USDT on TRON", "bg-teal-600")
+  supportPayment("eth", supportEthAddress, "ethereum", "Ethereum mainnet", "bg-indigo-600", "dStream", "Cake Wallet"),
+  supportPayment("usdt", supportEthAddress, "ethereum", "USDT on Ethereum", "bg-emerald-600", "dStream", "Cake Wallet"),
+  supportPayment("usdc", supportEthAddress, "ethereum", "USDC on Ethereum", "bg-blue-600", "dStream", "Cake Wallet"),
+  supportPayment("pepe", supportEthAddress, "ethereum", "PEPE on Ethereum", "bg-lime-700", "dStream", "Cake Wallet"),
+  supportPayment("trx", supportTrxAddress, "tron", "TRON mainnet", "bg-red-600", "dStream", "Cake Wallet"),
+  supportPayment("usdt", supportTrxAddress, "tron", "USDT on TRON", "bg-teal-600", "dStream", "Cake Wallet"),
+  supportPayment("sol", supportSolAddress, "solana", "Solana mainnet", "bg-violet-600"),
+  supportPayment("usdc", supportSolAddress, "solana", "USDC on Solana", "bg-cyan-600"),
+  supportPayment("usdt", supportSolAddress, "solana", "USDT on Solana", "bg-teal-700"),
+  supportPayment("xrp", supportXrpAddress, "xrpl", "XRP Ledger mainnet", "bg-neutral-700"),
+  supportPayment("doge", supportDogeAddress, "dogecoin", "Dogecoin mainnet", "bg-yellow-600"),
+  supportPayment("bch", supportBchAddress, "bitcoincash", "Bitcoin Cash mainnet", "bg-green-700"),
+  supportPayment("ada", supportAdaAddress, "cardano", "Cardano mainnet", "bg-blue-700")
 ].filter((payment): payment is SupportPayment => payment !== null);
 
-const configuredAssets = new Set(configuredPayments.map((payment) => payment.method.asset));
-const missingAssets = (["xmr", "btc", "eth", "trx"] as const).filter((asset) => !configuredAssets.has(asset));
+const missingRails = [
+  !supportBtcLightning ? "Lightning" : null,
+  !supportSolAddress ? "Solana / SPL" : null,
+  !supportXrpAddress ? "XRP Ledger" : null,
+  !supportDogeAddress ? "Dogecoin" : null,
+  !supportBchAddress ? "Bitcoin Cash" : null,
+  !supportAdaAddress ? "Cardano" : null
+].filter((label): label is string => !!label);
 
 export default function DonatePage() {
   return (
@@ -87,13 +108,14 @@ export default function DonatePage() {
               address={payment.method.address}
               walletUri={payment.walletUri}
               symbolClassName={payment.symbolClassName}
+              walletLabel={payment.walletLabel}
             />
           ))}
         </section>
 
-        {missingAssets.length > 0 ? (
+        {missingRails.length > 0 ? (
           <section className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
-            Wallet configuration pending: {missingAssets.map((asset) => PAYMENT_ASSET_META[asset].symbol).join(", ")}.
+            Receive address pending: {missingRails.join(", ")}.
           </section>
         ) : null}
 

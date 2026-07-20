@@ -1,6 +1,7 @@
 "use client";
 
 const NWC_STORAGE_KEY = "dstream_lightning_nwc_v1";
+const NWC_SESSION_STORAGE_KEY = "dstream_lightning_nwc_session_v1";
 
 export type LightningWalletProvider = "nwc" | "webln" | "wallet_uri";
 
@@ -14,10 +15,21 @@ export interface LightningPaymentResult {
 
 export function getNwcConnection(): string {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(NWC_STORAGE_KEY)?.trim() ?? "";
+  return (
+    window.sessionStorage.getItem(NWC_SESSION_STORAGE_KEY)?.trim() ||
+    window.localStorage.getItem(NWC_STORAGE_KEY)?.trim() ||
+    ""
+  );
 }
 
-export function saveNwcConnection(input: string): void {
+export function getNwcPersistence(): "session" | "device" | null {
+  if (typeof window === "undefined") return null;
+  if (window.sessionStorage.getItem(NWC_SESSION_STORAGE_KEY)?.trim()) return "session";
+  if (window.localStorage.getItem(NWC_STORAGE_KEY)?.trim()) return "device";
+  return null;
+}
+
+export function saveNwcConnection(input: string, options: { rememberOnDevice?: boolean } = {}): void {
   if (typeof window === "undefined") throw new Error("Web environment required.");
   const value = input.trim();
   if (!/^nostr\+walletconnect:\/\//i.test(value)) {
@@ -38,11 +50,19 @@ export function saveNwcConnection(input: string): void {
   }
   if (relayUrl.protocol !== "wss:") throw new Error("NWC relay must use wss://.");
   if (!/^[a-f0-9]{64}$/i.test(secret)) throw new Error("NWC connection secret is malformed.");
-  window.localStorage.setItem(NWC_STORAGE_KEY, value);
+  if (options.rememberOnDevice) {
+    window.localStorage.setItem(NWC_STORAGE_KEY, value);
+    window.sessionStorage.removeItem(NWC_SESSION_STORAGE_KEY);
+  } else {
+    window.sessionStorage.setItem(NWC_SESSION_STORAGE_KEY, value);
+    window.localStorage.removeItem(NWC_STORAGE_KEY);
+  }
 }
 
 export function clearNwcConnection(): void {
-  if (typeof window !== "undefined") window.localStorage.removeItem(NWC_STORAGE_KEY);
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(NWC_STORAGE_KEY);
+  window.sessionStorage.removeItem(NWC_SESSION_STORAGE_KEY);
 }
 
 async function payWithNwc(invoice: string, connection: string): Promise<LightningPaymentResult> {
@@ -99,7 +119,10 @@ export async function testNwcConnection(input?: string): Promise<void> {
   const { NWCClient } = await import("@getalby/sdk");
   const client = new NWCClient({ nostrWalletConnectUrl: connection });
   try {
-    await client.getInfo();
+    const info = (await client.getInfo()) as { methods?: unknown };
+    if (Array.isArray(info.methods) && !info.methods.includes("pay_invoice")) {
+      throw new Error("This NWC connection does not allow invoice payments.");
+    }
   } finally {
     client.close();
   }

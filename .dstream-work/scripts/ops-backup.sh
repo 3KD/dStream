@@ -50,7 +50,7 @@ if [[ -d "${PROJECT_DIR}/.caddy-config" ]]; then
 fi
 
 mapfile -t volume_names < <(
-  docker volume ls --format '{{.Name}}' | grep -E '(dstream.*(xmr|monero|wallet|caddy)|xmr|monero|wallet|caddy)' | sort -u || true
+  docker volume ls --format '{{.Name}}' | grep -E '(dstream.*(data|xmr|monero|wallet|caddy)|xmr|monero|wallet|caddy)' | sort -u || true
 )
 
 for volume in "${volume_names[@]}"; do

@@ -41,7 +41,7 @@ Last updated: 2026-02-12
 - ✅ Escrow v3 multisig coordination shipped: session + participant joins + coordinator make/exchange/import/sign/submit routes under `/api/xmr/escrow/session/*` plus dashboard control surface (`/dashboard`)
 - ✅ Real-wallet escrow-v3 smoke auto-enables Monero multisig experimental mode for ephemeral wallets via `monero-wallet-cli` before exchange.
 - ✅ Analytics dashboard shipped: `/analytics` (real presence + Monero tip/stake telemetry)
-- ✅ Multi-asset payout rails shipped in broadcast/watch/settings (XMR, ETH, BTC, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE) with copy + wallet URI guidance; Monero remains the only verified settlement backend.
+- ✅ Intent-bound settlement rails shipped for XMR, Lightning BTC, on-chain BTC/DOGE/BCH, ETH/ERC-20, TRX/TRC-20, SOL/SPL, XRP, and ADA. Provider readiness is public and unconfigured rails fail before wallet payment.
 - ✅ Escrow trust boundary remains explicit: current model is multisig coordination + origin-enforced settlement, not on-chain contract escrow
 - ✅ Mobile store-release automation shipped: Fastlane lanes + signing/env checks + scripted release commands for TestFlight/App Store and Play internal/production (`docs/MOBILE_STORE_DEPLOY.md`)
 

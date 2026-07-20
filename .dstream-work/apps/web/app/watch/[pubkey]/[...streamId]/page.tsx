@@ -2,11 +2,13 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, LoaderCircle, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { ChatBox } from "@/components/chat/ChatBox";
+import { UnifiedTipDialog } from "@/components/chat/UnifiedTipDialog";
+import { VideoPackageCheckout } from "@/components/payments/VideoPackageCheckout";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
 import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
@@ -23,23 +25,14 @@ import { shortenText } from "@/lib/encoding";
 import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
 import { makeOriginStreamId } from "@/lib/origin";
 import { getNostrRelays } from "@/lib/config";
-import { PAYMENT_ASSET_META, buildPaymentUri, comparePaymentAssetOrder, getWalletIntegrationById } from "@/lib/payments/catalog";
-import { groupPaymentMethodsByRail } from "@/lib/payments/rails";
-import {
-  getNativeWalletCapability,
-  nativeWalletProviderLabel,
-  nativeWalletSendNeedsAmount,
-  sendNativeWalletPayment,
-  supportsNativeWalletPayment
-} from "@/lib/payments/nativeWallet";
-import { requestLightningZapInvoice } from "@/lib/payments/lightning";
-import { payLightningInvoice } from "@/lib/payments/lightningWallet";
+import { comparePaymentAssetOrder } from "@/lib/payments/catalog";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
+import { listVideoAccessPackagesClient, type VideoAccessPackage } from "@/lib/access/client";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
-import { buildP2PBytesReceiptEvent, makeATag, type StreamPaymentMethod } from "@dstream/protocol";
+import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
 
 function base64EncodeUtf8(input: string): string {
   try {
@@ -202,7 +195,7 @@ export default function WatchPage() {
   const npub = useMemo(() => (pubkey ? pubkeyHexToNpub(pubkey) : null), [pubkey]);
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
 
-  const { announce, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
+  const { announce, announceEvent, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
   const hostProfile = useNostrProfile(pubkey);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
@@ -286,6 +279,8 @@ export default function WatchPage() {
   const [videoUnlocked, setVideoUnlocked] = useState(false);
   const [videoUnlockExpiresAtMs, setVideoUnlockExpiresAtMs] = useState<number | null>(null);
   const [videoAccessToken, setVideoAccessToken] = useState<string | null>(null);
+  const [videoAccessTokenParam, setVideoAccessTokenParam] = useState<"access" | "vat">("vat");
+  const [videoAccessRefreshable, setVideoAccessRefreshable] = useState(false);
   const [videoUnlockSession, setVideoUnlockSession] = useState<{ session: string; address: string } | null>(null);
   const [videoUnlockQr, setVideoUnlockQr] = useState<string | null>(null);
   const [videoUnlockCopyStatus, setVideoUnlockCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -298,6 +293,39 @@ export default function WatchPage() {
     observedAtMs: number | null;
   } | null>(null);
   const [videoNowMs, setVideoNowMs] = useState(() => Date.now());
+  const [videoPackages, setVideoPackages] = useState<VideoAccessPackage[]>([]);
+  const [videoPackagesLoading, setVideoPackagesLoading] = useState(false);
+  const [videoPackagesError, setVideoPackagesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!pubkey || !streamId || announce?.status !== "ended") {
+      setVideoPackages([]);
+      setVideoPackagesLoading(false);
+      setVideoPackagesError(null);
+      return;
+    }
+    setVideoPackagesLoading(true);
+    setVideoPackagesError(null);
+    void listVideoAccessPackagesClient({ hostPubkey: pubkey, streamId, limit: 100 })
+      .then((result) => {
+        if (cancelled) return;
+        setVideoPackages(result.packages.filter((pkg) => !pkg.relativePath && !pkg.playlistId));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setVideoPackages([]);
+        setVideoPackagesError(error instanceof Error ? error.message : "Failed to load video access packages.");
+      })
+      .finally(() => {
+        if (!cancelled) setVideoPackagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [announce?.status, pubkey, streamId]);
+  const videoPackageRequiresUnlock = announce?.status === "ended" && videoPackages.length > 0;
+  const videoAccessRequired = videoPaidRequiresUnlock || videoPackageRequiresUnlock;
 
   const stakeSatisfied = useMemo(() => {
     if (!stakeRequiredAtomic) return true;
@@ -493,9 +521,9 @@ export default function WatchPage() {
     renditionMasterUrl
   ]);
   const playbackStreamUrl = useMemo(() => {
-    if (!videoPaidRequiresUnlock || !videoAccessToken) return streamUrl;
-    return withQueryParam(streamUrl, "vat", videoAccessToken);
-  }, [streamUrl, videoAccessToken, videoPaidRequiresUnlock]);
+    if (!videoAccessToken) return streamUrl;
+    return withQueryParam(streamUrl, videoAccessTokenParam, videoAccessToken);
+  }, [streamUrl, videoAccessToken, videoAccessTokenParam]);
 
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;
@@ -669,16 +697,6 @@ export default function WatchPage() {
     return Array.from(dedup.values()).sort((a, b) => comparePaymentAssetOrder(a.asset, b.asset));
   }, [announce?.payments, announce?.xmr, hostProfile?.profile]);
 
-  const nonMoneroPaymentMethods = useMemo(
-    () => paymentMethods.filter((method) => method.asset !== "xmr"),
-    [paymentMethods]
-  );
-
-  const paymentRailGroups = useMemo(
-    () => groupPaymentMethodsByRail(nonMoneroPaymentMethods),
-    [nonMoneroPaymentMethods]
-  );
-
   const [tipModalOpen, setTipModalOpen] = useState(false);
   const closeTipModal = useCallback(() => setTipModalOpen(false), []);
   const openTipModal = useCallback(() => setTipModalOpen(true), []);
@@ -697,186 +715,6 @@ export default function WatchPage() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [tipModalOpen]);
-
-  const viewerWalletMethods = useMemo(() => social.settings.paymentDefaults.paymentMethods, [social.settings.paymentDefaults.paymentMethods]);
-
-  const commonAssetSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const method of viewerWalletMethods) {
-      set.add(method.asset);
-    }
-    if ((social.settings.paymentDefaults.xmrTipAddress ?? "").trim()) set.add("xmr");
-    return set;
-  }, [social.settings.paymentDefaults.xmrTipAddress, viewerWalletMethods]);
-
-  const commonAssetNetworkSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const method of viewerWalletMethods) {
-      const asset = (method.asset ?? "").trim().toLowerCase();
-      if (!asset) continue;
-      const network = (method.network ?? "").trim().toLowerCase();
-      if (!network) continue;
-      set.add(`${asset}:${network}`);
-    }
-    return set;
-  }, [viewerWalletMethods]);
-
-  const tipModalMethods = useMemo(
-    () =>
-      paymentMethods
-        .map((method, index) => {
-          const network = (method.network ?? "").trim().toLowerCase();
-          const asset = (method.asset ?? "").trim().toLowerCase();
-          const commonNetwork = !!network && commonAssetNetworkSet.has(`${asset}:${network}`);
-          const commonAsset = commonAssetSet.has(asset);
-          const rank = commonNetwork ? 0 : commonAsset ? 1 : 2;
-          return { method, index, commonAsset, commonNetwork, rank };
-        })
-        .sort((a, b) => {
-          if (a.rank !== b.rank) return a.rank - b.rank;
-          const byAsset = comparePaymentAssetOrder(a.method.asset, b.method.asset);
-          if (byAsset !== 0) return byAsset;
-          return a.index - b.index;
-        }),
-    [commonAssetNetworkSet, commonAssetSet, paymentMethods]
-  );
-
-  const [paymentCopyStatus, setPaymentCopyStatus] = useState<Record<string, "idle" | "copied" | "error">>({});
-  const [nativeSendBusyByKey, setNativeSendBusyByKey] = useState<Record<string, boolean>>({});
-  const [nativeSendStatusByKey, setNativeSendStatusByKey] = useState<
-    Record<string, { ok: boolean; message: string; txId?: string }>
-  >({});
-  const [nativeSendAmountByKey, setNativeSendAmountByKey] = useState<Record<string, string>>({});
-
-  const copyPaymentAddress = useCallback(async (paymentKey: string, address: string) => {
-    setPaymentCopyStatus((prev) => ({ ...prev, [paymentKey]: "idle" }));
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
-      await navigator.clipboard.writeText(address);
-      setPaymentCopyStatus((prev) => ({ ...prev, [paymentKey]: "copied" }));
-      setTimeout(() => {
-        setPaymentCopyStatus((prev) => ({ ...prev, [paymentKey]: "idle" }));
-      }, 1200);
-    } catch {
-      setPaymentCopyStatus((prev) => ({ ...prev, [paymentKey]: "error" }));
-      setTimeout(() => {
-        setPaymentCopyStatus((prev) => ({ ...prev, [paymentKey]: "idle" }));
-      }, 1800);
-    }
-  }, []);
-
-  const sendNativePayment = useCallback(
-    async (paymentKey: string, method: StreamPaymentMethod) => {
-      const amountOverride = (nativeSendAmountByKey[paymentKey] ?? "").trim();
-      const requestMethod: StreamPaymentMethod = {
-        ...method,
-        amount: (method.amount ?? "").trim() || amountOverride || undefined
-      };
-      setNativeSendBusyByKey((prev) => ({ ...prev, [paymentKey]: true }));
-      setNativeSendStatusByKey((prev) => ({ ...prev, [paymentKey]: { ok: false, message: "" } }));
-      try {
-        const result = await sendNativeWalletPayment(requestMethod);
-        if (!result.ok) {
-          setNativeSendStatusByKey((prev) => ({
-            ...prev,
-            [paymentKey]: { ok: false, message: result.error ?? "Wallet send failed." }
-          }));
-          return;
-        }
-        setNativeSendStatusByKey((prev) => ({
-          ...prev,
-          [paymentKey]: {
-            ok: true,
-            message: result.provider === "wallet_uri" ? "Opened wallet app." : `Sent via ${result.provider ?? "wallet"}.`,
-            txId: result.txId
-          }
-        }));
-      } catch (error: any) {
-        setNativeSendStatusByKey((prev) => ({
-          ...prev,
-          [paymentKey]: { ok: false, message: error?.message ?? "Wallet send failed." }
-        }));
-      } finally {
-        setNativeSendBusyByKey((prev) => ({ ...prev, [paymentKey]: false }));
-      }
-    },
-    [nativeSendAmountByKey]
-  );
-
-  const hasLightningZap = useMemo(() => {
-    return paymentMethods.some((method) => {
-      if (method.asset !== "btc") return false;
-      const network = (method.network ?? "").trim().toLowerCase();
-      const address = (method.address ?? "").trim().toLowerCase();
-      if (network.includes("lightning") || network.includes("lnurl") || network.includes("bolt11")) return true;
-      return address.startsWith("lnbc") || address.startsWith("lnurl") || address.startsWith("lightning:");
-    });
-  }, [paymentMethods]);
-
-  const lightningZapMethod = useMemo(
-    () =>
-      paymentMethods.find((method) => {
-        if (method.asset !== "btc") return false;
-        const network = (method.network ?? "").trim().toLowerCase();
-        const address = (method.address ?? "").trim().toLowerCase().replace(/^lightning:/, "");
-        return network.includes("lightning") || network.includes("lnurl") || address.includes("@") || address.startsWith("lnurl");
-      }) ?? null,
-    [paymentMethods]
-  );
-
-  const [zapAmountSats, setZapAmountSats] = useState("1000");
-  const [zapComment, setZapComment] = useState("");
-  const [zapRequestBusy, setZapRequestBusy] = useState(false);
-  const [zapRequestNotice, setZapRequestNotice] = useState<string | null>(null);
-  const [zapRequestError, setZapRequestError] = useState<string | null>(null);
-  const publishZapRequest = useCallback(async () => {
-    if (!pubkey || !streamId) {
-      setZapRequestError("Invalid stream target for zap request.");
-      return;
-    }
-    if (!identity) {
-      setZapRequestError("Connect identity to sign a zap payment.");
-      return;
-    }
-    if (!lightningZapMethod) {
-      setZapRequestError("This stream has no NIP-57 Lightning address.");
-      return;
-    }
-    const sats = Number(zapAmountSats);
-    if (!Number.isFinite(sats) || sats <= 0) {
-      setZapRequestError("Enter a valid zap amount in sats.");
-      return;
-    }
-    setZapRequestBusy(true);
-    setZapRequestError(null);
-    setZapRequestNotice(null);
-    try {
-      const invoice = await requestLightningZapInvoice({
-        destination: lightningZapMethod.address,
-        amountSats: BigInt(Math.floor(sats)),
-        senderPubkey: identity.pubkey,
-        recipientPubkey: pubkey,
-        relays,
-        content: zapComment,
-        eventCoordinate: makeATag(pubkey, streamId),
-        signEvent: async (event) => signEvent(event as any)
-      });
-      const payment = await payLightningInvoice(invoice.invoice);
-      if (!payment.ok) {
-        setZapRequestError(payment.error ?? "Lightning wallet rejected the payment.");
-        return;
-      }
-      setZapRequestNotice(
-        payment.pendingExternal
-          ? "Invoice opened in your Lightning wallet. The creator's provider will publish the receipt after payment."
-          : `Zap paid via ${payment.provider === "nwc" ? "Nostr Wallet Connect" : "WebLN"}. Waiting for the receipt.`
-      );
-    } catch (error: any) {
-      setZapRequestError(error?.message ?? "Failed to publish zap request.");
-    } finally {
-      setZapRequestBusy(false);
-    }
-  }, [identity, lightningZapMethod, pubkey, relays, signEvent, streamId, zapAmountSats, zapComment]);
 
   const [watchReportOpen, setWatchReportOpen] = useState(false);
   const [watchReportBusy, setWatchReportBusy] = useState(false);
@@ -987,6 +825,8 @@ export default function WatchPage() {
       expiresAtMs?: number | null;
       accessScope?: "stream" | "playlist";
       playlistId?: string | null;
+      accessTokenParam?: "access" | "vat";
+      refreshable?: boolean;
     }) => {
       const unlockedAtMs = params.observedAtMs && Number.isFinite(params.observedAtMs) ? params.observedAtMs : Date.now();
       const accessSeconds = videoPolicy.accessSeconds && videoPolicy.accessSeconds > 0 ? videoPolicy.accessSeconds : null;
@@ -995,7 +835,7 @@ export default function WatchPage() {
       const accessScope = params.accessScope === "playlist" && videoPlaylistId ? "playlist" : "stream";
       const playlistId = (params.playlistId ?? videoPlaylistId ?? "").trim() || null;
 
-      if (videoPaidRequiresUnlock && !accessToken) {
+      if (videoAccessRequired && !accessToken) {
         setVideoUnlocked(false);
         setVideoAccessToken(null);
         setVideoUnlockExpiresAtMs(null);
@@ -1004,6 +844,8 @@ export default function WatchPage() {
 
       setVideoUnlocked(true);
       setVideoAccessToken(accessToken);
+      setVideoAccessTokenParam(params.accessTokenParam === "access" ? "access" : "vat");
+      setVideoAccessRefreshable(params.refreshable === true);
       setVideoUnlockExpiresAtMs(expiresAtMs);
       if (!videoEntitlementKey) return;
       try {
@@ -1011,6 +853,8 @@ export default function WatchPage() {
           unlockedAtMs,
           expiresAtMs,
           accessToken,
+          accessTokenParam: params.accessTokenParam === "access" ? "access" : "vat",
+          refreshable: params.refreshable === true,
           accessScope,
           playlistId
         });
@@ -1022,14 +866,16 @@ export default function WatchPage() {
         // ignore storage errors
       }
     },
-    [videoEntitlementKey, videoPaidRequiresUnlock, videoPlaylistEntitlementKey, videoPlaylistId, videoPolicy.accessSeconds]
+    [videoAccessRequired, videoEntitlementKey, videoPlaylistEntitlementKey, videoPlaylistId, videoPolicy.accessSeconds]
   );
 
   useEffect(() => {
-    if (!videoPaidRequiresUnlock) {
+    if (!videoAccessRequired) {
       setVideoUnlocked(true);
       setVideoUnlockExpiresAtMs(null);
       setVideoAccessToken(null);
+      setVideoAccessTokenParam("vat");
+      setVideoAccessRefreshable(false);
       return;
     }
     setVideoUnlocked(false);
@@ -1051,6 +897,8 @@ export default function WatchPage() {
           unlockedAtMs?: number;
           expiresAtMs?: number | null;
           accessToken?: string | null;
+          accessTokenParam?: "access" | "vat";
+          refreshable?: boolean;
           accessScope?: "stream" | "playlist";
           playlistId?: string | null;
         } | null;
@@ -1071,13 +919,15 @@ export default function WatchPage() {
         }
         setVideoUnlocked(true);
         setVideoAccessToken(accessToken);
+        setVideoAccessTokenParam(parsed?.accessTokenParam === "access" ? "access" : "vat");
+        setVideoAccessRefreshable(parsed?.refreshable === true);
         setVideoUnlockExpiresAtMs(expiresAtMs);
         break;
       }
     } catch {
       // ignore parse errors
     }
-  }, [videoEntitlementKey, videoEntitlementScope, videoPaidRequiresUnlock, videoPlaylistEntitlementKey, videoPlaylistId]);
+  }, [videoAccessRequired, videoEntitlementKey, videoEntitlementScope, videoPlaylistEntitlementKey, videoPlaylistId]);
 
   useEffect(() => {
     if (!videoUnlockExpiresAtMs || !videoEntitlementKey) return;
@@ -1093,6 +943,8 @@ export default function WatchPage() {
     if (remaining <= 0) {
       setVideoUnlocked(false);
       setVideoAccessToken(null);
+      setVideoAccessTokenParam("vat");
+      setVideoAccessRefreshable(false);
       setVideoUnlockExpiresAtMs(null);
       clearKeys();
       return;
@@ -1101,11 +953,50 @@ export default function WatchPage() {
     const timer = setTimeout(() => {
       setVideoUnlocked(false);
       setVideoAccessToken(null);
+      setVideoAccessTokenParam("vat");
+      setVideoAccessRefreshable(false);
       setVideoUnlockExpiresAtMs(null);
       clearKeys();
     }, remaining);
     return () => clearTimeout(timer);
   }, [videoEntitlementKey, videoPlaylistEntitlementKey, videoUnlockExpiresAtMs]);
+
+  useEffect(() => {
+    if (!videoAccessRefreshable || !videoAccessToken || !videoUnlockExpiresAtMs || !announceEvent) return;
+    const delayMs = Math.max(1_000, videoUnlockExpiresAtMs - Date.now() - 60_000);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch("/api/playback-access/refresh", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token: videoAccessToken, announceEvent }),
+            cache: "no-store"
+          });
+          const body = (await response.json().catch(() => null)) as { token?: unknown; expiresAtSec?: unknown; error?: unknown } | null;
+          if (!response.ok || typeof body?.token !== "string" || typeof body.expiresAtSec !== "number") {
+            throw new Error(typeof body?.error === "string" ? body.error : "Playback access refresh failed.");
+          }
+          if (cancelled) return;
+          persistVideoUnlock({
+            accessToken: body.token,
+            expiresAtMs: body.expiresAtSec * 1000,
+            accessTokenParam: "access",
+            refreshable: true
+          });
+        } catch (error) {
+          if (!cancelled) {
+            setVideoUnlockError(error instanceof Error ? `${error.message} Use Restore access to retry.` : "Playback access refresh failed.");
+          }
+        }
+      })();
+    }, delayMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [announceEvent, persistVideoUnlock, videoAccessRefreshable, videoAccessToken, videoUnlockExpiresAtMs]);
 
   const claimVideoAccess = useCallback(
     async (tipSession: string, observedAtMs: number | null): Promise<boolean> => {
@@ -1379,6 +1270,8 @@ export default function WatchPage() {
     setVideoUnlockError(null);
     setVideoUnlockStatus(null);
     setVideoAccessToken(null);
+    setVideoAccessTokenParam("vat");
+    setVideoAccessRefreshable(false);
   }, [pubkey, streamId]);
 
   const makeNip98AuthHeader = useCallback(
@@ -1676,7 +1569,8 @@ export default function WatchPage() {
     streamId
   ]);
 
-  const showVideoUnlockGate = videoPaidRequiresUnlock && !videoUnlocked;
+  const showVideoPackageGate = videoPackageRequiresUnlock && !videoUnlocked;
+  const showVideoUnlockGate = videoPaidRequiresUnlock && videoPackages.length === 0 && !videoUnlocked;
   const videoAccessExpiryLabel = useMemo(() => {
     if (!videoUnlockExpiresAtMs) return null;
     return new Date(videoUnlockExpiresAtMs).toLocaleString();
@@ -1705,6 +1599,7 @@ export default function WatchPage() {
     <ChatBox
       streamPubkey={pubkey ?? ""}
       streamId={streamId}
+      paymentMethods={paymentMethods}
       viewerCount={effectiveViewerCount}
       onMessageCountChange={(count) => {
         if (!e2e || e2eSentRef.current.chat) return;
@@ -1742,7 +1637,29 @@ export default function WatchPage() {
           }`}
         >
           <div className={desktopWatchLayout || mobileLandscapeLayout ? "min-w-0 flex flex-col gap-6" : "flex flex-col gap-4"}>
-            {showVideoUnlockGate ? (
+            {videoPackagesLoading && announce?.status === "ended" ? (
+              <div className="flex min-h-40 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900/30 text-sm text-neutral-500">
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Checking video access...
+              </div>
+            ) : showVideoPackageGate && pubkey && originStreamId ? (
+              <VideoPackageCheckout
+                packages={videoPackages}
+                announceEvent={announceEvent}
+                streamPubkey={pubkey}
+                streamId={streamId}
+                originStreamId={originStreamId}
+                onUnlocked={({ token, expiresAtMs }) => {
+                  setVideoUnlockError(null);
+                  persistVideoUnlock({
+                    accessToken: token,
+                    expiresAtMs,
+                    accessScope: "stream",
+                    accessTokenParam: "access",
+                    refreshable: true
+                  });
+                }}
+              />
+            ) : showVideoUnlockGate ? (
               <div className="rounded-2xl border border-amber-700/40 bg-amber-950/15 p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -1867,6 +1784,9 @@ export default function WatchPage() {
                 )}
               </div>
             )}
+            {videoPackagesError && announce?.status === "ended" ? (
+              <div className="text-xs text-red-300">{videoPackagesError}</div>
+            ) : null}
 
             {mobilePortraitLayout && (
               <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex flex-col w-full h-[calc(100svh-clamp(15rem,35vh,24rem))] min-h-[30rem]">
@@ -1929,7 +1849,7 @@ export default function WatchPage() {
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <div className="text-emerald-300">Playing live stream path.</div>
                     {p2pStats && <P2PStatsPanel stats={p2pStats} />}
-                    {tipModalMethods.length > 0 && (
+                    {paymentMethods.length > 0 && (
                       <button
                         type="button"
                         onClick={openTipModal}
@@ -2351,168 +2271,6 @@ export default function WatchPage() {
               </div>
             )}
 
-	            {paymentRailGroups.length > 0 && (
-	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">Wallet Actions</div>
-                  <div className="text-xs text-neutral-500">Native app / extension / CLI</div>
-                </div>
-
-                <div className="space-y-3">
-                  {paymentRailGroups.map(({ rail, methods }) => (
-                    <div key={rail.id} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-xs font-semibold text-neutral-200">{rail.name}</div>
-                        <div className="text-[11px] text-neutral-500">
-                          {rail.execution === "verified_backend" ? "verified backend" : "wallet URI / copy"}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        {methods.map((method, methodIndex) => {
-                          const paymentKey = `${rail.id}:${method.asset}:${method.network ?? ""}:${method.address}:${methodIndex}`;
-                          const walletUri = buildPaymentUri(method);
-                          const preferredWalletId = social.settings.paymentDefaults.preferredWalletByAsset[method.asset] ?? null;
-                          const preferredWallet = getWalletIntegrationById(preferredWalletId);
-                          const copyState = paymentCopyStatus[paymentKey] ?? "idle";
-                          const nativeState = nativeSendStatusByKey[paymentKey];
-                          const nativeBusy = !!nativeSendBusyByKey[paymentKey];
-                          const nativeAmountDraft = nativeSendAmountByKey[paymentKey] ?? "";
-                          const assetMeta = PAYMENT_ASSET_META[method.asset];
-                          const nativeCapability = getNativeWalletCapability(method);
-                          const nativeSupported = nativeCapability.supported && supportsNativeWalletPayment(method);
-                          const nativeNeedsAmount = nativeCapability.requiresAmount && nativeWalletSendNeedsAmount(method);
-                          const nativeAmount = (method.amount ?? "").trim() || nativeAmountDraft.trim();
-                          const canNativeSend = nativeSupported && (!nativeNeedsAmount || !!nativeAmount);
-                          const providerLabel = nativeCapability.providerLabel || nativeWalletProviderLabel(method);
-                          const nativeActionLabel = nativeCapability.mode === "wallet_uri" ? "Open wallet app" : `Send via ${providerLabel}`;
-                          const nativeTitle = nativeSupported
-                            ? nativeCapability.mode === "wallet_uri"
-                              ? "Open wallet using payment URI"
-                              : `Send with ${providerLabel}`
-                            : nativeCapability.reason ?? `${providerLabel} not detected in this browser`;
-                          return (
-                            <div key={paymentKey} className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-3 py-2 space-y-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="text-xs text-neutral-300">
-                                  <span className="font-semibold text-neutral-200">{assetMeta.symbol}</span>
-                                  {method.network ? <span className="text-neutral-500"> · {method.network}</span> : null}
-                                  {method.label ? <span className="text-neutral-500"> · {method.label}</span> : null}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => void copyPaymentAddress(paymentKey, method.address)}
-                                    className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 inline-flex items-center gap-1.5"
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                    {copyState === "copied" ? "Copied" : copyState === "error" ? "Error" : "Copy"}
-                                  </button>
-                                  {walletUri && (
-                                    <a
-                                      href={walletUri}
-                                      className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                                    >
-                                      {preferredWallet ? `Open ${preferredWallet.name}` : "Open wallet"}
-                                    </a>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => void sendNativePayment(paymentKey, method)}
-                                    disabled={!canNativeSend || nativeBusy}
-                                    className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                                    title={nativeTitle}
-                                  >
-                                    {nativeBusy ? "Sending…" : nativeActionLabel}
-                                  </button>
-                                </div>
-                              </div>
-                              {nativeNeedsAmount && !(method.amount ?? "").trim() && (
-                                <input
-                                  value={nativeAmountDraft}
-                                  onChange={(event) =>
-                                    setNativeSendAmountByKey((prev) => ({ ...prev, [paymentKey]: event.target.value }))
-                                  }
-                                  placeholder={`Amount (${assetMeta.symbol})`}
-                                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:border-blue-500 focus:outline-none"
-                                />
-                              )}
-                              {!nativeSupported && (
-                                <div className="text-[11px] text-neutral-500">
-                                  {nativeCapability.reason ?? `${providerLabel} not detected in this browser.`}
-                                </div>
-                              )}
-                              {nativeCapability.mode === "wallet_uri" && nativeSupported && (
-                                <div className="text-[11px] text-neutral-500">
-                                  This asset opens your installed wallet app using a URI handoff.
-                                </div>
-                              )}
-                              <div className="text-xs text-neutral-400 font-mono break-all">{method.address}</div>
-                              {nativeState?.message ? (
-                                <div className={`text-[11px] ${nativeState.ok ? "text-emerald-300" : "text-red-300"}`}>
-                                  {nativeState.message}
-                                  {nativeState.txId ? (
-                                    <>
-                                      {" "}
-                                      · tx{" "}
-                                      <span className="font-mono text-neutral-300">
-                                        {shortenText(nativeState.txId, { head: 12, tail: 8 })}
-                                      </span>
-                                    </>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-	            {hasLightningZap && (
-	              <div className={`${mobilePortraitLayout ? "order-5" : ""} rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-wider font-bold">NIP-57 Zaps</div>
-                  <div className="text-xs text-neutral-500">
-                    Receipts: <span className="font-mono text-neutral-300">{zapCount}</span> ·{" "}
-                    <span className="font-mono text-neutral-300">{zapTotalSats}</span> sats
-                  </div>
-                </div>
-                <div className="text-xs text-neutral-500">
-                  Pay through Nostr Wallet Connect, WebLN, or an installed Lightning wallet. The recipient provider publishes the receipt.
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_auto] gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={zapAmountSats}
-                    onChange={(event) => setZapAmountSats(event.target.value)}
-                    placeholder="sats"
-                    className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:border-blue-500 focus:outline-none"
-                  />
-                  <input
-                    value={zapComment}
-                    onChange={(event) => setZapComment(event.target.value)}
-                    placeholder="Optional zap note"
-                    className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-200 focus:border-blue-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void publishZapRequest()}
-                    disabled={zapRequestBusy}
-                    className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                  >
-                    {zapRequestBusy ? "Requesting invoice…" : "Zap now"}
-                  </button>
-                </div>
-                {zapRequestNotice && <div className="text-xs text-emerald-300">{zapRequestNotice}</div>}
-                {zapRequestError && <div className="text-xs text-red-300">{zapRequestError}</div>}
-              </div>
-            )}
           </div>
 
           {(desktopWatchLayout || mobileLandscapeLayout) && (
@@ -2529,130 +2287,14 @@ export default function WatchPage() {
           )}
         </div>
 
-        {tipModalOpen && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/75" onClick={closeTipModal} />
-            <div className="relative z-10 w-full max-w-3xl max-h-[88dvh] overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-neutral-800 px-5 py-4">
-                <div>
-                  <div className="text-sm font-semibold text-neutral-100">Tip Streamer</div>
-                  <div className="mt-1 text-xs text-neutral-500">
-                    Wallet rails configured by this creator. Methods matching your wallet setup are listed first.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeTipModal}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-                  aria-label="Close tip modal"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="max-h-[calc(88dvh-5rem)] overflow-y-auto px-5 py-4 space-y-3">
-                {tipModalMethods.length === 0 ? (
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-sm text-neutral-400">
-                    This stream has not configured any tip wallets yet.
-                  </div>
-                ) : (
-                  tipModalMethods.map(({ method, index, commonAsset, commonNetwork }) => {
-                    const paymentKey = `tip-modal:${index}:${method.asset}:${method.network ?? ""}:${method.address}`;
-                    const walletUri = buildPaymentUri(method);
-                    const preferredWalletId = social.settings.paymentDefaults.preferredWalletByAsset[method.asset] ?? null;
-                    const preferredWallet = getWalletIntegrationById(preferredWalletId);
-                    const copyState = paymentCopyStatus[paymentKey] ?? "idle";
-                    const nativeState = nativeSendStatusByKey[paymentKey];
-                    const nativeBusy = !!nativeSendBusyByKey[paymentKey];
-                    const nativeAmountDraft = nativeSendAmountByKey[paymentKey] ?? "";
-                    const assetMeta = PAYMENT_ASSET_META[method.asset];
-                    const nativeCapability = getNativeWalletCapability(method);
-                    const nativeSupported = nativeCapability.supported && supportsNativeWalletPayment(method);
-                    const nativeNeedsAmount = nativeCapability.requiresAmount && nativeWalletSendNeedsAmount(method);
-                    const nativeAmount = (method.amount ?? "").trim() || nativeAmountDraft.trim();
-                    const canNativeSend = nativeSupported && (!nativeNeedsAmount || !!nativeAmount);
-                    const providerLabel = nativeCapability.providerLabel || nativeWalletProviderLabel(method);
-                    const nativeActionLabel = nativeCapability.mode === "wallet_uri" ? "Open wallet app" : `Send via ${providerLabel}`;
-                    const nativeTitle = nativeSupported
-                      ? nativeCapability.mode === "wallet_uri"
-                        ? "Open wallet using payment URI"
-                        : `Send with ${providerLabel}`
-                      : nativeCapability.reason ?? `${providerLabel} not detected in this browser`;
-
-                    return (
-                      <div key={paymentKey} className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 space-y-2.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <span className="font-semibold text-neutral-200">{assetMeta.symbol}</span>
-                            {method.network ? <span className="text-neutral-500">· {method.network}</span> : null}
-                            {method.label ? <span className="text-neutral-500">· {method.label}</span> : null}
-                            {commonNetwork ? (
-                              <span className="rounded-full border border-emerald-600/70 bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-200">
-                                Matches your network
-                              </span>
-                            ) : commonAsset ? (
-                              <span className="rounded-full border border-blue-600/70 bg-blue-900/30 px-2 py-0.5 text-[11px] text-blue-200">
-                                Matches your wallet setup
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => void copyPaymentAddress(paymentKey, method.address)}
-                              className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 inline-flex items-center gap-1.5"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                              {copyState === "copied" ? "Copied" : copyState === "error" ? "Error" : "Copy"}
-                            </button>
-                            {walletUri && (
-                              <a
-                                href={walletUri}
-                                className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200"
-                              >
-                                {preferredWallet ? `Open ${preferredWallet.name}` : "Open wallet"}
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => void sendNativePayment(paymentKey, method)}
-                              disabled={!canNativeSend || nativeBusy}
-                              className="px-2.5 py-1 rounded-lg bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs text-neutral-200 disabled:opacity-50"
-                              title={nativeTitle}
-                            >
-                              {nativeBusy ? "Sending…" : nativeActionLabel}
-                            </button>
-                          </div>
-                        </div>
-
-                        {nativeNeedsAmount && !(method.amount ?? "").trim() && (
-                          <input
-                            value={nativeAmountDraft}
-                            onChange={(event) => setNativeSendAmountByKey((prev) => ({ ...prev, [paymentKey]: event.target.value }))}
-                            placeholder={`Amount (${assetMeta.symbol})`}
-                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:border-blue-500 focus:outline-none"
-                          />
-                        )}
-                        <div className="text-xs text-neutral-400 font-mono break-all">{method.address}</div>
-                        {nativeState?.message ? (
-                          <div className={`text-[11px] ${nativeState.ok ? "text-emerald-300" : "text-red-300"}`}>
-                            {nativeState.message}
-                            {nativeState.txId ? (
-                              <>
-                                {" "}
-                                · tx <span className="font-mono text-neutral-300">{shortenText(nativeState.txId, { head: 12, tail: 8 })}</span>
-                              </>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <UnifiedTipDialog
+          open={tipModalOpen}
+          streamPubkey={pubkey ?? ""}
+          streamId={streamId}
+          broadcasterName={social.getAlias(pubkey ?? "") || announce?.title}
+          paymentMethods={paymentMethods}
+          onClose={closeTipModal}
+        />
 
         <ReportDialog
           open={watchReportOpen}

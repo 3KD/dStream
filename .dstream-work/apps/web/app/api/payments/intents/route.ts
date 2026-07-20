@@ -7,7 +7,7 @@ import { verifyTipSession } from "@/lib/monero/tipSession";
 import { getPaymentRailById, getPaymentRailForMethod, type PaymentRailId } from "@/lib/payments/rails";
 import { normalizePaymentAddress, normalizePaymentAsset, validatePaymentAddress, validatePaymentAmount } from "@/lib/payments/methods";
 import { createPaymentIntent, type PaymentIntentScope } from "@/lib/payments/server/intentStore";
-import { PaymentVerificationError } from "@/lib/payments/server";
+import { getPaymentRailCapabilities, PaymentVerificationError } from "@/lib/payments/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,6 +138,13 @@ export async function POST(req: Request): Promise<Response> {
     const amountError = validatePaymentAmount(method.asset, method.amount ?? "", method.network ?? "", method.address);
     if (amountError || !method.amount) throw new PaymentVerificationError(amountError || "Payment amount is required.", 400);
     const railId = railForMethod(method, requestedRail);
+    const capability = getPaymentRailCapabilities().find((row) => row.railId === railId && row.asset === method.asset);
+    if (!capability?.configured) {
+      throw new PaymentVerificationError(
+        capability?.reason || `${method.asset.toUpperCase()} settlement is not configured on the ${railId} rail.`,
+        503
+      );
+    }
     const created = createPaymentIntent({
       scope,
       buyerPubkey: proof.pubkey,

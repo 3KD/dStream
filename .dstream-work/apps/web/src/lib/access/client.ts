@@ -826,6 +826,54 @@ export async function buildAccessViewerProof(
   });
 }
 
+export async function buildPlaybackAccessProof(
+  signEvent: ((event: Omit<NostrEvent, "id" | "sig">) => Promise<NostrEvent>) | undefined,
+  pubkey: string | null | undefined,
+  originStreamId: string,
+  ttlSec = 900
+): Promise<NostrEvent | null> {
+  if (!signEvent || !pubkey || !originStreamId.trim()) return null;
+  const expiresAtSec = nowSec() + Math.max(60, Math.min(ttlSec, 3600));
+  try {
+    return await signEvent({
+      kind: 27235,
+      pubkey,
+      created_at: nowSec(),
+      tags: [
+        ["dstream", "watch_access"],
+        ["stream", originStreamId.trim()],
+        ["exp", String(expiresAtSec)]
+      ],
+      content: ""
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function issuePlaybackAccessTokenClient(input: {
+  announceEvent: NostrEvent;
+  viewerProofEvent: NostrEvent;
+  streamPubkey: string;
+  streamId: string;
+  originStreamId: string;
+}): Promise<{ token: string; expiresAtSec: number }> {
+  const response = await fetch("/api/playback-access/issue", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store"
+  });
+  const body = (await parseJsonResponse(response)) as AccessApiResult<{
+    token?: string;
+    expiresAtSec?: number;
+  }> | null;
+  if (!response.ok || !body?.ok || typeof body.token !== "string" || typeof body.expiresAtSec !== "number") {
+    throw new Error(asErrorMessage(body, "Failed to issue playback access."));
+  }
+  return { token: body.token, expiresAtSec: body.expiresAtSec };
+}
+
 export async function buildAccessProof(
   signEvent: ((event: Omit<NostrEvent, "id" | "sig">) => Promise<NostrEvent>) | undefined,
   pubkey: string | null | undefined,

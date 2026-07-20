@@ -10,6 +10,12 @@ import type { AccessDecision } from "@/lib/access/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function playbackCookie(req: Request, originStreamId: string, token: string, expiresAtSec: number): string {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  const maxAge = Math.max(1, expiresAtSec - Math.floor(Date.now() / 1000));
+  return `dstream_playback_access=${encodeURIComponent(token)}; Path=/api/video/file/${encodeURIComponent(originStreamId)}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -137,7 +143,7 @@ export async function POST(req: Request): Promise<Response> {
     privateStream: policy.privateStream
   });
 
-  return Response.json({
+  const response = Response.json({
     ok: true,
     token: issued.token,
     expiresAtSec: issued.expiresAtSec,
@@ -148,4 +154,6 @@ export async function POST(req: Request): Promise<Response> {
     reasonCode: liveDecision?.reasonCode ?? "allow_public",
     entitlementId: liveDecision?.entitlementId ?? null
   });
+  response.headers.append("set-cookie", playbackCookie(req, expectedOriginStreamId, issued.token, issued.expiresAtSec));
+  return response;
 }

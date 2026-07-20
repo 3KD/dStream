@@ -5,6 +5,7 @@ import { buildStreamAnnounceEvent } from "@dstream/protocol";
 import { makeOriginStreamId } from "./origin";
 import {
   authorizePlaybackProxyRequest,
+  authorizeVideoProxyRequest,
   issuePlaybackAccessToken,
   registerPlaybackPolicyFromAnnounceEvent
 } from "./playback-access";
@@ -13,6 +14,8 @@ function buildSignedAnnounce(input: {
   streamId: string;
   status?: "live" | "ended";
   viewerAllowPubkeys?: string[];
+  videoArchiveEnabled?: boolean;
+  videoVisibility?: "public" | "private";
 }) {
   const secret = generateSecretKey();
   const pubkey = getPublicKey(secret);
@@ -22,7 +25,9 @@ function buildSignedAnnounce(input: {
     streamId: input.streamId,
     title: "test",
     status: input.status ?? "live",
-    viewerAllowPubkeys: input.viewerAllowPubkeys ?? []
+    viewerAllowPubkeys: input.viewerAllowPubkeys ?? [],
+    videoArchiveEnabled: input.videoArchiveEnabled,
+    videoVisibility: input.videoVisibility
   });
   return { pubkey, signed: finalizeEvent(unsigned as any, secret) as any };
 }
@@ -109,3 +114,30 @@ test("playback access: rendition suffix still enforces origin token", () => {
   assert.equal(withToken.ok, true);
 });
 
+test("playback access: public archive allows anonymous video requests", () => {
+  const { pubkey, signed } = buildSignedAnnounce({
+    streamId: "video-public-1",
+    status: "ended",
+    videoArchiveEnabled: true,
+    videoVisibility: "public"
+  });
+  assert.equal(registerPlaybackPolicyFromAnnounceEvent(signed).ok, true);
+  const originStreamId = makeOriginStreamId(pubkey, "video-public-1");
+  assert.ok(originStreamId);
+  if (!originStreamId) return;
+  assert.equal(authorizeVideoProxyRequest(originStreamId, null, ["index.m3u8"]).ok, true);
+});
+
+test("playback access: private archive rejects anonymous video requests", () => {
+  const { pubkey, signed } = buildSignedAnnounce({
+    streamId: "video-private-1",
+    status: "ended",
+    videoArchiveEnabled: true,
+    videoVisibility: "private"
+  });
+  assert.equal(registerPlaybackPolicyFromAnnounceEvent(signed).ok, true);
+  const originStreamId = makeOriginStreamId(pubkey, "video-private-1");
+  assert.ok(originStreamId);
+  if (!originStreamId) return;
+  assert.equal(authorizeVideoProxyRequest(originStreamId, null, ["index.m3u8"]).ok, false);
+});

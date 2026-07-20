@@ -69,7 +69,7 @@ It maps:
 3) **Payments scope drift inside JRNY**
 - JRNY branding says Monero-first.
 - JRNY PROTOCOL/CONFIG also mention non-Monero receipt namespaces.
-- Decision: **Monero-only for verified settlement** (ADR `0021`), while additional payout rails are supported as unverified address/URI methods.
+- Decision: **intent-bound, provider-gated settlement** (ADR `0031`). XMR, Lightning, UTXO, EVM, TRON, Solana, XRPL, and Cardano adapters verify exact recipients, amounts, and finality; an unconfigured provider fails closed.
 
 4) **WHEP**
 - JRNY README calls out “WHIP/WHEP native”.

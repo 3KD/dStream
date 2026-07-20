@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, ExternalLink, PlugZap, Save, Trash2, Wifi } from "lucide-react";
+import { AlertTriangle, Check, ClipboardPaste, ExternalLink, Eye, EyeOff, PlugZap, Save, Trash2, Wifi } from "lucide-react";
 import { WALLET_INTEGRATIONS, PAYMENT_ASSET_META } from "@/lib/payments/catalog";
-import { clearNwcConnection, getNwcConnection, saveNwcConnection, testNwcConnection } from "@/lib/payments/lightningWallet";
+import {
+  clearNwcConnection,
+  getNwcConnection,
+  getNwcPersistence,
+  saveNwcConnection,
+  testNwcConnection
+} from "@/lib/payments/lightningWallet";
 
 export function walletModeLabel(mode: "native_app" | "browser_extension" | "external_cli") {
   if (mode === "browser_extension") return "Browser extension";
@@ -20,6 +26,8 @@ export function walletModeHint(mode: "native_app" | "browser_extension" | "exter
 export function WalletIntegrationsInfo() {
   const [nwcInput, setNwcInput] = useState("");
   const [nwcBusy, setNwcBusy] = useState(false);
+  const [nwcVisible, setNwcVisible] = useState(false);
+  const [rememberNwc, setRememberNwc] = useState(false);
   const [nwcStatus, setNwcStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [settlementCapabilities, setSettlementCapabilities] = useState<
     Array<{ asset: string; railId: string; network: string; configured: boolean; reason?: string }>
@@ -27,6 +35,7 @@ export function WalletIntegrationsInfo() {
 
   useEffect(() => {
     setNwcInput(getNwcConnection());
+    setRememberNwc(getNwcPersistence() === "device");
     let active = true;
     void fetch("/api/payments/capabilities", { cache: "no-store" })
       .then((response) => response.json())
@@ -43,7 +52,7 @@ export function WalletIntegrationsInfo() {
     setNwcBusy(true);
     setNwcStatus(null);
     try {
-      saveNwcConnection(nwcInput);
+      saveNwcConnection(nwcInput, { rememberOnDevice: rememberNwc });
       await testNwcConnection(nwcInput);
       setNwcStatus({ ok: true, message: "Connected" });
     } catch (error) {
@@ -57,6 +66,17 @@ export function WalletIntegrationsInfo() {
     clearNwcConnection();
     setNwcInput("");
     setNwcStatus({ ok: true, message: "Disconnected" });
+  };
+
+  const pasteNwc = async () => {
+    setNwcStatus(null);
+    try {
+      const value = await navigator.clipboard.readText();
+      if (!value.trim()) throw new Error("Clipboard is empty");
+      setNwcInput(value.trim());
+    } catch (error) {
+      setNwcStatus({ ok: false, message: error instanceof Error ? error.message : "Paste failed" });
+    }
   };
 
   const walletIntegrationsByMode = useMemo(() => {
@@ -100,14 +120,36 @@ export function WalletIntegrationsInfo() {
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="password"
-            autoComplete="off"
-            value={nwcInput}
-            onChange={(event) => setNwcInput(event.target.value)}
-            placeholder="nostr+walletconnect://..."
-            className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-neutral-200 outline-none focus:border-blue-500"
-          />
+          <div className="flex min-w-0 flex-1">
+            <input
+              type={nwcVisible ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
+              value={nwcInput}
+              onChange={(event) => setNwcInput(event.target.value)}
+              placeholder="nostr+walletconnect://..."
+              aria-label="Nostr Wallet Connect secret"
+              className="min-w-0 flex-1 rounded-l-md border border-r-0 border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-neutral-200 outline-none focus:border-blue-500"
+            />
+            <button
+              type="button"
+              onClick={() => setNwcVisible((current) => !current)}
+              className="inline-flex h-9 w-9 items-center justify-center border border-neutral-700 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+              title={nwcVisible ? "Hide connection secret" : "Show connection secret"}
+              aria-label={nwcVisible ? "Hide connection secret" : "Show connection secret"}
+            >
+              {nwcVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => void pasteNwc()}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-r-md border border-l-0 border-neutral-700 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+              title="Paste connection secret"
+              aria-label="Paste connection secret"
+            >
+              <ClipboardPaste className="h-4 w-4" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => void saveAndTestNwc()}
@@ -127,6 +169,15 @@ export function WalletIntegrationsInfo() {
             Disconnect
           </button>
         </div>
+        <label className="inline-flex items-center gap-2 text-xs text-neutral-400">
+          <input
+            type="checkbox"
+            checked={rememberNwc}
+            onChange={(event) => setRememberNwc(event.target.checked)}
+            className="h-4 w-4 accent-blue-500"
+          />
+          Remember this connection on this device
+        </label>
       </div>
 
       {settlementCapabilities.length ? (
