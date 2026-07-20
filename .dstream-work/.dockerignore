@@ -9,6 +9,8 @@
 !packages/
 !packages/protocol/
 !packages/protocol/**
+!scripts/
+!scripts/smoke-payment-rails-real.ts
 apps/web/.next
 apps/web/.next/**
 apps/web/node_modules
