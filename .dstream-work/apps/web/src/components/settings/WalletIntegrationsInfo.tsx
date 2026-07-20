@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ClipboardPaste, ExternalLink, Eye, EyeOff, PlugZap, Save, Trash2, Wifi } from "lucide-react";
 import { WALLET_INTEGRATIONS, PAYMENT_ASSET_META } from "@/lib/payments/catalog";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import {
   clearNwcConnection,
   getNwcConnection,
@@ -83,7 +84,9 @@ export function WalletIntegrationsInfo() {
     const modes: Array<"native_app" | "browser_extension" | "external_cli"> = ["native_app", "browser_extension", "external_cli"];
     return modes.map((mode) => ({
       mode,
-      wallets: WALLET_INTEGRATIONS.filter((wallet) => wallet.mode === mode)
+      wallets: WALLET_INTEGRATIONS.filter(
+        (wallet) => wallet.mode === mode && wallet.assets.some((asset) => isPublicPaymentAsset(asset))
+      )
     }));
   }, []);
 
@@ -226,7 +229,7 @@ export function WalletIntegrationsInfo() {
                     </a>
                   </div>
                   <div className="text-[11px] text-neutral-500">
-                    Assets: {wallet.assets.map((asset) => PAYMENT_ASSET_META[asset].symbol).join(", ")}
+                    Assets: {wallet.assets.filter(isPublicPaymentAsset).map((asset) => PAYMENT_ASSET_META[asset].symbol).join(", ")}
                   </div>
                 </div>
               ))}

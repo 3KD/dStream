@@ -30,6 +30,7 @@ import {
   type PaymentIntentCredentials
 } from "@/lib/payments/paymentIntents";
 import { getPaymentRailForMethod } from "@/lib/payments/rails";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 
 interface VideoPackageCheckoutProps {
   packages: VideoAccessPackage[];
@@ -74,7 +75,8 @@ export function VideoPackageCheckout({
 }: VideoPackageCheckoutProps) {
   const { identity, signEvent } = useIdentity();
   const relays = useMemo(() => getNostrRelays(), []);
-  const [selectedId, setSelectedId] = useState(packages[0]?.id ?? "");
+  const publicPackages = useMemo(() => packages.filter((pkg) => isPublicPaymentAsset(pkg.paymentAsset)), [packages]);
+  const [selectedId, setSelectedId] = useState(publicPackages[0]?.id ?? "");
   const [capabilities, setCapabilities] = useState<ClientPaymentRailCapability[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Loading payment readiness...");
@@ -83,8 +85,8 @@ export function VideoPackageCheckout({
   const [pendingLightning, setPendingLightning] = useState<PendingLightningPayment | null>(null);
 
   useEffect(() => {
-    if (!packages.some((pkg) => pkg.id === selectedId)) setSelectedId(packages[0]?.id ?? "");
-  }, [packages, selectedId]);
+    if (!publicPackages.some((pkg) => pkg.id === selectedId)) setSelectedId(publicPackages[0]?.id ?? "");
+  }, [publicPackages, selectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +104,7 @@ export function VideoPackageCheckout({
     };
   }, []);
 
-  const selectedPackage = packages.find((pkg) => pkg.id === selectedId) ?? packages[0] ?? null;
+  const selectedPackage = publicPackages.find((pkg) => pkg.id === selectedId) ?? publicPackages[0] ?? null;
   const selectedMethod = selectedPackage ? packageMethod(selectedPackage) : null;
   const selectedCapability = selectedMethod && capabilities ? capabilityForMethod(selectedMethod, capabilities) : null;
   const railReady = selectedCapability?.configured === true;
@@ -378,7 +380,7 @@ export function VideoPackageCheckout({
         </div>
       </div>
 
-      {packages.length > 1 ? (
+      {publicPackages.length > 1 ? (
         <select
           value={selectedPackage.id}
           onChange={(event) => {
@@ -391,7 +393,7 @@ export function VideoPackageCheckout({
           disabled={busy}
           className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
         >
-          {packages.map((pkg) => (
+          {publicPackages.map((pkg) => (
             <option key={pkg.id} value={pkg.id}>
               {pkg.title} - {pkg.paymentAmount} {PAYMENT_ASSET_META[pkg.paymentAsset].symbol}
             </option>

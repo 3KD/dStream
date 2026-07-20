@@ -9,6 +9,7 @@ import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { serializeProfileContent, type NostrProfile } from "@/lib/profile";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 
 const PROFILE_DRAFTS_STORAGE_KEY = "dstream_profile_drafts_v1";
 
@@ -297,26 +298,32 @@ export function ProfileMetadataEditor() {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Ethereum Address (ETH)</div>
-          <input
-            value={draft.eth}
-            onChange={(event) => updateField("eth", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="0x..."
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">TRON Address (TRX)</div>
-          <input
-            value={draft.trx}
-            onChange={(event) => updateField("trx", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="T..."
-          />
-        </label>
-      </div>
+      {isPublicPaymentAsset("eth") || isPublicPaymentAsset("trx") ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {isPublicPaymentAsset("eth") ? (
+            <label className="space-y-1">
+              <div className="text-xs text-neutral-500">Ethereum Address (ETH)</div>
+              <input
+                value={draft.eth}
+                onChange={(event) => updateField("eth", event.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+                placeholder="0x..."
+              />
+            </label>
+          ) : null}
+          {isPublicPaymentAsset("trx") ? (
+            <label className="space-y-1">
+              <div className="text-xs text-neutral-500">TRON Address (TRX)</div>
+              <input
+                value={draft.trx}
+                onChange={(event) => updateField("trx", event.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
+                placeholder="T..."
+              />
+            </label>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="space-y-1">

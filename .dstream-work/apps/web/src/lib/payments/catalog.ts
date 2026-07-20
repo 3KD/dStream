@@ -1,4 +1,5 @@
 import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset, type StreamPaymentMethod } from "@dstream/protocol";
+import { getPublicPaymentAssets } from "./publicAssets";
 
 export interface PaymentAssetMeta {
   asset: StreamPaymentAsset;
@@ -42,6 +43,11 @@ export const PAYMENT_ASSET_ORDER: StreamPaymentAsset[] = [
   ...PAYMENT_ASSET_PREFERRED_HEAD,
   ...STREAM_PAYMENT_ASSETS.filter((asset) => !PAYMENT_ASSET_PREFERRED_HEAD_SET.has(asset))
 ];
+
+const PUBLIC_PAYMENT_ASSET_SET = new Set(getPublicPaymentAssets());
+export const PUBLIC_PAYMENT_ASSET_ORDER: StreamPaymentAsset[] = PAYMENT_ASSET_ORDER.filter((asset) =>
+  PUBLIC_PAYMENT_ASSET_SET.has(asset)
+);
 
 const PAYMENT_ASSET_ORDER_INDEX = new Map<StreamPaymentAsset, number>(
   PAYMENT_ASSET_ORDER.map((asset, index) => [asset, index])

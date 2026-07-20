@@ -5,8 +5,6 @@ import { getSupportLinks } from "@/lib/support";
 
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? "").trim();
 const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
-const supportEthAddress = (process.env.NEXT_PUBLIC_SUPPORT_ETH_ADDRESS ?? "").trim();
-const supportTrxAddress = (process.env.NEXT_PUBLIC_SUPPORT_TRX_ADDRESS ?? "").trim();
 const supportLinks = getSupportLinks();
 
 const protocolLinks = [
@@ -90,8 +88,6 @@ export function SiteFooter() {
             <div className="space-y-1.5 mt-2 rounded-lg border border-neutral-800/60 bg-neutral-900/30 p-2">
               {supportXmrAddress && <SupportAddressCopyChip label="XMR" address={supportXmrAddress} ariaLabel="Copy Monero support address" />}
               {supportBtcAddress && <SupportAddressCopyChip label="BTC" address={supportBtcAddress} ariaLabel="Copy Bitcoin support address" />}
-              {supportEthAddress && <SupportAddressCopyChip label="ETH" address={supportEthAddress} ariaLabel="Copy Ethereum support address" />}
-              {supportTrxAddress && <SupportAddressCopyChip label="TRX" address={supportTrxAddress} ariaLabel="Copy Tron support address" />}
               <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-800">Support addresses</div>
             </div>
             <div className="text-[11px] text-neutral-500 pt-1">Wallet setup: Settings → Wallet Integrations</div>

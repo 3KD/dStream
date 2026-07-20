@@ -20,6 +20,8 @@ afterEach(() => {
   delete process.env.DSTREAM_BTC_RPC_ORIGIN;
   delete process.env.DSTREAM_BTC_RPC_USER;
   delete process.env.DSTREAM_BTC_RPC_PASS;
+  delete process.env.DSTREAM_BTC_ESPLORA_ORIGINS;
+  delete process.env.DSTREAM_BTC_ESPLORA_QUORUM;
   delete process.env.DSTREAM_BTC_CONFIRMATIONS_REQUIRED;
   delete process.env.DSTREAM_ETH_RPC_ORIGIN;
   delete process.env.DSTREAM_ETH_CONFIRMATIONS_REQUIRED;
@@ -63,6 +65,74 @@ test("Bitcoin verifier binds network, recipient, amount, confirmations, and outp
   assert.equal(result.confirmations, 4);
   assert.equal(result.blockHeight, 899997);
   assert.equal(result.settlementKey, `btc:main:${txId}:1`);
+});
+
+test("Bitcoin Esplora verifier requires quorum agreement and uses conservative confirmations", async () => {
+  process.env.DSTREAM_BTC_ESPLORA_ORIGINS = "https://indexer-a.example/api,https://indexer-b.example/api";
+  process.env.DSTREAM_BTC_ESPLORA_QUORUM = "2";
+  process.env.DSTREAM_BTC_CONFIRMATIONS_REQUIRED = "3";
+  const txId = "b".repeat(64);
+  const blockHash = "c".repeat(64);
+  const address = "bc1qdstreamtestaddress";
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.endsWith("/blocks/tip/height")) {
+      return new Response(parsed.hostname === "indexer-a.example" ? "900003" : "900004", { status: 200 });
+    }
+    return jsonResponse({
+      txid: txId,
+      status: { confirmed: true, block_height: 900000, block_hash: blockHash },
+      vout: [
+        { scriptpubkey_address: "bc1qchange", value: 10_000 },
+        { scriptpubkey_address: address, value: 150_000 }
+      ]
+    });
+  };
+
+  const result = await verifyNativePayment({ asset: "btc", address, amount: "0.001", txId, paymentRailId: "utxo" });
+  assert.equal(result.amountAtomic, "150000");
+  assert.equal(result.confirmations, 4);
+  assert.equal(result.blockHeight, 900000);
+  assert.equal(result.settlementKey, `btc:main:${txId}:1`);
+  assert.deepEqual(result.metadata, {
+    outputIndex: 1,
+    blockHash,
+    verifier: "esplora_quorum",
+    quorum: 2,
+    agreeingProviders: 2
+  });
+});
+
+test("Bitcoin Esplora verifier fails closed on provider disagreement or quorum outage", async () => {
+  process.env.DSTREAM_BTC_ESPLORA_ORIGINS = "https://indexer-a.example/api,https://indexer-b.example/api";
+  process.env.DSTREAM_BTC_ESPLORA_QUORUM = "2";
+  const txId = "d".repeat(64);
+  const blockHash = "e".repeat(64);
+  const address = "bc1qdstreamtestaddress";
+  let outage = false;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    if (outage && parsed.hostname === "indexer-b.example") throw new Error("offline");
+    if (parsed.pathname.endsWith("/blocks/tip/height")) return new Response("900010", { status: 200 });
+    return jsonResponse({
+      txid: txId,
+      status: { confirmed: true, block_height: 900000, block_hash: blockHash },
+      vout: [
+        { scriptpubkey: parsed.hostname === "indexer-a.example" ? "0014aa" : "0014bb", scriptpubkey_address: "bc1qchange", value: 50_000 },
+        { scriptpubkey: "0014cc", scriptpubkey_address: address, value: 150_000 }
+      ]
+    });
+  };
+  await assert.rejects(
+    () => verifyNativePayment({ asset: "btc", address, amount: "0.001", txId, paymentRailId: "utxo" }),
+    /indexers disagree/
+  );
+
+  outage = true;
+  await assert.rejects(
+    () => verifyNativePayment({ asset: "btc", address, amount: "0.001", txId, paymentRailId: "utxo" }),
+    /quorum is unavailable/
+  );
 });
 
 test("Ethereum verifier rejects reverted or under-confirmed transactions and accepts a confirmed native transfer", async () => {

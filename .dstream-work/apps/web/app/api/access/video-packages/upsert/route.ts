@@ -1,5 +1,6 @@
 import { upsertVideoAccessPackage, type VideoAccessPackageStatus, type VideoAccessPackageVisibility } from "@/lib/access/packages";
 import type { StreamPaymentAsset } from "@dstream/protocol";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import { asString, authorizeAccessAdmin, normalizePubkey, parsePositiveInt } from "../../_lib";
 
 export const runtime = "nodejs";
@@ -38,6 +39,9 @@ export async function POST(req: Request): Promise<Response> {
   if (!streamId) return Response.json({ ok: false, error: "streamId is required" }, { status: 400 });
   if (!title) return Response.json({ ok: false, error: "title is required" }, { status: 400 });
   if (!paymentAsset) return Response.json({ ok: false, error: "paymentAsset is required" }, { status: 400 });
+  if (!isPublicPaymentAsset(paymentAsset as StreamPaymentAsset)) {
+    return Response.json({ ok: false, error: `${paymentAsset.toUpperCase()} is not enabled on this deployment` }, { status: 400 });
+  }
   if (!paymentAmount) return Response.json({ ok: false, error: "paymentAmount is required" }, { status: 400 });
   if (!durationHours) return Response.json({ ok: false, error: "durationHours must be a positive integer" }, { status: 400 });
 

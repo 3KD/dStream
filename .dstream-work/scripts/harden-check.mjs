@@ -280,8 +280,40 @@ function checkProdRules(options = {}) {
   if (whepProxy && !isHttpUrl(whepProxy)) errors.push("DSTREAM_WHEP_PROXY_ORIGIN must be a valid http(s) URL when set.");
   if (!isHttpUrl(hlsProxy)) errors.push("DSTREAM_HLS_PROXY_ORIGIN must be a valid http(s) URL.");
 
+  const btcRpcOrigin = readEnv("DSTREAM_BTC_RPC_ORIGIN").trim();
+  const btcEsploraOrigins = Array.from(new Set(parseCsvOrJsonList(readEnv("DSTREAM_BTC_ESPLORA_ORIGINS"))));
+  const btcEsploraQuorumRaw = readEnv("DSTREAM_BTC_ESPLORA_QUORUM").trim() || "2";
+  const btcEsploraQuorum = isDigits(btcEsploraQuorumRaw) ? Number(btcEsploraQuorumRaw) : 0;
+  let btcEsploraConfigured = false;
+  if (btcRpcOrigin) {
+    if (!isHttpUrl(btcRpcOrigin)) errors.push("DSTREAM_BTC_RPC_ORIGIN must be a valid http(s) URL.");
+    if (strictExternal && isExampleHost(hostName(btcRpcOrigin))) {
+      errors.push("Deploy mode forbids placeholder DSTREAM_BTC_RPC_ORIGIN host.");
+    }
+  } else if (btcEsploraOrigins.length > 0) {
+    const invalidOrigins = btcEsploraOrigins.filter((origin) => !isHttpUrl(origin));
+    if (invalidOrigins.length > 0) errors.push(`Invalid Bitcoin Esplora URL(s): ${invalidOrigins.join(", ")}`);
+    const placeholderOrigins = btcEsploraOrigins.filter((origin) => isExampleHost(hostName(origin)));
+    if (strictExternal && placeholderOrigins.length > 0) {
+      errors.push(`Deploy mode forbids placeholder Bitcoin Esplora host(s): ${placeholderOrigins.join(", ")}`);
+    }
+    if (!isDigits(btcEsploraQuorumRaw) || btcEsploraQuorum < 2) {
+      errors.push("DSTREAM_BTC_ESPLORA_QUORUM must be an integer of at least 2.");
+    } else if (btcEsploraQuorum > btcEsploraOrigins.length) {
+      errors.push("DSTREAM_BTC_ESPLORA_QUORUM cannot exceed the number of unique Esplora origins.");
+    } else if (invalidOrigins.length === 0 && placeholderOrigins.length === 0) {
+      btcEsploraConfigured = true;
+    }
+    const btcNetwork = readEnv("DSTREAM_BTC_NETWORK").trim().toLowerCase() || "main";
+    if (btcNetwork !== "main") errors.push("Esplora quorum verification currently requires DSTREAM_BTC_NETWORK=main.");
+  } else {
+    warnings.push("No Bitcoin Core RPC or Esplora quorum is configured; verified Bitcoin settlements will be unavailable.");
+  }
+  const btcConfirmations = readEnv("DSTREAM_BTC_CONFIRMATIONS_REQUIRED").trim() || "3";
+  if (!isDigits(btcConfirmations)) errors.push("DSTREAM_BTC_CONFIRMATIONS_REQUIRED must be digits.");
+  else if (Number(btcConfirmations) < 1) warnings.push("DSTREAM_BTC_CONFIRMATIONS_REQUIRED < 1 reduces payment finality.");
+
   const paymentProviders = [
-    ["Bitcoin", "DSTREAM_BTC_RPC_ORIGIN", "DSTREAM_BTC_CONFIRMATIONS_REQUIRED", "3"],
     ["Dogecoin", "DSTREAM_DOGE_RPC_ORIGIN", "DSTREAM_DOGE_CONFIRMATIONS_REQUIRED", "12"],
     ["Bitcoin Cash", "DSTREAM_BCH_RPC_ORIGIN", "DSTREAM_BCH_CONFIRMATIONS_REQUIRED", "6"],
     ["Ethereum", "DSTREAM_ETH_RPC_ORIGIN", "DSTREAM_ETH_CONFIRMATIONS_REQUIRED", "12"],
@@ -478,8 +510,8 @@ function checkProdRules(options = {}) {
   ]);
   const configuredPaymentCapabilities = new Set(["btc:lightning"]);
   if (walletOrigin) configuredPaymentCapabilities.add("xmr:xmr");
+  if (btcRpcOrigin || btcEsploraConfigured) configuredPaymentCapabilities.add("btc:utxo");
   const providerCapabilityMap = [
-    ["DSTREAM_BTC_RPC_ORIGIN", ["btc:utxo"]],
     ["DSTREAM_DOGE_RPC_ORIGIN", ["doge:utxo"]],
     ["DSTREAM_BCH_RPC_ORIGIN", ["bch:utxo"]],
     ["DSTREAM_ETH_RPC_ORIGIN", ["eth:evm", "usdt:evm", "usdc:evm", "pepe:evm"]],
@@ -504,6 +536,26 @@ function checkProdRules(options = {}) {
     } else if (!configuredPaymentCapabilities.has(key)) {
       errors.push(`Required payment capability is not configured: ${key}`);
     }
+  }
+
+  const knownPaymentAssets = new Set(["xmr", "btc", "eth", "usdt", "xrp", "usdc", "sol", "trx", "doge", "bch", "ada", "pepe"]);
+  const clientPublicPaymentAssets = parseCsvOrJsonList(readEnv("NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS")).map((value) => value.toLowerCase());
+  const serverPublicPaymentAssets = parseCsvOrJsonList(readEnv("DSTREAM_PUBLIC_PAYMENT_ASSETS")).map((value) => value.toLowerCase());
+  if (strictExternal && clientPublicPaymentAssets.length === 0) {
+    errors.push("Deploy mode requires NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS to prevent advertising dormant payment rails.");
+  }
+  if (strictExternal && serverPublicPaymentAssets.length === 0) {
+    errors.push("Deploy mode requires DSTREAM_PUBLIC_PAYMENT_ASSETS to enforce the public payment allowlist server-side.");
+  }
+  for (const asset of [...clientPublicPaymentAssets, ...serverPublicPaymentAssets]) {
+    if (!knownPaymentAssets.has(asset)) errors.push(`Unknown public payment asset: ${asset}`);
+  }
+  if (
+    clientPublicPaymentAssets.length > 0 &&
+    serverPublicPaymentAssets.length > 0 &&
+    [...new Set(clientPublicPaymentAssets)].sort().join(",") !== [...new Set(serverPublicPaymentAssets)].sort().join(",")
+  ) {
+    errors.push("NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS and DSTREAM_PUBLIC_PAYMENT_ASSETS must match.");
   }
 
   const nip05Policy = readEnv("NEXT_PUBLIC_NIP05_POLICY").trim().toLowerCase();

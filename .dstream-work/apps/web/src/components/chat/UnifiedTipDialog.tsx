@@ -26,6 +26,7 @@ import {
   type PaymentIntentCredentials
 } from "@/lib/payments/paymentIntents";
 import { getPaymentRailForMethod } from "@/lib/payments/rails";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 
 interface UnifiedTipDialogProps {
   open: boolean;
@@ -103,6 +104,7 @@ export function UnifiedTipDialog({
   const methods = useMemo(() => {
     const dedup = new Map<string, StreamPaymentMethod>();
     for (const method of [...paymentMethods, ...profilePaymentMethods(profile)]) {
+      if (!isPublicPaymentAsset(method.asset)) continue;
       const key = methodKey(method);
       if (!dedup.has(key)) dedup.set(key, method);
     }

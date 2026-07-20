@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PAYMENT_ASSET_ORDER, buildPaymentUri, comparePaymentAssetOrder } from "./catalog";
 import { coercePaymentMethods, createPaymentMethodDraft, type PaymentMethodDraft, validatePaymentMethodDrafts } from "./methods";
+import { getPublicPaymentAssets } from "./publicAssets";
 import { PAYMENT_RAILS, getPaymentRailForAsset, getPaymentRailForMethod, groupPaymentMethodsByRail } from "./rails";
 
 test("validatePaymentMethodDrafts accepts supported addresses", () => {
@@ -160,6 +161,17 @@ test("payment asset default order prioritizes XMR then BTC", () => {
   assert.equal(PAYMENT_ASSET_ORDER[1], "btc");
   assert.ok(comparePaymentAssetOrder("xmr", "eth") < 0);
   assert.ok(comparePaymentAssetOrder("btc", "eth") < 0);
+});
+
+test("public payment asset allowlist hides dormant adapters", () => {
+  const original = process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS;
+  process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS = "xmr,btc,unknown";
+  try {
+    assert.deepEqual(getPublicPaymentAssets(), ["xmr", "btc"]);
+  } finally {
+    if (original === undefined) delete process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS;
+    else process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS = original;
+  }
 });
 
 test("payment rails map expected assets", () => {

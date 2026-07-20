@@ -26,6 +26,7 @@ import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyP
 import { makeOriginStreamId } from "@/lib/origin";
 import { getNostrRelays } from "@/lib/config";
 import { comparePaymentAssetOrder } from "@/lib/payments/catalog";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import { listVideoAccessPackagesClient, type VideoAccessPackage } from "@/lib/access/client";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
@@ -656,7 +657,7 @@ export default function WatchPage() {
     for (const method of source) {
       const asset = method.asset;
       const address = (method.address ?? "").trim();
-      if (!asset || !address) continue;
+      if (!asset || !isPublicPaymentAsset(asset) || !address) continue;
       const network = (method.network ?? "").trim();
       const label = (method.label ?? "").trim();
       const amount = (method.amount ?? "").trim();

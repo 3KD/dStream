@@ -59,6 +59,9 @@ function makeBolt11(input: { timestamp: number; paymentHash: Uint8Array; descrip
 afterEach(() => {
   globalThis.fetch = originalFetch;
   for (const name of [
+    "DSTREAM_BTC_RPC_ORIGIN",
+    "DSTREAM_BTC_ESPLORA_ORIGINS",
+    "DSTREAM_BTC_ESPLORA_QUORUM",
     "DSTREAM_DOGE_RPC_ORIGIN",
     "DSTREAM_DOGE_CONFIRMATIONS_REQUIRED",
     "DSTREAM_ETH_RPC_ORIGIN",

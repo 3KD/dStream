@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, PackagePlus, Pencil, RefreshCcw, ShieldPlus, Trash2 } from "lucide-react";
-import { STREAM_PAYMENT_ASSETS, type StreamPaymentAsset } from "@dstream/protocol";
+import { type StreamPaymentAsset } from "@dstream/protocol";
+import { PUBLIC_PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
 import { useIdentity } from "@/context/IdentityContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import {
@@ -1235,7 +1236,7 @@ export function VideoAccessPackagesPanel() {
             onChange={(event) => setPaymentAsset(event.target.value as StreamPaymentAsset)}
             className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
           >
-            {STREAM_PAYMENT_ASSETS.map((asset) => (
+            {PUBLIC_PAYMENT_ASSET_ORDER.map((asset) => (
               <option key={asset} value={asset}>
                 {asset.toUpperCase()}
               </option>

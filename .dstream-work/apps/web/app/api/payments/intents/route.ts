@@ -8,6 +8,7 @@ import { getPaymentRailById, getPaymentRailForMethod, type PaymentRailId } from 
 import { normalizePaymentAddress, normalizePaymentAsset, validatePaymentAddress, validatePaymentAmount } from "@/lib/payments/methods";
 import { createPaymentIntent, type PaymentIntentScope } from "@/lib/payments/server/intentStore";
 import { getPaymentRailCapabilities, PaymentVerificationError } from "@/lib/payments/server";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -132,6 +133,9 @@ export async function POST(req: Request): Promise<Response> {
       throw new PaymentVerificationError("scopeType must be video_package or tip.", 400);
     }
 
+    if (!isPublicPaymentAsset(method.asset)) {
+      throw new PaymentVerificationError(`${method.asset.toUpperCase()} is not enabled on this dStream deployment.`, 400);
+    }
     if (!method.address) throw new PaymentVerificationError("Payment recipient address is not configured.", 400);
     const addressError = validatePaymentAddress(method.asset, method.address, method.network);
     if (addressError) throw new PaymentVerificationError(addressError, 400);

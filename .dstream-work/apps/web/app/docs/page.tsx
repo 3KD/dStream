@@ -36,7 +36,7 @@ const runtimePlanes = [
   },
   {
     name: "Payments",
-    details: "Noncustodial wallet execution plus backend verification for Monero, Lightning, UTXO, EVM/TRON/Solana tokens, XRP, and Cardano."
+    details: "This deployment verifies Monero, Bitcoin Lightning, and Bitcoin on-chain payments. Additional protocol adapters remain dormant until an operator explicitly enables their verifier and public asset."
   }
 ];
 

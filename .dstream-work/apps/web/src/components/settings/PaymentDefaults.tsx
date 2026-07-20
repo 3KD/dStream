@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSocial } from "@/context/SocialContext";
 import {
-  PAYMENT_ASSET_ORDER,
+  PUBLIC_PAYMENT_ASSET_ORDER,
   PAYMENT_ASSET_META,
   getWalletIntegrationsForAsset,
   type WalletIntegrationId
 } from "@/lib/payments/catalog";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import {
   type PaymentMethodDraft,
   paymentMethodToDraft,
@@ -25,7 +26,9 @@ export function PaymentDefaults() {
   const [defaultPaymentsNotice, setDefaultPaymentsNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    setDefaultPaymentDrafts(settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+    setDefaultPaymentDrafts(
+      settings.paymentDefaults.paymentMethods.filter((method) => isPublicPaymentAsset(method.asset)).map(paymentMethodToDraft)
+    );
   }, [settings.paymentDefaults.paymentMethods]);
 
   const updateDefaultPaymentDraft = useCallback((index: number, patch: Partial<PaymentMethodDraft>) => {
@@ -37,7 +40,10 @@ export function PaymentDefaults() {
   }, []);
 
   const addDefaultPaymentDraft = useCallback(() => {
-    setDefaultPaymentDrafts((prev) => [...prev, createPaymentMethodDraft()]);
+    setDefaultPaymentDrafts((prev) => [
+      ...prev,
+      createPaymentMethodDraft(PUBLIC_PAYMENT_ASSET_ORDER.find((asset) => asset !== "xmr") ?? "xmr")
+    ]);
   }, []);
 
   const saveDefaultPaymentMethods = useCallback(() => {
@@ -154,7 +160,7 @@ export function PaymentDefaults() {
                   onChange={(e) => updateDefaultPaymentDraft(index, { asset: e.target.value as StreamPaymentAsset })}
                   className="bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-2 text-xs text-neutral-200"
                 >
-                  {PAYMENT_ASSET_ORDER.map((asset) => (
+                  {PUBLIC_PAYMENT_ASSET_ORDER.map((asset) => (
                     <option key={asset} value={asset}>
                       {PAYMENT_ASSET_META[asset].symbol}
                     </option>
@@ -203,7 +209,7 @@ export function PaymentDefaults() {
       <div className="pt-3 border-t border-neutral-800 space-y-2">
         <div className="text-xs text-neutral-500">Preferred wallet per asset</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {PAYMENT_ASSET_ORDER.map((asset) => {
+          {PUBLIC_PAYMENT_ASSET_ORDER.map((asset) => {
             const supported = getWalletIntegrationsForAsset(asset);
             return (
               <label key={`wallet-pref-${asset}`} className="rounded-lg border border-neutral-800 bg-neutral-950/40 px-3 py-2 space-y-1">

@@ -11,7 +11,8 @@ import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
-import { PAYMENT_ASSET_META, PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
+import { PAYMENT_ASSET_META, PUBLIC_PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
+import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import { getPaymentRailForMethod } from "@/lib/payments/rails";
 import {
   getNativeWalletCapability,
@@ -416,7 +417,9 @@ export default function BroadcastPage() {
       if (!raw) {
         setStreamId(requestedStreamId ?? safeDefaultStreamId(identity?.pubkey ?? null));
         setXmr(social.settings.paymentDefaults.xmrTipAddress);
-        setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+        setPaymentDrafts(
+          social.settings.paymentDefaults.paymentMethods.filter((method) => isPublicPaymentAsset(method.asset)).map(paymentMethodToDraft)
+        );
         setStakeXmr(social.settings.paymentDefaults.stakeXmr);
         setStakeNote(social.settings.paymentDefaults.stakeNote);
         setHostMode(social.settings.broadcastHostMode);
@@ -457,7 +460,7 @@ export default function BroadcastPage() {
           parsed.paymentMethods
             .map((row: any) => {
               if (!row || typeof row !== "object") return null;
-              const asset = PAYMENT_ASSET_ORDER.includes((row.asset ?? "").toString().toLowerCase() as StreamPaymentAsset)
+              const asset = PUBLIC_PAYMENT_ASSET_ORDER.includes((row.asset ?? "").toString().toLowerCase() as StreamPaymentAsset)
                 ? ((row.asset ?? "").toString().toLowerCase() as StreamPaymentAsset)
                 : null;
               if (!asset) return null;
@@ -472,7 +475,9 @@ export default function BroadcastPage() {
             .filter((row: PaymentMethodDraft | null): row is PaymentMethodDraft => !!row)
         );
       } else {
-        setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+        setPaymentDrafts(
+          social.settings.paymentDefaults.paymentMethods.filter((method) => isPublicPaymentAsset(method.asset)).map(paymentMethodToDraft)
+        );
       }
       if (typeof parsed.stakeXmr === "string") setStakeXmr(parsed.stakeXmr);
       if (typeof parsed.stakeNote === "string") setStakeNote(parsed.stakeNote);
@@ -535,7 +540,9 @@ export default function BroadcastPage() {
     } catch {
       setStreamId(requestedStreamId ?? safeDefaultStreamId(identity?.pubkey ?? null));
       setXmr(social.settings.paymentDefaults.xmrTipAddress);
-      setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+      setPaymentDrafts(
+        social.settings.paymentDefaults.paymentMethods.filter((method) => isPublicPaymentAsset(method.asset)).map(paymentMethodToDraft)
+      );
       setStakeXmr(social.settings.paymentDefaults.stakeXmr);
       setStakeNote(social.settings.paymentDefaults.stakeNote);
       setHostMode(social.settings.broadcastHostMode);
@@ -747,7 +754,7 @@ export default function BroadcastPage() {
   }, [topicsCsv]);
 
   const addPaymentDraft = useCallback(() => {
-    setPaymentDrafts((prev) => [...prev, createPaymentMethodDraft()]);
+    setPaymentDrafts((prev) => [...prev, createPaymentMethodDraft(PUBLIC_PAYMENT_ASSET_ORDER.find((asset) => asset !== "xmr") ?? "xmr")]);
   }, []);
 
   const removePaymentDraft = useCallback((index: number) => {
@@ -2320,7 +2327,11 @@ export default function BroadcastPage() {
                         type="button"
                         onClick={() => {
                           setXmr(social.settings.paymentDefaults.xmrTipAddress);
-                          setPaymentDrafts(social.settings.paymentDefaults.paymentMethods.map((method) => paymentMethodToDraft(method)));
+                          setPaymentDrafts(
+                            social.settings.paymentDefaults.paymentMethods
+                              .filter((method) => isPublicPaymentAsset(method.asset))
+                              .map(paymentMethodToDraft)
+                          );
                           setStakeXmr(social.settings.paymentDefaults.stakeXmr);
                           setStakeNote(social.settings.paymentDefaults.stakeNote);
                           setHostMode(social.settings.broadcastHostMode);
@@ -2433,7 +2444,7 @@ export default function BroadcastPage() {
                                   disabled={status === "connecting"}
                                   className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-2 text-xs"
                                 >
-                                  {PAYMENT_ASSET_ORDER.map((asset) => (
+                                  {PUBLIC_PAYMENT_ASSET_ORDER.map((asset) => (
                                     <option key={asset} value={asset}>
                                       {PAYMENT_ASSET_META[asset].symbol}
                                     </option>
@@ -2544,7 +2555,7 @@ export default function BroadcastPage() {
                       <div className="text-xs text-red-300">{paymentInputError}</div>
                     ) : (
                       <div className="text-xs text-neutral-500">
-                        Supported assets: XMR, ETH, BTC (on-chain + Lightning), USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, PEPE.
+                        Supported assets: XMR and BTC (on-chain + Lightning).
                       </div>
                     )}
                   </div>
