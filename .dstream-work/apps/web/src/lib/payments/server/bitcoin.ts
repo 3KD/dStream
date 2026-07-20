@@ -208,7 +208,7 @@ export function getUtxoCapabilities(): PaymentRailCapability[] {
       network: getNetwork(config),
       configured,
       confirmationsRequired: getConfirmationsRequired(config),
-      verifier: rpcConfigured ? "json_rpc" : "rest",
+      verifier: rpcConfigured ? "json_rpc" : "esplora_quorum",
       ...(!configured
         ? {
             reason:

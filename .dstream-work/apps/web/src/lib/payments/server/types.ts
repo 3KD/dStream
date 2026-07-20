@@ -52,7 +52,7 @@ export interface PaymentRailCapability {
   network: string;
   configured: boolean;
   confirmationsRequired: number;
-  verifier: "wallet_rpc" | "json_rpc" | "rest" | "lnurl_nip57";
+  verifier: "wallet_rpc" | "json_rpc" | "rest" | "esplora_quorum" | "lnurl_nip57";
   reason?: string;
 }
 
