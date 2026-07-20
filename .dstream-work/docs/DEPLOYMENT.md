@@ -52,6 +52,7 @@ See `.env.example`. Quick reference:
 - `DSTREAM_WHEP_PROXY_ORIGIN`: where `/api/whep/*` proxies to (defaults to `DSTREAM_WHIP_PROXY_ORIGIN`).
 - `DSTREAM_HLS_PROXY_ORIGIN`: where `/api/hls/*` proxies to.
 - `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. Production currently requires `btc:lightning,xmr:xmr`; add other rails only with authenticated production providers.
+- `scripts/ops-disk-cleanup.sh`: threshold-triggered cleanup for deploy/build artifacts, old journals, stopped containers, dangling images, and inactive Docker build cache. It never prunes Docker volumes or `/var/lib/dstream` settlement state.
 
 **Server-only (Monero verified tips)**
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN`: Monero wallet RPC origin (expects `POST <origin>/json_rpc`).
