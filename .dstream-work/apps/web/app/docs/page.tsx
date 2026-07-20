@@ -36,7 +36,7 @@ const runtimePlanes = [
   },
   {
     name: "Payments",
-    details: "This deployment verifies Monero, Bitcoin Lightning, and Bitcoin on-chain payments. Additional protocol adapters remain dormant until an operator explicitly enables their verifier and public asset."
+    details: "This deployment publicly accepts Monero, Bitcoin Lightning, and Bitcoin on-chain payments. Additional protocol adapters can remain backend-connected for real-chain operator checks without becoming public payment options."
   }
 ];
 

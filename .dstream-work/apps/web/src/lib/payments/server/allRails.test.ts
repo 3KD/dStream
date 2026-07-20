@@ -68,7 +68,8 @@ afterEach(() => {
     "DSTREAM_TRON_RPC_ORIGIN",
     "DSTREAM_SOLANA_RPC_ORIGIN",
     "DSTREAM_XRPL_RPC_ORIGIN",
-    "DSTREAM_CARDANO_API_ORIGIN"
+    "DSTREAM_CARDANO_API_ORIGIN",
+    "DSTREAM_CARDANO_API_KIND"
   ]) {
     delete process.env[name];
   }
@@ -230,11 +231,13 @@ test("XRPL verifier requires validated tesSUCCESS and delivered XRP", async () =
         hash: txId,
         validated: true,
         ledger_index: 99_000_000,
-        TransactionType: "Payment",
-        Account: "rLs1MzkFWCxTbuAHgjeTZK4fcCDDnf2KRv",
-        Destination: recipient,
-        DestinationTag: 7,
-        Amount: "2000000",
+        tx_json: {
+          TransactionType: "Payment",
+          Account: "rLs1MzkFWCxTbuAHgjeTZK4fcCDDnf2KRv",
+          Destination: recipient,
+          DestinationTag: 7,
+          Amount: "2000000"
+        },
         meta: { TransactionResult: "tesSUCCESS", delivered_amount: "2000000" }
       }
     });
@@ -266,6 +269,40 @@ test("Cardano verifier sums lovelace outputs and chain confirmations", async () 
   const payment = await verifyPayment({ asset: "ada", paymentRailId: "cardano", network: "cardano", address: recipient, amount: "2", txId });
   assert.equal(payment.amountAtomic, "2500000");
   assert.equal(payment.confirmations, 21);
+});
+
+test("Cardano verifier supports Koios transaction and confirmation responses", async () => {
+  process.env.DSTREAM_CARDANO_API_ORIGIN = "https://cardano.example/api/v1";
+  process.env.DSTREAM_CARDANO_API_KIND = "koios";
+  const txId = "8".repeat(64);
+  const recipient = `addr1${"p".repeat(54)}`;
+  globalThis.fetch = async (url) => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith("/tx_info")) {
+      return response([
+        {
+          tx_hash: txId,
+          block_height: 1000,
+          outputs: [{ payment_addr: { bech32: recipient }, value: "2500000" }]
+        }
+      ]);
+    }
+    if (path.endsWith("/tx_status")) {
+      return response([{ tx_hash: txId, num_confirmations: 21 }]);
+    }
+    return response([{ block_height: 1020 }]);
+  };
+  const payment = await verifyPayment({
+    asset: "ada",
+    paymentRailId: "cardano",
+    network: "cardano",
+    address: recipient,
+    amount: "2",
+    txId
+  });
+  assert.equal(payment.amountAtomic, "2500000");
+  assert.equal(payment.confirmations, 21);
+  assert.equal(payment.metadata?.verifier, "koios");
 });
 
 test("NIP-57 verifier validates provider signature, zap binding, amount, and invoice hash", async () => {

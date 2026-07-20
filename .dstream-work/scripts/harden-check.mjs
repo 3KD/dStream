@@ -341,6 +341,10 @@ function checkProdRules(options = {}) {
       }
     }
   }
+  const cardanoApiKind = readEnv("DSTREAM_CARDANO_API_KIND").trim().toLowerCase() || "blockfrost";
+  if (cardanoApiKind !== "blockfrost" && cardanoApiKind !== "koios") {
+    errors.push("DSTREAM_CARDANO_API_KIND must be blockfrost or koios.");
+  }
 
   const evmNetworksRaw = readEnv("DSTREAM_EVM_NETWORKS_JSON").trim();
   if (evmNetworksRaw) {

@@ -21,8 +21,31 @@ interface CardanoBlock {
   height?: number | string;
 }
 
+interface KoiosTransaction {
+  tx_hash?: string;
+  block_height?: number | string;
+  outputs?: Array<{
+    payment_addr?: { bech32?: string };
+    value?: number | string;
+  }>;
+}
+
+interface KoiosTip {
+  block_height?: number | string;
+}
+
+interface KoiosTransactionStatus {
+  tx_hash?: string;
+  num_confirmations?: number | string;
+}
+
 function getOrigin(): string {
   return (process.env.DSTREAM_CARDANO_API_ORIGIN ?? "").trim();
+}
+
+function getApiKind(): "blockfrost" | "koios" {
+  const configured = (process.env.DSTREAM_CARDANO_API_KIND ?? "blockfrost").trim().toLowerCase();
+  return configured === "koios" ? "koios" : "blockfrost";
 }
 
 function getNetwork(): string {
@@ -78,12 +101,73 @@ export function getCardanoCapabilities(): PaymentRailCapability[] {
   ];
 }
 
+async function verifyKoiosPayment(input: {
+  txId: string;
+  recipient: string;
+  expectedLovelace: bigint;
+}): Promise<{ paidLovelace: bigint; confirmations: number; blockHeight: bigint }> {
+  const query = `_tx_hashes={${input.txId}}`;
+  const [transactions, statuses, tips] = await Promise.all([
+    cardanoGet<KoiosTransaction[]>(`tx_info?${query}`, "Cardano Koios transaction API"),
+    cardanoGet<KoiosTransactionStatus[]>(`tx_status?${query}`, "Cardano Koios transaction status API"),
+    cardanoGet<KoiosTip[]>("tip", "Cardano Koios tip API")
+  ]);
+  const tx = transactions.find((row) => (row.tx_hash ?? "").toLowerCase() === input.txId);
+  const status = statuses.find((row) => (row.tx_hash ?? "").toLowerCase() === input.txId);
+  if (!tx || !status) throw new PaymentVerificationError("Cardano transaction is not confirmed by Koios.", 404);
+
+  const blockHeight = parseIntegerQuantity(tx.block_height, "Cardano Koios transaction block height");
+  const head = parseIntegerQuantity(tips[0]?.block_height, "Cardano Koios latest block height");
+  const reportedConfirmations = parseIntegerQuantity(
+    status.num_confirmations,
+    "Cardano Koios transaction confirmations"
+  );
+  if (head < blockHeight) throw new PaymentVerificationError("Cardano Koios index is behind the payment block.", 502);
+  const confirmationsBig = head - blockHeight + 1n;
+  if (reportedConfirmations <= 0n || reportedConfirmations > confirmationsBig) {
+    throw new PaymentVerificationError("Cardano Koios confirmation data is inconsistent.", 502);
+  }
+  const confirmations = Number(reportedConfirmations);
+  const required = getConfirmationsRequired();
+  if (!Number.isSafeInteger(confirmations) || confirmations < required) {
+    throw new PaymentVerificationError(`Cardano payment has ${confirmations}/${required} confirmations.`, 409);
+  }
+
+  let paidLovelace = 0n;
+  for (const output of tx.outputs ?? []) {
+    if (output.payment_addr?.bech32 !== input.recipient) continue;
+    paidLovelace += parseIntegerQuantity(output.value, "Cardano Koios output value");
+  }
+  if (paidLovelace < input.expectedLovelace) {
+    throw new PaymentVerificationError("Cardano transaction does not pay the required recipient and amount.");
+  }
+  return { paidLovelace, confirmations, blockHeight };
+}
+
 export async function verifyCardanoPayment(input: PaymentVerificationInput): Promise<VerifiedPayment> {
   if (input.asset !== "ada") throw new PaymentVerificationError("Cardano verifier requires the ADA asset.", 400);
   const txId = (input.txId ?? input.proof?.txId ?? input.proof?.transactionHash ?? "").trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(txId)) throw new PaymentVerificationError("Cardano transaction hash is malformed.", 400);
   const recipient = normalizeAddress(input.address);
   assertRequestedNetwork(input);
+  const expectedLovelace = decimalToAtomic(input.amount, 6);
+  if (getApiKind() === "koios") {
+    const verified = await verifyKoiosPayment({ txId, recipient, expectedLovelace });
+    const network = `cardano:${getNetwork()}`;
+    return {
+      asset: "ada",
+      railId: "cardano",
+      network,
+      txId,
+      settlementKey: `ada:${network}:${txId}`,
+      recipient,
+      amountAtomic: verified.paidLovelace.toString(),
+      confirmations: verified.confirmations,
+      blockHeight: Number(verified.blockHeight),
+      finality: "confirmed",
+      metadata: { verifier: "koios" }
+    };
+  }
   const tx = await cardanoGet<CardanoTransaction>(`txs/${txId}`, "Cardano transaction API");
   const utxos = await cardanoGet<CardanoTransactionUtxos>(`txs/${txId}/utxos`, "Cardano transaction UTXO API");
   if ((tx.hash ?? "").toLowerCase() !== txId || (utxos.hash ?? "").toLowerCase() !== txId) {
@@ -108,7 +192,7 @@ export async function verifyCardanoPayment(input: PaymentVerificationInput): Pro
       paidLovelace += BigInt(amount.quantity);
     }
   }
-  if (paidLovelace < decimalToAtomic(input.amount, 6)) {
+  if (paidLovelace < expectedLovelace) {
     throw new PaymentVerificationError("Cardano transaction does not pay the required recipient and amount.");
   }
   const network = `cardano:${getNetwork()}`;

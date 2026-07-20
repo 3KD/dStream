@@ -51,7 +51,7 @@ See `.env.example`. Quick reference:
 - `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
 - `DSTREAM_WHEP_PROXY_ORIGIN`: where `/api/whep/*` proxies to (defaults to `DSTREAM_WHIP_PROXY_ORIGIN`).
 - `DSTREAM_HLS_PROXY_ORIGIN`: where `/api/hls/*` proxies to.
-- `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. Production currently requires `btc:lightning,xmr:xmr`; add other rails only with authenticated production providers.
+- `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. The dstream.stream public scope requires `btc:lightning,btc:utxo,xmr:xmr`; backend-only rails are exercised separately by the real-chain smoke.
 - `scripts/ops-disk-cleanup.sh`: threshold-triggered cleanup for deploy/build artifacts, old journals, stopped containers, dangling images, and inactive Docker build cache. It never prunes Docker volumes or `/var/lib/dstream` settlement state.
 
 **Server-only (Monero verified tips)**
@@ -87,7 +87,8 @@ See `.env.example`. Quick reference:
 - `DSTREAM_TRON_RPC_ORIGIN`, `DSTREAM_TRON_API_KEY`, `DSTREAM_TRON_CONFIRMATIONS_REQUIRED`, `DSTREAM_TRON_USDT_CONTRACT`: TRX/TRC-20 verification.
 - `DSTREAM_SOLANA_*`: Solana RPC, network, finality threshold, and SPL USDC/USDT mint/decimal allowlists.
 - `DSTREAM_XRPL_RPC_ORIGIN`, `DSTREAM_XRPL_NETWORK`: XRP Ledger JSON-RPC.
-- `DSTREAM_CARDANO_API_ORIGIN`, `DSTREAM_CARDANO_API_KEY`, `DSTREAM_CARDANO_NETWORK`, `DSTREAM_CARDANO_CONFIRMATIONS_REQUIRED`: Blockfrost-compatible Cardano chain index.
+- `DSTREAM_CARDANO_API_ORIGIN`, `DSTREAM_CARDANO_API_KIND`, `DSTREAM_CARDANO_API_KEY`, `DSTREAM_CARDANO_NETWORK`, `DSTREAM_CARDANO_CONFIRMATIONS_REQUIRED`: Cardano chain index. Set the API kind to `blockfrost` (optionally with a project key) or `koios`.
+- `npm run smoke:payments:extended:real`: verifies confirmed DOGE, BCH, EVM, TRON, Solana, XRP, and ADA transactions through the same adapters used by payment intents. It is a live-network smoke and requires every extended rail endpoint above.
 - `DSTREAM_PAYMENT_INTENT_STORE_PATH`, `DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH`: durable intent and replay stores. Keep both on persistent storage.
 - `DSTREAM_PAYMENT_RPC_TIMEOUT_MS`: outbound verifier timeout.
 

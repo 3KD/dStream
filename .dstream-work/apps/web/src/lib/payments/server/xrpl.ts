@@ -8,16 +8,20 @@ interface XrplRpcResponse {
   error?: { code?: number; message?: string };
 }
 
-interface XrplTransaction {
-  hash?: string;
-  validated?: boolean;
-  ledger_index?: number;
+interface XrplTransactionFields {
   TransactionType?: string;
   Account?: string;
   Destination?: string;
   DestinationTag?: number;
   Amount?: string | Record<string, unknown>;
   DeliverMax?: string | Record<string, unknown>;
+}
+
+interface XrplTransaction extends XrplTransactionFields {
+  hash?: string;
+  validated?: boolean;
+  ledger_index?: number;
+  tx_json?: XrplTransactionFields;
   meta?: {
     TransactionResult?: string;
     delivered_amount?: string | Record<string, unknown>;
@@ -81,10 +85,20 @@ export async function verifyXrplPayment(input: PaymentVerificationInput): Promis
   if (response.error) {
     throw new PaymentVerificationError(`XRPL RPC rejected the request: ${response.error.message ?? response.error.code ?? "unknown"}.`, 502);
   }
-  const tx = response.result;
-  if (!tx || tx.error) {
-    throw new PaymentVerificationError(tx?.error_message || "XRP transaction is not available on the configured RPC.", 404);
+  const result = response.result;
+  if (!result || result.error) {
+    throw new PaymentVerificationError(result?.error_message || "XRP transaction is not available on the configured RPC.", 404);
   }
+  // XRPL API v2 nests transaction fields under tx_json; v1 returns them at the result root.
+  const tx: XrplTransaction = result.tx_json
+    ? {
+        ...result.tx_json,
+        hash: result.hash,
+        validated: result.validated,
+        ledger_index: result.ledger_index,
+        meta: result.meta
+      }
+    : result;
   if ((tx.hash ?? "").toUpperCase() !== txId) throw new PaymentVerificationError("XRPL RPC returned a different transaction.", 502);
   if (tx.validated !== true) throw new PaymentVerificationError("XRP transaction is not in a validated ledger.", 409);
   if (tx.meta?.TransactionResult !== "tesSUCCESS") throw new PaymentVerificationError("XRP transaction did not succeed.");

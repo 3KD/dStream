@@ -163,7 +163,7 @@ test("payment asset default order prioritizes XMR then BTC", () => {
   assert.ok(comparePaymentAssetOrder("btc", "eth") < 0);
 });
 
-test("public payment asset allowlist hides dormant adapters", () => {
+test("public payment asset allowlist hides backend-only adapters", () => {
   const original = process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS;
   process.env.DSTREAM_PUBLIC_PAYMENT_ASSETS = "xmr,btc,unknown";
   try {

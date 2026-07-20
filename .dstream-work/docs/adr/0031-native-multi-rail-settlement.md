@@ -30,7 +30,7 @@ Each adapter validates recipient, amount, network, transaction success, required
 
 ### 3) Fail closed before payment
 
-Intent creation checks the effective server capability. If its authenticated node, RPC, or indexer is not configured, the server returns `503` before the wallet is opened. `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES` defines the production minimum, and `/api/payments/health` returns `503` when a required verifier or durable store is unavailable.
+Intent creation checks the effective server capability. If its node, RPC, or indexer is not configured, the server returns `503` before the wallet is opened. `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES` defines the production minimum, and `/api/payments/health` returns `503` when a required verifier or durable store is unavailable.
 
 ### 4) Grant access only after settlement
 
@@ -42,7 +42,7 @@ Browser wallets sign or hand off transactions, but RPC credentials and API keys 
 
 ## Consequences
 
-- Operators must provision authenticated production providers before enabling additional required rails.
+- Operators must provision trusted production providers and pass the real-chain smoke before enabling additional public rails.
 - The capability endpoint is the source of truth for which rails can settle now.
 - Missing wallet receive addresses or RPC credentials are explicit configuration gaps and are never replaced with generated or guessed values.
 - Durable intent and settlement stores must remain on `/var/lib/dstream` and be included in backups.

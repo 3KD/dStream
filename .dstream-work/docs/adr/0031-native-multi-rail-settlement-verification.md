@@ -18,7 +18,7 @@ Add built-in, noncustodial settlement adapters for:
 - TRX and TRC-20 USDT through a configured TRON HTTP API endpoint.
 - SOL and SPL USDC/USDT through finalized Solana transaction and owner-balance data.
 - XRP through validated XRP Ledger transaction results and delivered-amount metadata.
-- ADA through a Blockfrost-compatible Cardano transaction/UTXO index.
+- ADA through a Blockfrost-compatible index or the distributed Koios transaction/status API.
 
 Video access packages may store a trusted `paymentAddress`. The purchase API verifies the submitted transaction against the package asset, address, amount, and rail before granting access. A durable payment intent binds the signed buyer and current package revision to exact payment terms and expires after a bounded window. Verified references are recorded in lock-protected intent and settlement stores. Cross-intent and cross-purchase replay is rejected.
 

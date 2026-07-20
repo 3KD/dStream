@@ -46,6 +46,7 @@
     "smoke:wallet:cli": "WALLET_MATRIX=cli node scripts/smoke-wallet-matrix.mjs",
     "smoke:wallet:cap": "node scripts/smoke-wallet-capabilities.mjs",
     "smoke:wallet:real": "node scripts/smoke-wallet-real.mjs",
+    "smoke:payments:extended:real": "node --import tsx scripts/smoke-payment-rails-real.ts",
     "harden:check": "node scripts/harden-check.mjs",
     "harden:deploy": "HARDEN_MODE=deploy node scripts/harden-check.mjs",
     "gate:prod": "bash scripts/gate-production.sh",
