@@ -92,8 +92,8 @@ if [[ "${payments_code}" != "200" ]]; then
 fi
 
 mediamtx_code="$(run_cmd "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9990/v3/paths/list" 2>/dev/null || true)"
-if [[ "${mediamtx_code}" != "200" ]]; then
-  record_failure "mediamtx API expected 200, got ${mediamtx_code:-000}"
+if [[ ! "${mediamtx_code}" =~ ^(200|401)$ ]]; then
+  record_failure "mediamtx API expected 200 or authenticated 401, got ${mediamtx_code:-000}"
 fi
 
 relay_code="$(run_cmd "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/" 2>/dev/null || true)"
