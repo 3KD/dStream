@@ -501,8 +501,8 @@ async function verifyRouteHandoff(run) {
       );
     }
     await verifyBackgroundResume(run.page, `${run.scenario}/${run.title} after route handoff`);
-    after = await sampleVideo(run.page);
   }
+  after = await sampleVideo(run.page);
   run.routed = true;
   run.last = after;
   run.lastSampledAt = Date.now();
