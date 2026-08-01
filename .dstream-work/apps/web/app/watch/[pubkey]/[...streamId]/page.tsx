@@ -24,6 +24,7 @@ import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
 import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
 import { makeOriginStreamId } from "@/lib/origin";
+import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
 import { getNostrRelays } from "@/lib/config";
 import { comparePaymentAssetOrder } from "@/lib/payments/catalog";
 import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
@@ -525,6 +526,10 @@ export default function WatchPage() {
     if (!videoAccessToken) return streamUrl;
     return withQueryParam(streamUrl, videoAccessTokenParam, videoAccessToken);
   }, [streamUrl, videoAccessToken, videoAccessTokenParam]);
+  const playbackStateKey = useMemo(() => {
+    if (!pubkey || !playbackStreamUrl) return undefined;
+    return deriveQuickPlayPlaybackStateKey({ pubkey, streamId, hlsUrl: playbackStreamUrl });
+  }, [playbackStreamUrl, pubkey, streamId]);
 
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;
@@ -1527,6 +1532,7 @@ export default function WatchPage() {
     captionTracks: captionTracks,
     viewerCount: effectiveViewerCount,
     p2pPeers: p2pStats?.peersConnected,
+    playbackStateKey,
     autoplayMuted: e2e ? true : social.settings.playbackAutoplayMuted,
     layoutMode: mobilePortraitLayout ? "aspect" : "fill",
     overlayTitle: announce?.title ?? "Live Stream",
@@ -1561,6 +1567,7 @@ export default function WatchPage() {
     captionTracks,
     effectiveViewerCount,
     p2pStats?.peersConnected,
+    playbackStateKey,
     e2e,
     social,
     mobilePortraitLayout,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HandCoins, Headphones, Maximize2, Move, PictureInPicture2, Volume2, VolumeX, X, Play, Pause, Users } from "lucide-react";
 import { GlobalPlayerSlot, useGlobalPlayer } from "@/context/GlobalPlayerContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
@@ -34,8 +34,6 @@ type LayoutState = {
   width: number;
   x: number;
   y: number;
-  volume: number;
-  muted: boolean;
 };
 
 type PipCapableVideo = HTMLVideoElement & {
@@ -99,9 +97,7 @@ function readLayoutState(): LayoutState | null {
     return {
       width,
       x: position.x,
-      y: position.y,
-      volume: clampVolume(Number(parsed.volume ?? 1)),
-      muted: parsed.muted === true
+      y: position.y
     };
   } catch {
     return null;
@@ -131,7 +127,7 @@ export function GlobalQuickPlayDock() {
   const pathname = usePathname();
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
   const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
-  const { clearRequest, playerHost } = useGlobalPlayer();
+  const { clearRequest, playerHost, syncPortalPosition } = useGlobalPlayer();
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [position, setPosition] = useState({
@@ -278,8 +274,6 @@ export function GlobalQuickPlayDock() {
     if (saved) {
       setWidth(saved.width);
       setPosition({ x: saved.x, y: saved.y });
-      setVolume(saved.volume);
-      setMuted(saved.muted);
       setReady(true);
       return;
     }
@@ -289,8 +283,6 @@ export function GlobalQuickPlayDock() {
       x: DEFAULT_GAP,
       y: Math.max(DEFAULT_GAP, window.innerHeight - defaultHeight - DEFAULT_GAP)
     });
-    setVolume(1);
-    setMuted(false);
     setReady(true);
   }, [ready]);
 
@@ -299,11 +291,13 @@ export function GlobalQuickPlayDock() {
     writeLayoutState({
       width,
       x: position.x,
-      y: position.y,
-      volume,
-      muted
+      y: position.y
     });
-  }, [ready, width, position.x, position.y, volume, muted]);
+  }, [ready, width, position.x, position.y]);
+
+  useLayoutEffect(() => {
+    syncPortalPosition("quickplay-dock");
+  }, [height, position.x, position.y, syncPortalPosition, width]);
 
   useEffect(() => {
     if (!ready) return;
@@ -350,7 +344,7 @@ export function GlobalQuickPlayDock() {
 
       const onVolumeChange = () => {
         try {
-          const nextVolume = found.muted ? 0 : clampVolume(found.volume);
+          const nextVolume = clampVolume(found.volume);
           setMuted(found.muted || nextVolume === 0);
           setVolume(nextVolume);
         } catch {
@@ -488,17 +482,6 @@ export function GlobalQuickPlayDock() {
   }, [backgroundPlayEnabled, clearAutoPipTimer, hlsSrc, isWatchRoute, pathname, quickPlayStream, ready, requestSystemPip, touchDevice]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    try {
-      video.volume = clampVolume(volume);
-      video.muted = muted || clampVolume(volume) === 0;
-    } catch {
-      // ignore
-    }
-  }, [muted, volume]);
-
-  useEffect(() => {
     if (interactionMode === "idle") return;
 
     const onMove = (e: MouseEvent | TouchEvent) => {
@@ -608,14 +591,35 @@ export function GlobalQuickPlayDock() {
 
   const handleVolumeInput = useCallback((next: number) => {
     const value = clampVolume(next);
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.volume = value;
+        video.muted = value === 0;
+      } catch {
+        // ignore
+      }
+    }
     setVolume(value);
     setMuted(value === 0);
   }, []);
 
   const handleToggleMute = useCallback(() => {
-    setMuted((prev) => !prev);
-    if (volume === 0) setVolume(0.7);
-  }, [volume]);
+    const video = videoRef.current;
+    const currentlyMuted = video ? video.muted || video.volume === 0 : muted || volume === 0;
+    const nextMuted = !currentlyMuted;
+    const nextVolume = volume > 0 ? clampVolume(volume) : 0.7;
+    if (video) {
+      try {
+        if (!nextMuted && video.volume === 0) video.volume = nextVolume;
+        video.muted = nextMuted;
+      } catch {
+        // ignore
+      }
+    }
+    setMuted(nextMuted);
+    if (!nextMuted && volume === 0) setVolume(nextVolume);
+  }, [muted, volume]);
 
   const handleSeek = useCallback((next: number) => {
     if (videoRef.current) {
@@ -678,7 +682,7 @@ export function GlobalQuickPlayDock() {
     configureAudioSessionForPlayback();
 
     const video = videoRef.current as PipCapableVideo | null;
-    const nextVolume = muted || volume === 0 ? 0.7 : clampVolume(volume);
+    const nextVolume = volume > 0 ? clampVolume(volume) : 0.7;
     setMuted(false);
     setVolume(nextVolume);
 
@@ -696,7 +700,7 @@ export function GlobalQuickPlayDock() {
     if (touchDevice) {
       void requestSystemPip();
     }
-  }, [muted, requestSystemPip, touchDevice, volume]);
+  }, [requestSystemPip, touchDevice, volume]);
 
   const handleToggleBackgroundPlay = useCallback(() => {
     if (backgroundPlayEnabled) {
@@ -711,14 +715,14 @@ export function GlobalQuickPlayDock() {
     src: hlsSrc,
     posterSrc: announce?.image ?? null,
     whepSrc,
-    autoplayMuted: !backgroundPlayEnabled,
+    autoplayMuted: false,
     isLiveStream: true,
     showTimelineControls: false,
     showAuxControls: false,
     showNativeControls: false,
     playbackStateKey,
     overlayTitle: quickPlayStream?.title || announce?.title || "Live stream"
-  }), [announce?.image, announce?.title, backgroundPlayEnabled, hlsSrc, playbackStateKey, quickPlayStream?.title, whepSrc]);
+  }), [announce?.image, announce?.title, hlsSrc, playbackStateKey, quickPlayStream?.title, whepSrc]);
 
   useEffect(() => {
     if (!quickPlayStream) {

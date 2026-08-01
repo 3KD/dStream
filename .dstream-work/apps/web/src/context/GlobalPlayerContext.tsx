@@ -10,6 +10,7 @@ interface GlobalPlayerContextValue {
   unregisterPortal: (id: string) => void;
   requestPortal: (id: string, props: any) => void;
   clearRequest: (id: string) => void;
+  syncPortalPosition: (id: string) => void;
 }
 
 const GlobalPlayerContext = createContext<GlobalPlayerContextValue | null>(null);
@@ -85,6 +86,20 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const syncPortalPosition = useCallback((id: string) => {
+    const host = playerHostRef.current;
+    const target = portalsRef.current[id];
+    if (!host || activeRequestIdRef.current !== id || !target?.isConnected) return;
+
+    const rect = target.getBoundingClientRect();
+    host.style.left = `${rect.left}px`;
+    host.style.top = `${rect.top}px`;
+    host.style.width = `${Math.max(1, rect.width)}px`;
+    host.style.height = `${Math.max(1, rect.height)}px`;
+    host.style.zIndex = id === "quickplay-dock" ? "9999" : "1";
+    host.style.pointerEvents = getComputedStyle(target).pointerEvents;
+  }, []);
+
   useLayoutEffect(() => {
     const host = playerHostRef.current;
     if (!host || !playerHost) return;
@@ -103,16 +118,7 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const syncPosition = () => {
-      if (!target.isConnected) return;
-      const rect = target.getBoundingClientRect();
-      host.style.left = `${rect.left}px`;
-      host.style.top = `${rect.top}px`;
-      host.style.width = `${Math.max(1, rect.width)}px`;
-      host.style.height = `${Math.max(1, rect.height)}px`;
-      host.style.zIndex = activeRequest.id === "quickplay-dock" ? "9999" : "1";
-      host.style.pointerEvents = getComputedStyle(target).pointerEvents;
-    };
+    const syncPosition = () => syncPortalPosition(activeRequest.id);
 
     syncPosition();
     const resizeObserver = new ResizeObserver(syncPosition);
@@ -126,11 +132,11 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("scroll", syncPosition, true);
       window.clearInterval(positionInterval);
     };
-  }, [activeRequest, forceTick, playerHost]);
+  }, [activeRequest, forceTick, playerHost, syncPortalPosition]);
 
   const contextValue = useMemo(
-    () => ({ playerHost, registerPortal, unregisterPortal, requestPortal, clearRequest }),
-    [clearRequest, playerHost, registerPortal, requestPortal, unregisterPortal]
+    () => ({ playerHost, registerPortal, unregisterPortal, requestPortal, clearRequest, syncPortalPosition }),
+    [clearRequest, playerHost, registerPortal, requestPortal, syncPortalPosition, unregisterPortal]
   );
 
   return (

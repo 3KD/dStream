@@ -105,6 +105,7 @@ async function sampleVideo(page) {
     currentTime: Number(video.currentTime || 0),
     paused: video.paused,
     muted: video.muted,
+    volume: Number(video.volume),
     ended: video.ended,
     readyState: video.readyState,
     frames: video.getVideoPlaybackQuality?.().totalVideoFrames ?? null,
@@ -414,7 +415,17 @@ async function verifyRouteHandoff(run) {
   const preferenceBeforeRoute = run.background
     ? await run.page.evaluate(() => localStorage.getItem("dstream_player_background_play_v1"))
     : null;
+  if (!run.scenario.includes("mobile")) {
+    await run.page.locator("video").first().evaluate((video) => {
+      video.volume = 0.65;
+      video.muted = false;
+    });
+    await run.page.waitForTimeout(100);
+  }
   const before = await sampleVideo(run.page);
+  if (!run.scenario.includes("mobile") && (before.muted || before.volume === 0)) {
+    fail(`${run.scenario}/${run.title}: could not establish audible playback before route handoff`);
+  }
   const homeLink = run.page.locator('a[href="/"]').first();
   await homeLink.click();
   await run.page.waitForURL(`${BASE_URL}/`, { timeout: 20_000 });
@@ -432,6 +443,14 @@ async function verifyRouteHandoff(run) {
     );
   }
   if (after.paused || after.ended) fail(`${run.scenario}/${run.title}: playback stopped during route handoff`);
+  if (after.muted !== before.muted || Math.abs(after.volume - before.volume) > 0.01) {
+    fail(
+      `${run.scenario}/${run.title}: audio state changed during route handoff ` +
+        `(muted ${before.muted} -> ${after.muted}, volume ${before.volume.toFixed(2)} -> ${after.volume.toFixed(2)})`
+    );
+  }
+
+  await verifyMiniPlayerDragAlignment(run, miniPlayer);
 
   await miniPlayer.hover();
   const pauseButton = miniPlayer.getByRole("button", { name: "Pause", exact: true });
@@ -488,6 +507,53 @@ async function verifyRouteHandoff(run) {
   run.last = after;
   run.lastSampledAt = Date.now();
   run.lastProgressAt = Date.now();
+}
+
+async function verifyMiniPlayerDragAlignment(run, miniPlayer) {
+  if (run.scenario.includes("mobile")) return;
+  const box = await miniPlayer.boundingBox();
+  if (!box) fail(`${run.scenario}/${run.title}: mini-player has no drag bounds`);
+
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const destinations = [
+    { x: Math.max(80, start.x - 140), y: Math.max(80, start.y - 90) },
+    { x: Math.min(1100, start.x + 100), y: Math.max(80, start.y - 150) },
+    { x: Math.max(80, start.x - 60), y: Math.min(650, start.y + 30) }
+  ];
+
+  await run.page.mouse.move(start.x, start.y);
+  await run.page.mouse.down();
+  try {
+    for (const destination of destinations) {
+      await run.page.mouse.move(destination.x, destination.y, { steps: 1 });
+      const alignment = await run.page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            requestAnimationFrame(() => {
+              const slot = document.querySelector('[data-player-slot="quickplay-dock"]');
+              const host = document.querySelector("[data-global-player-host]");
+              if (!(slot instanceof HTMLElement) || !(host instanceof HTMLElement)) {
+                resolve(null);
+                return;
+              }
+              const slotRect = slot.getBoundingClientRect();
+              const hostRect = host.getBoundingClientRect();
+              resolve({
+                left: Math.abs(slotRect.left - hostRect.left),
+                top: Math.abs(slotRect.top - hostRect.top),
+                width: Math.abs(slotRect.width - hostRect.width),
+                height: Math.abs(slotRect.height - hostRect.height)
+              });
+            });
+          })
+      );
+      if (!alignment || Math.max(alignment.left, alignment.top, alignment.width, alignment.height) > 1.5) {
+        fail(`${run.scenario}/${run.title}: video host lagged behind mini-player drag (${JSON.stringify(alignment)})`);
+      }
+    }
+  } finally {
+    await run.page.mouse.up();
+  }
 }
 
 async function verifyMiniPlayerClose(run) {
