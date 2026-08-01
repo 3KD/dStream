@@ -9,7 +9,7 @@ export default function SettingsProfilePage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-4xl mx-auto p-8 space-y-8">
+      <main className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-7">
         <header className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-2xl font-bold">Profile</h1>
@@ -19,13 +19,13 @@ export default function SettingsProfilePage() {
 
         <SettingsNav />
 
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-neutral-200">Public Profile</h2>
-            <ProfileMetadataEditor />
-          </section>
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-neutral-200">Custom Emotes</h2>
+        <div className="space-y-7">
+          <ProfileMetadataEditor />
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-base font-semibold text-neutral-100">Custom emotes</h2>
+              <p className="mt-1 text-xs text-neutral-500">Manage the emotes viewers can use in your chat.</p>
+            </div>
             <EmoteManager />
           </section>
         </div>

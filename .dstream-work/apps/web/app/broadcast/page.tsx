@@ -2,7 +2,27 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleDot, Camera, Mic, MonitorUp, Radio, Square, AlertTriangle, ExternalLink, PictureInPicture2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleDot,
+  ClipboardCopy,
+  ExternalLink,
+  Laptop,
+  LoaderCircle,
+  Mic,
+  MonitorUp,
+  PictureInPicture2,
+  Radio,
+  RefreshCw,
+  Signal,
+  Square,
+  Video,
+  WifiOff
+} from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { ChatBox } from "@/components/chat/ChatBox";
 import { useIdentity } from "@/context/IdentityContext";
@@ -178,6 +198,8 @@ type LadderProfile = { id: string; width: number; height: number; bandwidth: num
 type SourceMode = "camera" | "screen" | "camera_screen_pip";
 type CaptureResolutionPreset = "source" | "1080p" | "720p" | "480p";
 type EncoderGuide = "obs" | "streamlabs" | "vmix" | "xsplit" | "prism";
+type BroadcastMethod = "browser" | "external";
+type ExternalFeedState = "idle" | "waiting" | "checking" | "detected" | "publishing" | "live" | "interrupted" | "error";
 
 const AUTO_LADDER_PROFILES: LadderProfile[] = [
   { id: "360p", width: 640, height: 360, bandwidth: 700_000 }
@@ -200,7 +222,7 @@ const ENCODER_GUIDE_OPTIONS: Array<{ id: EncoderGuide; label: string }> = [
 
 export default function BroadcastPage() {
   const { identity, signEvent } = useIdentity();
-  const { quickPlayStream, setQuickPlayStream, clearQuickPlayStream } = useQuickPlay();
+  const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
   const [requestedStreamId, setRequestedStreamId] = useState<string | null>(null);
@@ -214,8 +236,17 @@ export default function BroadcastPage() {
   const reconnectInFlightRef = useRef(false);
   const lastWhipOptionsRef = useRef<{ videoMaxBitrateKbps?: number; videoMaxFps?: number }>({});
   const previewResourceCleanupRef = useRef<(() => void) | null>(null);
+  const externalProbeInFlightRef = useRef(false);
+  const externalAnnounceInFlightRef = useRef(false);
+  const externalSuccessCountRef = useRef(0);
+  const externalFailureCountRef = useRef(0);
+  const externalAnnouncedRef = useRef(false);
+  const externalAutoSuppressedRef = useRef(false);
+  const externalLastAnnounceAttemptRef = useRef(0);
+  const externalLastCheckedAtRef = useRef(0);
 
   const [streamId, setStreamId] = useState("");
+  const [broadcastMethod, setBroadcastMethod] = useState<BroadcastMethod>("browser");
   const [title, setTitle] = useState("Untitled Stream");
   const [summary, setSummary] = useState("");
   const [image, setImage] = useState("");
@@ -286,12 +317,46 @@ export default function BroadcastPage() {
   const [externalEncoderOpen, setExternalEncoderOpen] = useState(false);
   const [encoderGuide, setEncoderGuide] = useState<EncoderGuide>("obs");
   const [encoderCopyStatus, setEncoderCopyStatus] = useState<string | null>(null);
+  const [externalFeedState, setExternalFeedState] = useState<ExternalFeedState>("idle");
+  const [externalAnnounced, setExternalAnnounced] = useState(false);
+  const [externalAutoPublish, setExternalAutoPublish] = useState(true);
+  const [externalAutoSuppressed, setExternalAutoSuppressed] = useState(false);
+  const [externalLastCheckedAt, setExternalLastCheckedAt] = useState<number | null>(null);
   const [previewPipAvailable, setPreviewPipAvailable] = useState(false);
   const [previewPipActive, setPreviewPipActive] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    try {
+      const storedMethod = localStorage.getItem("dstream_broadcast_method_v1");
+      if (storedMethod === "browser" || storedMethod === "external") setBroadcastMethod(storedMethod);
+      const storedAutoPublish = localStorage.getItem("dstream_external_auto_publish_v1");
+      if (storedAutoPublish === "0") setExternalAutoPublish(false);
+      if (storedAutoPublish === "1") setExternalAutoPublish(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("dstream_broadcast_method_v1", broadcastMethod);
+      localStorage.setItem("dstream_external_auto_publish_v1", externalAutoPublish ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [broadcastMethod, externalAutoPublish]);
+
+  useEffect(() => {
+    externalAnnouncedRef.current = externalAnnounced;
+  }, [externalAnnounced]);
+
+  useEffect(() => {
+    externalAutoSuppressedRef.current = externalAutoSuppressed;
+  }, [externalAutoSuppressed]);
 
   useEffect(() => {
     try {
@@ -639,6 +704,7 @@ export default function BroadcastPage() {
     chatFollowerOnly,
     discoverable,
     matureContent,
+    contentWarningReason,
     hostMode,
     paymentDrafts,
     stakeNote,
@@ -902,6 +968,11 @@ export default function BroadcastPage() {
     return `/api/hls/${name}/index.m3u8`;
   }, [originStreamId, streamId]);
 
+  const externalIngestStatusUrl = useMemo(
+    () => (originStreamId ? `/api/broadcast/ingest-status/${encodeURIComponent(originStreamId)}` : ""),
+    [originStreamId]
+  );
+
   const hlsHintUrl = useMemo(() => {
     const streamName = originStreamId ?? streamId;
     const hlsOrigin = process.env.NEXT_PUBLIC_HLS_ORIGIN?.trim();
@@ -947,7 +1018,7 @@ export default function BroadcastPage() {
       "Open stream output settings and choose Custom RTMP.",
       `Server: ${rtmpServerUrl}`,
       `Stream key: ${streamKeyValue}`,
-      "Start streaming from your encoder, then click “Announce Live (External)” below."
+      "Start streaming. dStream will verify the signal and publish your live status automatically."
     ];
     switch (encoderGuide) {
       case "streamlabs":
@@ -989,6 +1060,20 @@ export default function BroadcastPage() {
       setTimeout(() => setEncoderCopyStatus(null), 1800);
     }
   }, []);
+
+  const copyExternalEncoderSetup = useCallback(async () => {
+    if (!externalStreamKey) return;
+    const setup = [`Server: ${rtmpServerUrl}`, `Stream key: ${externalStreamKey}`].join("\n");
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable.");
+      await navigator.clipboard.writeText(setup);
+      setEncoderCopyStatus("OBS setup copied");
+      setTimeout(() => setEncoderCopyStatus(null), 1500);
+    } catch {
+      setEncoderCopyStatus("Failed to copy OBS setup");
+      setTimeout(() => setEncoderCopyStatus(null), 1800);
+    }
+  }, [externalStreamKey, rtmpServerUrl]);
 
   const refreshDevices = async () => {
     try {
@@ -1448,6 +1533,7 @@ export default function BroadcastPage() {
     chatFollowerOnly,
     discoverable,
     matureContent,
+    contentWarningReason,
     viewerAllowPubkeys,
     videoArchiveEnabled,
     videoVisibility,
@@ -1507,7 +1593,7 @@ export default function BroadcastPage() {
 
   useEffect(() => {
     if (!autoAnnounce) return;
-    if (status !== "live") return;
+    if (status !== "live" && !(externalAnnounced && externalFeedState === "live")) return;
     if (!identity) return;
 
     const interval = setInterval(() => {
@@ -1524,7 +1610,7 @@ export default function BroadcastPage() {
     }, 30_000);
 
     return () => clearInterval(interval);
-  }, [announce, autoAnnounce, identity, status]);
+  }, [announce, autoAnnounce, externalAnnounced, externalFeedState, identity, status]);
 
   const reconnectPublish = useCallback(
     async (reason: string) => {
@@ -1727,15 +1813,16 @@ export default function BroadcastPage() {
     async (nextStatus: "live" | "ended") => {
       if (!identity) {
         setError("Connect an identity first (NIP-07 preferred).");
-        return;
+        return false;
       }
       if (!originStreamId) {
         setError(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
-        return;
+        return false;
       }
 
       setError(null);
       try {
+        if (nextStatus === "live") setExternalFeedState("publishing");
         setAnnounceStep("checking");
         const ok = await announce(nextStatus);
         setLastAnnounceAt(Date.now());
@@ -1754,45 +1841,220 @@ export default function BroadcastPage() {
           } catch {
             // ignore
           }
-          if (!ok) setError("External stream is live, but announce failed on relays.");
+          externalAnnouncedRef.current = ok;
+          setExternalAnnounced(ok);
+          setExternalFeedState(ok ? "live" : "detected");
+          if (!ok) setError("OBS signal is ready, but publishing the live status failed. dStream will retry.");
         } else {
-          clearStoredSession();
-          if (!ok) setError("External stream ended locally, but end announce failed on relays.");
+          if (ok) {
+            clearStoredSession();
+            externalAnnouncedRef.current = false;
+            setExternalAnnounced(false);
+            setExternalFeedState(externalFailureCountRef.current > 0 ? "waiting" : "detected");
+          } else {
+            setExternalFeedState("error");
+            setError("The OBS signal ended, but the public end status failed. dStream will retry.");
+          }
         }
+        return ok;
       } catch (e: any) {
         setAnnounceStep("fail");
+        if (nextStatus === "live") setExternalFeedState("error");
         setError(e?.message ?? `Failed to announce external stream (${nextStatus}).`);
+        return false;
       }
     },
     [announce, clearStoredSession, identity, originStreamId, streamId]
   );
 
-  const checkExternalIngest = useCallback(async () => {
-    setHlsStep("checking");
-    setHlsLastCode(null);
-    try {
-      const res = await fetch(hlsLocalUrl, { cache: "no-store" });
-      setHlsLastCode(res.status);
-      setHlsStep(res.ok ? "ok" : "fail");
-    } catch {
-      setHlsLastCode(null);
-      setHlsStep("fail");
+  const endExternalBroadcast = useCallback(async () => {
+    externalAutoSuppressedRef.current = true;
+    setExternalAutoSuppressed(true);
+    await announceExternal("ended");
+  }, [announceExternal]);
+
+  const probeExternalIngest = useCallback(async () => {
+    if (!identity || !originStreamId || externalProbeInFlightRef.current) return false;
+
+    externalProbeInFlightRef.current = true;
+    if (
+      !externalAnnouncedRef.current &&
+      externalSuccessCountRef.current === 0 &&
+      externalFailureCountRef.current === 0
+    ) {
+      setExternalFeedState("checking");
+      setHlsStep("checking");
     }
-  }, [hlsLocalUrl]);
+
+    try {
+      const res = await fetch(externalIngestStatusUrl, { cache: "no-store" });
+      const readiness = (await res.json().catch(() => null)) as { ready?: boolean; upstreamStatus?: number | null } | null;
+      const playablePlaylist = res.ok && readiness?.ready === true;
+      const checkedAt = Date.now();
+      if (checkedAt - externalLastCheckedAtRef.current >= 15_000) {
+        externalLastCheckedAtRef.current = checkedAt;
+        setExternalLastCheckedAt(checkedAt);
+      }
+      setHlsLastCode(typeof readiness?.upstreamStatus === "number" ? readiness.upstreamStatus : null);
+
+      if (playablePlaylist) {
+        externalSuccessCountRef.current += 1;
+        externalFailureCountRef.current = 0;
+        if (externalSuccessCountRef.current < 2) {
+          setExternalFeedState(externalAnnouncedRef.current ? "live" : "checking");
+          return true;
+        }
+
+        setHlsStep("ok");
+        setExternalFeedState(externalAnnouncedRef.current ? "live" : "detected");
+
+        const canAutoPublish =
+          externalAutoPublish &&
+          !externalAutoSuppressedRef.current &&
+          !externalAnnouncedRef.current &&
+          !externalAnnounceInFlightRef.current &&
+          Date.now() - externalLastAnnounceAttemptRef.current >= 15_000;
+
+        if (canAutoPublish) {
+          externalAnnounceInFlightRef.current = true;
+          externalLastAnnounceAttemptRef.current = Date.now();
+          try {
+            await announceExternal("live");
+          } finally {
+            externalAnnounceInFlightRef.current = false;
+          }
+        }
+        return true;
+      }
+
+      externalSuccessCountRef.current = 0;
+      externalFailureCountRef.current += 1;
+      if (externalFailureCountRef.current >= 2) setHlsStep("fail");
+
+      if (externalAutoSuppressedRef.current && externalFailureCountRef.current >= 3) {
+        externalAutoSuppressedRef.current = false;
+        setExternalAutoSuppressed(false);
+      }
+
+      if (externalAnnouncedRef.current) {
+        setExternalFeedState("interrupted");
+        if (
+          externalAutoPublish &&
+          externalFailureCountRef.current >= 10 &&
+          !externalAnnounceInFlightRef.current &&
+          Date.now() - externalLastAnnounceAttemptRef.current >= 15_000
+        ) {
+          externalAnnounceInFlightRef.current = true;
+          externalLastAnnounceAttemptRef.current = Date.now();
+          try {
+            await announceExternal("ended");
+          } finally {
+            externalAnnounceInFlightRef.current = false;
+          }
+        }
+      } else {
+        setExternalFeedState("waiting");
+      }
+      return false;
+    } catch {
+      const checkedAt = Date.now();
+      if (checkedAt - externalLastCheckedAtRef.current >= 15_000) {
+        externalLastCheckedAtRef.current = checkedAt;
+        setExternalLastCheckedAt(checkedAt);
+      }
+      setHlsLastCode(null);
+      externalSuccessCountRef.current = 0;
+      externalFailureCountRef.current += 1;
+      if (externalFailureCountRef.current >= 2) setHlsStep("fail");
+      setExternalFeedState(externalAnnouncedRef.current ? "interrupted" : "waiting");
+
+      if (
+        externalAnnouncedRef.current &&
+        externalAutoPublish &&
+        externalFailureCountRef.current >= 10 &&
+        !externalAnnounceInFlightRef.current &&
+        Date.now() - externalLastAnnounceAttemptRef.current >= 15_000
+      ) {
+        externalAnnounceInFlightRef.current = true;
+        externalLastAnnounceAttemptRef.current = Date.now();
+        try {
+          await announceExternal("ended");
+        } finally {
+          externalAnnounceInFlightRef.current = false;
+        }
+      }
+      return false;
+    } finally {
+      externalProbeInFlightRef.current = false;
+    }
+  }, [announceExternal, externalAutoPublish, externalIngestStatusUrl, identity, originStreamId]);
+
+  useEffect(() => {
+    if (broadcastMethod !== "external" || !identity || !originStreamId) {
+      externalSuccessCountRef.current = 0;
+      externalFailureCountRef.current = 0;
+      if (!externalAnnouncedRef.current) setExternalFeedState("idle");
+      return;
+    }
+
+    setExternalFeedState(externalAnnouncedRef.current ? "live" : "checking");
+    void probeExternalIngest();
+    const interval = setInterval(() => {
+      void probeExternalIngest();
+    }, 3_000);
+
+    return () => clearInterval(interval);
+  }, [broadcastMethod, identity, originStreamId, probeExternalIngest]);
+
+  const externalSignalDetected =
+    externalFeedState === "detected" ||
+    externalFeedState === "publishing" ||
+    externalFeedState === "live" ||
+    externalFeedState === "interrupted";
+  const externalStatusLabel =
+    !identity || !originStreamId
+      ? "Setup required"
+      : externalFeedState === "live"
+        ? "Live"
+        : externalFeedState === "publishing"
+          ? "Publishing live status"
+          : externalFeedState === "detected"
+            ? externalAutoSuppressed
+              ? "Signal detected — status paused"
+              : "Signal detected"
+            : externalFeedState === "interrupted"
+              ? "Signal interrupted — verifying"
+              : externalFeedState === "error"
+                ? "Status publish failed"
+                : externalFeedState === "checking"
+                  ? "Checking OBS signal"
+                  : "Waiting for OBS";
+  const publicBroadcastLive = broadcastMethod === "external" ? externalAnnounced : status === "live";
+  const broadcastConnecting =
+    broadcastMethod === "external"
+      ? externalFeedState === "checking" || externalFeedState === "publishing"
+      : status === "connecting";
+  const broadcastMethodLocked = status === "connecting" || status === "live" || externalAnnounced;
 
   const broadcastStatusBadge = (
     <span
       className={`min-w-[120px] text-center px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg ${
-        status === "live"
+        publicBroadcastLive
           ? "bg-red-600/20 text-red-300 border-red-500/40"
-          : status === "connecting"
+          : broadcastConnecting
             ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
             : "bg-neutral-900/70 text-neutral-300 border-neutral-800"
       }`}
     >
       <span className="inline-flex items-center gap-2">
-        <CircleDot className={`w-3.5 h-3.5 ${status === "live" ? "text-red-400" : "text-neutral-400"}`} />
-        {status === "live" ? "LIVE" : status === "connecting" ? "CONNECTING" : mediaStream ? "PREVIEW" : "OFFLINE"}
+        <CircleDot className={`w-3.5 h-3.5 ${publicBroadcastLive ? "text-red-400" : "text-neutral-400"}`} />
+        {publicBroadcastLive
+          ? "LIVE"
+          : broadcastConnecting
+            ? "CONNECTING"
+            : broadcastMethod === "browser" && mediaStream
+              ? "PREVIEW"
+              : "OFFLINE"}
       </span>
     </span>
   );
@@ -1800,7 +2062,46 @@ export default function BroadcastPage() {
   return (
       <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-[1720px] mx-auto px-6 pb-10 pt-6">
+      <main className="max-w-[1720px] mx-auto px-4 sm:px-6 pb-28 sm:pb-10 pt-5 sm:pt-6">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Broadcast Studio</h1>
+            <p className="mt-1 text-sm text-neutral-500">Set up the stream once, then keep its signal and public status in sync.</p>
+          </div>
+          <div className="inline-flex w-full max-w-md rounded-lg border border-neutral-800 bg-neutral-900/60 p-1" role="tablist" aria-label="Broadcast method">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={broadcastMethod === "browser"}
+              onClick={() => {
+                if (broadcastMethodLocked) return;
+                setBroadcastMethod("browser");
+              }}
+              disabled={broadcastMethodLocked}
+              className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                broadcastMethod === "browser" ? "bg-blue-600 text-white" : "text-neutral-400 hover:bg-neutral-800 hover:text-white"
+              }`}
+            >
+              <Video className="h-4 w-4" /> Browser
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={broadcastMethod === "external"}
+              onClick={() => {
+                if (broadcastMethodLocked) return;
+                stopPreview();
+                setBroadcastMethod("external");
+              }}
+              disabled={broadcastMethodLocked}
+              className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                broadcastMethod === "external" ? "bg-blue-600 text-white" : "text-neutral-400 hover:bg-neutral-800 hover:text-white"
+              }`}
+            >
+              <Laptop className="h-4 w-4" /> OBS / Encoder
+            </button>
+          </div>
+        </header>
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -1811,7 +2112,7 @@ export default function BroadcastPage() {
           </div>
         )}
 
-        {storedSession && identity && storedSession.pubkey === identity.pubkey && status !== "live" && (
+        {storedSession && identity && storedSession.pubkey === identity.pubkey && status !== "live" && !externalAnnounced && (
           <div className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="text-sm text-neutral-300">
               Previous session:{" "}
@@ -1838,462 +2139,302 @@ export default function BroadcastPage() {
         )}
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
-          <div className="space-y-6 min-w-0">
-            <div className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800 min-h-[52vh] lg:min-h-[60vh] xl:min-h-[64vh] max-h-[80vh]">
-              {mediaStream ? (
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center flex-col gap-4 text-neutral-400 p-6 text-center">
-                  <div className="flex items-center gap-3 text-neutral-500">
-                    <Camera className="w-10 h-10" />
-                    <MonitorUp className="w-10 h-10" />
-                  </div>
-                  <div className="text-sm">Choose a source to start preview.</div>
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <button
-                      onClick={() => {
-                        void startPreview("camera");
-                      }}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    >
-                      Camera
-                    </button>
-                    <button
-                      onClick={() => {
-                        void startPreview("screen");
-                      }}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    >
-                      Screen
-                    </button>
-                    <button
-                      onClick={() => {
-                        void startPreview("camera_screen_pip");
-                      }}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    >
-                      Camera + Screen
-                    </button>
-                  </div>
-                  <div className="text-xs text-neutral-500">Your browser will ask for permission after you click.</div>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-5">
-              <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
-                  <div className="space-y-2">
-                    <label className="text-xs text-neutral-400">Source</label>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setSourceMode("camera")}
-                        className={`px-3 py-2 rounded-xl border text-sm ${
-                          sourceMode === "camera"
-                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                        }`}
-                        disabled={status === "connecting" || status === "live"}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Camera className="w-4 h-4" /> Camera
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSourceMode("screen")}
-                        className={`px-3 py-2 rounded-xl border text-sm ${
-                          sourceMode === "screen"
-                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                        }`}
-                        disabled={status === "connecting" || status === "live"}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <MonitorUp className="w-4 h-4" /> Screen
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSourceMode("camera_screen_pip")}
-                        className={`px-3 py-2 rounded-xl border text-sm ${
-                          sourceMode === "camera_screen_pip"
-                            ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                            : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                        }`}
-                        disabled={status === "connecting" || status === "live"}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Camera className="w-4 h-4" />
-                          <MonitorUp className="w-4 h-4" />
-                          Camera + Screen
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2 md:justify-self-end">
-                    <label className="text-xs text-neutral-400">Audio</label>
-                    <label className="flex items-center gap-2 text-sm text-neutral-300 select-none cursor-pointer whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={includeAudio}
-                        onChange={(e) => setIncludeAudio(e.target.checked)}
-                        className="accent-blue-500"
-                        disabled={status === "connecting" || status === "live"}
-                      />
-                      Include microphone
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-neutral-300 select-none cursor-pointer whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={includeSystemAudio}
-                        onChange={(e) => setIncludeSystemAudio(e.target.checked)}
-                        className="accent-blue-500"
-                        disabled={status === "connecting" || status === "live"}
-                      />
-                      Include system audio
-                    </label>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3 pt-1">
-                  {mediaStream ? (
-                    <button
-                      onClick={stopPreview}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                      disabled={status === "connecting" || status === "live"}
-                    >
-                      Stop Preview
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        void startPreview();
-                      }}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    >
-                      {sourceMode === "screen" ? "Share Screen" : sourceMode === "camera_screen_pip" ? "Share + Camera PiP" : "Start Preview"}
-                    </button>
-                  )}
-
-                  {mediaStream && previewPipAvailable ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void togglePreviewPip();
-                      }}
-                      className={`px-4 py-2 rounded-xl border text-sm inline-flex items-center gap-2 ${
-                        previewPipActive
-                          ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                          : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                      }`}
-                      title={previewPipActive ? "Return preview to page" : "Pop preview out into a movable picture-in-picture window"}
-                    >
-                      <PictureInPicture2 className="w-4 h-4" />
-                      {previewPipActive ? "Return Preview" : "Pop Out Preview"}
-                    </button>
-                  ) : null}
-
-                  {status === "live" ? (
-                    <button onClick={endStream} className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-bold flex items-center gap-2">
-                      <Square className="w-4 h-4" /> End Stream
-                    </button>
-                  ) : (
-                    <button
-                      onClick={goLive}
-                      className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                      disabled={!mediaStream || status === "connecting"}
-                    >
-                      <Radio className="w-4 h-4" /> Start Stream
-                    </button>
-                  )}
-
-                  {status === "live" && identity && (
-                    <button
-                      onClick={() => {
-                        void (async () => {
-                          try {
-                            setAnnounceStep("checking");
-                            const ok = await announce("live");
-                            setLastAnnounceAt(Date.now());
-                            setAnnounceStep(ok ? "ok" : "fail");
-                          } catch {
-                            setAnnounceStep("fail");
-                          }
-                        })();
-                      }}
-                      className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                      title="Republish the stream announce event (kind 30311)"
-                      disabled={announceStep === "checking"}
-                    >
-                      Update Announce
-                    </button>
-                  )}
-
-                  <Link
-                    href={`/watch/${identity ? pubkeyHexToNpub(identity.pubkey) ?? identity.pubkey : "npub"}/${streamId}`}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm inline-flex items-center gap-2"
-                    title="Open watch page for this stream"
-                  >
-                    Watch <ExternalLink className="w-4 h-4" />
-                  </Link>
-
-                  <button
-                    onClick={copyWatchLink}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                    title="Copy watch link"
-                  >
-                    {copyStatus === "copied" ? "Copied" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
-                  </button>
-                </div>
+          <div className="space-y-5 min-w-0">
+            <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-100">Stream details</h2>
+                <p className="mt-1 text-xs text-neutral-500">These details appear in browse, your profile, and the watch page.</p>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs text-neutral-400">Stream ID (Nostr d-tag)</label>
-                    <button
-                      type="button"
-                      onClick={() => setStreamId(safeDefaultStreamId(identity?.pubkey ?? null))}
-                      disabled={status === "connecting" || status === "live"}
-                      className="px-2 py-1 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-[11px] text-neutral-300 disabled:opacity-50"
-                      title="Generate from identity pubkey + timestamp"
-                    >
-                      Auto from pubkey
-                    </button>
-                  </div>
-                  <input
-                    value={streamId}
-                    onChange={(e) => setStreamId(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={status === "connecting" || status === "live"}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-neutral-400">Title</label>
+                <label className="space-y-2">
+                  <span className="text-xs text-neutral-400">Title</span>
                   <input
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    onChange={(event) => setTitle(event.target.value)}
+                    className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
                     disabled={status === "connecting"}
+                    placeholder="What are you streaming?"
                   />
-                </div>
+                </label>
+                <label className="space-y-2 md:row-span-2">
+                  <span className="text-xs text-neutral-400">Description <span className="text-neutral-600">(optional)</span></span>
+                  <textarea
+                    value={summary}
+                    onChange={(event) => setSummary(event.target.value)}
+                    className="min-h-24 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none md:min-h-[108px]"
+                    disabled={status === "connecting"}
+                    placeholder="Give viewers a little context."
+                  />
+                </label>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-neutral-400">Summary (optional)</label>
-                <textarea
-                  value={summary}
-                  onChange={(e) => setSummary(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none min-h-20"
-                  disabled={status === "connecting"}
-                />
-              </div>
-
-              <div className="ui-surface-soft p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold text-neutral-100">Ingest + encoder tools</div>
-                    <p className="text-xs text-neutral-500">Use external tools only when streaming from OBS/Streamlabs/vMix/XSplit/PRISM.</p>
+              <details className="group border-t border-neutral-800 pt-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-neutral-400 hover:text-neutral-200">
+                  Stream identity and sharing
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-xs text-neutral-500">Stream ID</span>
+                    <div className="flex min-w-0 gap-2">
+                      <input
+                        value={streamId}
+                        onChange={(event) => setStreamId(event.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none"
+                        disabled={broadcastMethodLocked}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setStreamId(safeDefaultStreamId(identity?.pubkey ?? null))}
+                        disabled={broadcastMethodLocked}
+                        className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+                      >
+                        New ID
+                      </button>
+                    </div>
+                  </label>
+                  <div className="space-y-2">
+                    <span className="text-xs text-neutral-500">Watch link</span>
+                    <div className="flex min-w-0 gap-2">
+                      <input value={watchUrl} readOnly className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-neutral-400" />
+                      <button type="button" onClick={copyWatchLink} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800" aria-label="Copy watch link" title="Copy watch link">
+                        {copyStatus === "copied" ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                      </button>
+                      <Link href={watchPath} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800" aria-label="Open watch page" title="Open watch page">
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setExternalEncoderOpen((prev) => !prev)}
-                    className="ui-pill"
-                    data-active={externalEncoderOpen}
-                    aria-expanded={externalEncoderOpen}
-                    aria-controls="broadcast-external-encoder"
-                  >
-                    <span className="text-sm leading-none">{externalEncoderOpen ? "^" : "v"}</span>
-                    <span>{externalEncoderOpen ? "Hide External Tools" : "Show External Tools"}</span>
-                  </button>
+                </div>
+              </details>
+            </section>
+
+            {broadcastMethod === "browser" ? (
+              <>
+                <div className="relative aspect-video max-h-[70vh] min-h-[220px] overflow-hidden rounded-lg border border-neutral-800 bg-black">
+                  {mediaStream ? (
+                    <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-neutral-500">
+                      <div className="flex items-center gap-3">
+                        <Camera className="h-8 w-8" />
+                        <MonitorUp className="h-8 w-8" />
+                      </div>
+                      <div className="text-sm text-neutral-400">Your browser preview will appear here.</div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-xs text-neutral-500">
-                  HLS hint: <span className="font-mono break-all">{hlsHintUrl}</span>
-                </div>
-
-                {externalEncoderOpen ? (
-                  <div id="broadcast-external-encoder" className="pt-3 border-t border-neutral-800 space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="text-sm font-semibold text-neutral-100">External Encoder</div>
-                        <p className="text-xs text-neutral-500">
-                          Use custom RTMP from desktop software. Keep this page open to publish announce events.
-                        </p>
-                      </div>
-                      {encoderCopyStatus ? (
-                        <span className="px-2 py-1 rounded-lg border border-blue-500/40 bg-blue-600/20 text-[11px] text-blue-200">
-                          {encoderCopyStatus}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {!identity || !originStreamId ? (
-                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                        Connect identity and keep a valid Stream ID to generate a stable external stream key.
-                      </div>
-                    ) : null}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs text-neutral-400">RTMP server</label>
-                        <div className="flex gap-2">
-                          <input
-                            value={rtmpServerUrl}
-                            readOnly
-                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void copyExternalEncoderValue("RTMP server", rtmpServerUrl);
-                            }}
-                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-neutral-400">Stream key</label>
-                        <div className="flex gap-2">
-                          <input
-                            value={externalStreamKey || ""}
-                            readOnly
-                            placeholder="Connect identity first"
-                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void copyExternalEncoderValue("Stream key", externalStreamKey);
-                            }}
-                            disabled={!externalStreamKey}
-                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-neutral-400">RTMP publish URL (reference)</label>
-                        <div className="flex gap-2">
-                          <input
-                            value={rtmpPublishUrl}
-                            readOnly
-                            placeholder="Generated from server + key"
-                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void copyExternalEncoderValue("RTMP URL", rtmpPublishUrl);
-                            }}
-                            disabled={!rtmpPublishUrl}
-                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-neutral-400">WHIP endpoint (optional, WHIP-capable encoders)</label>
-                        <div className="flex gap-2">
-                          <input
-                            value={whipPublishUrl}
-                            readOnly
-                            placeholder="Generated from stream key"
-                            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs font-mono text-neutral-200 placeholder:text-neutral-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void copyExternalEncoderValue("WHIP endpoint", whipPublishUrl);
-                            }}
-                            disabled={!whipPublishUrl}
-                            className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs disabled:opacity-50"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-xs text-neutral-400">Quick setup</label>
+                <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="space-y-2">
+                      <div className="text-xs text-neutral-400">Video source</div>
                       <div className="flex flex-wrap gap-2">
-                        {ENCODER_GUIDE_OPTIONS.map((guide) => (
-                          <button
-                            key={guide.id}
-                            type="button"
-                            onClick={() => setEncoderGuide(guide.id)}
-                            className={`px-3 py-1.5 rounded-lg border text-xs ${
-                              encoderGuide === guide.id
-                                ? "bg-blue-600/20 border-blue-500/40 text-blue-200"
-                                : "bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
-                            }`}
-                          >
-                            {guide.label}
-                          </button>
-                        ))}
+                        {[
+                          { value: "camera" as const, label: "Camera", icon: Camera },
+                          { value: "screen" as const, label: "Screen", icon: MonitorUp },
+                          { value: "camera_screen_pip" as const, label: "Camera + Screen", icon: PictureInPicture2 }
+                        ].map((option) => {
+                          const Icon = option.icon;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setSourceMode(option.value)}
+                              disabled={status === "connecting" || status === "live"}
+                              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-50 ${
+                                sourceMode === option.value
+                                  ? "border-blue-500/50 bg-blue-600/20 text-blue-200"
+                                  : "border-neutral-800 bg-neutral-950 text-neutral-300 hover:bg-neutral-800"
+                              }`}
+                            >
+                              <Icon className="h-4 w-4" /> {option.label}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <ol className="list-decimal pl-5 space-y-1 text-xs text-neutral-300">
-                        {encoderGuideSteps.map((step, index) => (
-                          <li key={`encoder-guide-${index}`}>{step}</li>
-                        ))}
-                      </ol>
                     </div>
+                    <div className="flex flex-col gap-2 text-sm text-neutral-300">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={includeAudio} onChange={(event) => setIncludeAudio(event.target.checked)} className="accent-blue-500" disabled={status === "connecting" || status === "live"} />
+                        Microphone
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={includeSystemAudio} onChange={(event) => setIncludeSystemAudio(event.target.checked)} className="accent-blue-500" disabled={status === "connecting" || status === "live"} />
+                        System audio
+                      </label>
+                    </div>
+                  </div>
 
-                    <div className="flex flex-wrap gap-3 pt-1">
+                  <div className="hidden flex-wrap gap-2 border-t border-neutral-800 pt-4 sm:flex">
+                    {mediaStream ? (
+                      <button type="button" onClick={stopPreview} disabled={status === "connecting" || status === "live"} className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50">Stop preview</button>
+                    ) : (
+                      <button type="button" onClick={() => void startPreview()} className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800">Start preview</button>
+                    )}
+                    {mediaStream && previewPipAvailable ? (
+                      <button type="button" onClick={() => void togglePreviewPip()} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800">
+                        <PictureInPicture2 className="h-4 w-4" /> {previewPipActive ? "Return preview" : "Pop out preview"}
+                      </button>
+                    ) : null}
+                    {status === "live" ? (
+                      <button type="button" onClick={endStream} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-500"><Square className="h-4 w-4" /> End stream</button>
+                    ) : (
+                      <button type="button" onClick={goLive} disabled={!mediaStream || status === "connecting"} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"><Radio className="h-4 w-4" /> Go live</button>
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <section className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900/40">
+                <div className="flex flex-col gap-3 border-b border-neutral-800 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                  <div>
+                    <h2 className="text-base font-semibold text-neutral-100">OBS setup</h2>
+                    <p className="mt-1 text-xs text-neutral-500">Paste these two values into OBS, then start streaming.</p>
+                  </div>
+                  <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                    externalAnnounced
+                      ? "border-red-500/40 bg-red-500/10 text-red-200"
+                      : externalFeedState === "interrupted" || externalFeedState === "error"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                        : "border-neutral-700 bg-neutral-950 text-neutral-300"
+                  }`}>
+                    {externalFeedState === "checking" || externalFeedState === "publishing" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : externalFeedState === "interrupted" ? <WifiOff className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}
+                    {externalStatusLabel}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 border-b border-neutral-800 sm:grid-cols-3 sm:divide-x sm:divide-neutral-800">
+                  {[
+                    { label: "Setup ready", done: !!identity && !!originStreamId, active: !identity || !originStreamId },
+                    { label: "Signal detected", done: externalSignalDetected, active: !!identity && !!originStreamId && !externalSignalDetected },
+                    { label: "Publicly live", done: externalAnnounced, active: externalSignalDetected && !externalAnnounced }
+                  ].map((step, index) => (
+                    <div key={step.label} className="flex items-center gap-3 border-t border-neutral-800 px-4 py-3 first:border-t-0 sm:border-t-0">
+                      <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${step.done ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200" : step.active ? "border-blue-500/50 bg-blue-500/15 text-blue-200" : "border-neutral-700 bg-neutral-950 text-neutral-500"}`}>
+                        {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                      </span>
+                      <span className={`text-xs ${step.done || step.active ? "text-neutral-200" : "text-neutral-500"}`}>{step.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-5 p-4 sm:p-5">
+                  {!identity || !originStreamId ? (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Connect your identity to generate stable OBS settings.</div>
+                  ) : null}
+
+                  <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+                    <label className="min-w-0 space-y-2">
+                      <span className="text-xs text-neutral-400">Server</span>
+                      <div className="flex min-w-0 gap-2">
+                        <input value={rtmpServerUrl} readOnly className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-xs font-mono text-neutral-200" />
+                        <button type="button" onClick={() => void copyExternalEncoderValue("Server", rtmpServerUrl)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:bg-neutral-800" aria-label="Copy OBS server" title="Copy OBS server"><ClipboardCopy className="h-4 w-4" /></button>
+                      </div>
+                    </label>
+                    <label className="min-w-0 space-y-2">
+                      <span className="text-xs text-neutral-400">Stream key</span>
+                      <div className="flex min-w-0 gap-2">
+                        <input value={externalStreamKey} readOnly placeholder="Connect identity first" className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-xs font-mono text-neutral-200 placeholder:text-neutral-600" />
+                        <button type="button" onClick={() => void copyExternalEncoderValue("Stream key", externalStreamKey)} disabled={!externalStreamKey} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40" aria-label="Copy stream key" title="Copy stream key"><ClipboardCopy className="h-4 w-4" /></button>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="flex cursor-pointer items-start gap-3 text-sm text-neutral-300">
+                      <input
+                        type="checkbox"
+                        checked={externalAutoPublish}
+                        onChange={(event) => {
+                          setExternalAutoPublish(event.target.checked);
+                          if (event.target.checked) {
+                            externalAutoSuppressedRef.current = false;
+                            setExternalAutoSuppressed(false);
+                            void probeExternalIngest();
+                          }
+                        }}
+                        className="mt-0.5 accent-blue-500"
+                      />
+                      <span>
+                        <span className="block font-medium text-neutral-200">Publish status automatically</span>
+                        <span className="mt-0.5 block text-xs text-neutral-500">Requires two successful checks; ends after about 30 seconds of sustained signal loss.</span>
+                      </span>
+                    </label>
+                    {externalLastCheckedAt ? <span className="shrink-0 text-[11px] text-neutral-600">Checked {new Date(externalLastCheckedAt).toLocaleTimeString()}</span> : null}
+                  </div>
+
+                  <div className="hidden flex-wrap gap-2 sm:flex">
+                    <button type="button" onClick={() => void copyExternalEncoderSetup()} disabled={!externalStreamKey} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"><ClipboardCopy className="h-4 w-4" /> Copy OBS setup</button>
+                    <button type="button" onClick={() => void probeExternalIngest()} disabled={!identity || !originStreamId || externalFeedState === "checking"} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${externalFeedState === "checking" ? "animate-spin" : ""}`} /> Check now</button>
+                    {externalAnnounced ? (
+                      <button type="button" onClick={() => void endExternalBroadcast()} disabled={announceStep === "checking"} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-4 w-4" /> End broadcast</button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => {
+                          externalAutoSuppressedRef.current = false;
+                          setExternalAutoSuppressed(false);
                           void announceExternal("live");
                         }}
-                        disabled={!identity || !originStreamId || announceStep === "checking"}
-                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-bold disabled:opacity-50"
+                        disabled={!identity || !originStreamId || !externalSignalDetected || announceStep === "checking"}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
                       >
-                        Announce Live (External)
+                        <Radio className="h-4 w-4" /> Publish live now
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void announceExternal("ended");
-                        }}
-                        disabled={!identity || !originStreamId || announceStep === "checking"}
-                        className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
-                      >
-                        Announce Ended
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void checkExternalIngest();
-                        }}
-                        className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-                      >
-                        Check External Feed
-                      </button>
-                    </div>
+                    )}
                   </div>
-                ) : null}
-              </div>
 
-              <div className="pt-2 border-t border-neutral-800">
-                <button
-                  type="button"
-                  onClick={() => setAdvancedOpen((prev) => !prev)}
-                  className="ui-pill"
-                  data-active={advancedOpen}
-                  aria-expanded={advancedOpen}
-                  aria-controls="broadcast-advanced-settings"
-                >
-                  <span className="text-lg leading-none">{advancedOpen ? "^" : "v"}</span>
-                  <span>{advancedOpen ? "Hide Advanced Settings" : "Show Advanced Settings"}</span>
-                </button>
-              </div>
+                  <div className="rounded-lg border border-blue-500/25 bg-blue-500/5 px-3 py-2 text-xs text-blue-100/80">Keep this studio tab open while broadcasting so your identity can sign status updates. Brief signal interruptions do not immediately end the stream.</div>
+
+                  {encoderCopyStatus ? <div className="text-xs text-emerald-300" role="status">{encoderCopyStatus}</div> : null}
+
+                  <div className="border-t border-neutral-800 pt-4">
+                    <button type="button" onClick={() => setExternalEncoderOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-3 text-left text-xs font-medium text-neutral-400 hover:text-neutral-200" aria-expanded={externalEncoderOpen} aria-controls="broadcast-external-encoder">
+                      Technical details and other encoders
+                      {externalEncoderOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {externalEncoderOpen ? (
+                      <div id="broadcast-external-encoder" className="mt-4 space-y-5">
+                        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
+                          {[
+                            { label: "RTMP publish URL", value: rtmpPublishUrl },
+                            { label: "WHIP endpoint", value: whipPublishUrl },
+                            { label: "Playback HLS", value: hlsHintUrl }
+                          ].map((item) => (
+                            <div key={item.label} className="min-w-0 space-y-1">
+                              <div className="text-[11px] text-neutral-500">{item.label}</div>
+                              <div className="break-all font-mono text-[11px] text-neutral-300">{item.value || "Unavailable"}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2">
+                            {ENCODER_GUIDE_OPTIONS.map((guide) => (
+                              <button key={guide.id} type="button" onClick={() => setEncoderGuide(guide.id)} className={`rounded-lg border px-3 py-1.5 text-xs ${encoderGuide === guide.id ? "border-blue-500/40 bg-blue-600/20 text-blue-200" : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:bg-neutral-800"}`}>{guide.label}</button>
+                            ))}
+                          </div>
+                          <ol className="list-decimal space-y-1 pl-5 text-xs text-neutral-300">
+                            {encoderGuideSteps.map((step, index) => <li key={`encoder-guide-${index}`} className="break-words">{step}</li>)}
+                          </ol>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-5">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-neutral-300 hover:text-white"
+                aria-expanded={advancedOpen}
+                aria-controls="broadcast-advanced-settings"
+              >
+                Advanced stream settings
+                {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
 
               {advancedOpen ? (
                 <div id="broadcast-advanced-settings" className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-5">
@@ -2910,6 +3051,8 @@ export default function BroadcastPage() {
                     </div>
                   </div>
 
+                  {broadcastMethod === "browser" ? (
+                    <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs text-neutral-400">Capture resolution preset</label>
@@ -3015,6 +3158,8 @@ export default function BroadcastPage() {
                       <div className="text-[11px] text-neutral-500 font-mono">Reconnect attempts this session: {reconnectAttempt}</div>
                     </div>
                   </div>
+                    </>
+                  ) : null}
 
                   <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">
                     <div className="text-sm font-semibold text-neutral-200">Chat policy (viewer-side enforcement)</div>
@@ -3076,7 +3221,8 @@ export default function BroadcastPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {broadcastMethod === "browser" ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs text-neutral-400 flex items-center gap-2">
                         <Camera className="w-4 h-4" /> Camera
@@ -3117,14 +3263,65 @@ export default function BroadcastPage() {
                           ))}
                       </select>
                     </div>
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-6 xl:sticky xl:top-24">
-            <div className="h-[68vh] min-h-[620px] max-h-[82vh] xl:h-[calc(100vh-7rem)] xl:max-h-[calc(100vh-7rem)] xl:min-h-[720px]">
+          <div className="space-y-5 xl:sticky xl:top-24">
+            <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 space-y-3 text-sm text-neutral-300">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-neutral-100">Broadcast status</h2>
+                  <p className="mt-0.5 text-xs text-neutral-500">Signal and public listing are tracked separately.</p>
+                </div>
+                {broadcastStatusBadge}
+              </div>
+
+              <div className="divide-y divide-neutral-800 border-y border-neutral-800 text-xs">
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="text-neutral-500">Media signal</span>
+                  <span className="text-right text-neutral-200">
+                    {broadcastMethod === "external"
+                      ? externalFeedState === "live" || externalFeedState === "detected"
+                        ? "Detected"
+                        : externalFeedState === "interrupted"
+                          ? "Interrupted"
+                          : externalFeedState === "checking"
+                            ? "Checking"
+                            : "Waiting"
+                      : status === "live"
+                        ? hlsStep === "ok" ? "Ready" : "Publishing"
+                        : mediaStream ? "Preview ready" : "Waiting"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="text-neutral-500">Public listing</span>
+                  <span className={publicBroadcastLive ? "text-emerald-300" : announceStep === "fail" ? "text-red-300" : "text-neutral-200"}>
+                    {publicBroadcastLive ? "Live" : announceStep === "checking" ? "Publishing" : announceStep === "fail" ? "Needs attention" : "Offline"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Link href={watchPath} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-neutral-200 hover:bg-neutral-800">
+                  <ExternalLink className="h-3.5 w-3.5" /> Open watch page
+                </Link>
+                <button type="button" onClick={copyWatchLink} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-neutral-200 hover:bg-neutral-800">
+                  {copyStatus === "copied" ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                  {copyStatus === "copied" ? "Copied" : "Copy link"}
+                </button>
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-neutral-400">
+                <input type="checkbox" checked={autoAnnounce} onChange={(event) => setAutoAnnounce(event.target.checked)} className="accent-blue-500" />
+                Keep the live listing fresh while broadcasting
+              </label>
+            </section>
+
+            <div className="h-[62vh] min-h-[560px] max-h-[760px] xl:h-[calc(100vh-23rem)] xl:min-h-[500px] xl:max-h-[720px]">
               <ChatBox
                 streamPubkey={identity?.pubkey ?? ""}
                 streamId={streamId}
@@ -3137,67 +3334,44 @@ export default function BroadcastPage() {
               />
             </div>
 
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3 text-sm text-neutral-300">
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">Stream Links</div>
-                <label className="flex items-center gap-2 text-xs text-neutral-400 select-none cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoAnnounce}
-                    onChange={(e) => setAutoAnnounce(e.target.checked)}
-                    className="accent-blue-500"
-                  />
-                  Auto-announce
-                </label>
+            <details className="group rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium text-neutral-300 hover:text-white">
+                Technical status
+                <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-4 space-y-3 border-t border-neutral-800 pt-4 text-xs text-neutral-500">
+                <div>Watch URL: <span className="break-all font-mono text-neutral-300">{watchUrl}</span></div>
+                {identity ? <div>Origin stream: <span className="break-all font-mono text-neutral-300">{originStreamId ?? "Unavailable"}</span></div> : null}
+                <div>HLS: <span className="font-mono text-neutral-300">{hlsStep === "checking" ? `checking${hlsLastCode ? ` (${hlsLastCode})` : ""}` : hlsStep}</span></div>
+                <div>Announce: <span className="font-mono text-neutral-300">{announceStatusLabel}{announceStatusMeta ? ` · ${announceStatusMeta}` : ""}</span></div>
+                {lastAnnounceLabel ? <div>Last status update: <span className="text-neutral-300">{lastAnnounceLabel}</span></div> : null}
+                <div>Identity: <span className="break-all font-mono text-neutral-300">{npub ?? "Not connected"}</span></div>
+                <div>Relays ({relays.length}): <span className="break-all font-mono text-neutral-300">{relays.join(", ")}</span></div>
               </div>
-
-              <div className="text-xs text-neutral-500">
-                Watch URL: <span className="font-mono break-all text-neutral-300">{watchUrl}</span>
-              </div>
-
-              {identity && (
-                <div className="text-xs text-neutral-500">
-                  Origin stream: <span className="font-mono break-all text-neutral-300">{originStreamId ?? "…"}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-2 text-xs">
-                <div className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
-                  <span className="text-neutral-400">HLS</span>
-                  <span className="font-mono text-neutral-300">
-                    {hlsStep === "idle"
-                      ? "idle"
-                      : hlsStep === "checking"
-                        ? `checking${hlsLastCode ? ` (${hlsLastCode})` : ""}`
-                        : hlsStep === "ok"
-                          ? "ready"
-                          : "failed"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2">
-                  <span className="text-neutral-400">Announce</span>
-                  <div className="min-w-[130px] text-right">
-                    <div className="font-mono text-neutral-300">{announceStatusLabel}</div>
-                    {announceStatusMeta ? <div className="text-[11px] text-neutral-500">{announceStatusMeta}</div> : null}
-                  </div>
-                </div>
-              </div>
-
-              {lastAnnounceLabel ? (
-                <div className="text-[11px] text-neutral-500">Last announce: {lastAnnounceLabel}</div>
-              ) : null}
-
-              <div className="text-xs text-neutral-500">
-                Your identity: <span className="font-mono break-all text-neutral-300">{npub ?? "Connect identity"}</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-2 text-sm text-neutral-300">
-              <div className="font-semibold">Relays</div>
-              <div className="text-xs text-neutral-500">Using {relays.length} configured relay(s):</div>
-              <div className="text-xs font-mono text-neutral-300 break-all">{relays.join(", ")}</div>
-            </div>
+            </details>
           </div>
+        </div>
+
+        <div className="fixed inset-x-3 bottom-3 z-50 flex min-w-0 items-center justify-between gap-3 rounded-lg border border-neutral-700 bg-neutral-950/95 p-3 shadow-2xl backdrop-blur sm:hidden">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium text-neutral-200">{broadcastMethod === "external" ? externalStatusLabel : publicBroadcastLive ? "Live" : mediaStream ? "Preview ready" : "Ready to set up"}</div>
+            <div className="mt-0.5 text-[11px] text-neutral-500">{broadcastMethod === "external" ? "OBS / Encoder" : "Browser"}</div>
+          </div>
+          {broadcastMethod === "external" ? (
+            externalAnnounced ? (
+              <button type="button" onClick={() => void endExternalBroadcast()} disabled={announceStep === "checking"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Square className="h-4 w-4" /> End</button>
+            ) : externalSignalDetected ? (
+              <button type="button" onClick={() => { externalAutoSuppressedRef.current = false; setExternalAutoSuppressed(false); void announceExternal("live"); }} disabled={announceStep === "checking"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Radio className="h-4 w-4" /> Go live</button>
+            ) : (
+              <button type="button" onClick={() => void copyExternalEncoderSetup()} disabled={!externalStreamKey} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"><ClipboardCopy className="h-4 w-4" /> Copy setup</button>
+            )
+          ) : status === "live" ? (
+            <button type="button" onClick={endStream} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"><Square className="h-4 w-4" /> End</button>
+          ) : mediaStream ? (
+            <button type="button" onClick={goLive} disabled={status === "connecting"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Radio className="h-4 w-4" /> Go live</button>
+          ) : (
+            <button type="button" onClick={() => void startPreview()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Camera className="h-4 w-4" /> Preview</button>
+          )}
         </div>
       </main>
     </div>

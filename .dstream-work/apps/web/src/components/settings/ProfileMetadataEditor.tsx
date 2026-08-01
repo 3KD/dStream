@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { ExternalLink, Globe2, Image as ImageIcon, Link2, RotateCcw, Save, ShieldCheck, UserRound, WalletCards } from "lucide-react";
 import { useIdentity } from "@/context/IdentityContext";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
 import { getNostrRelays } from "@/lib/config";
@@ -187,182 +189,170 @@ export function ProfileMetadataEditor() {
 
   const npub = pubkeyHexToNpub(identity.pubkey);
   const publicProfileHref = `/profile/${npub ?? identity.pubkey}`;
+  const previewName = draft.displayName.trim() || draft.name.trim() || "Your display name";
+  const previewHandle = draft.name.trim() || "username";
+  const previewInitial = previewName.slice(0, 1).toUpperCase() || "?";
+  const paymentLabels = [
+    draft.lud16.trim() ? "Lightning" : "",
+    draft.btc.trim() ? "Bitcoin" : "",
+    draft.xmr.trim() ? "Monero" : "",
+    isPublicPaymentAsset("eth") && draft.eth.trim() ? "Ethereum" : "",
+    isPublicPaymentAsset("trx") && draft.trx.trim() ? "TRON" : ""
+  ].filter(Boolean);
 
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-neutral-500">Identity Profile</div>
-          <div className="text-sm text-neutral-300">Publish name, bio, avatar, and metadata (Nostr kind 0).</div>
-        </div>
-        <Link href={publicProfileHref} className="text-xs text-neutral-300 hover:text-white">
-          Open public profile
-        </Link>
-      </div>
-
-      <div className="text-[11px] text-neutral-500">
-        Active: <span className="font-mono text-neutral-400">{shortenText(npub ?? identity.pubkey, { head: 22, tail: 10 })}</span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Name</div>
-          <input
-            value={draft.name}
-            onChange={(event) => updateField("name", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="alice"
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Display Name</div>
-          <input
-            value={draft.displayName}
-            onChange={(event) => updateField("displayName", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="Alice"
-          />
-        </label>
-      </div>
-
-      <label className="space-y-1 block">
-        <div className="text-xs text-neutral-500">Bio / About</div>
-        <textarea
-          value={draft.about}
-          onChange={(event) => updateField("about", event.target.value)}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm min-h-24"
-          placeholder="What are you streaming?"
-        />
-      </label>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Avatar URL</div>
-          <input
-            value={draft.picture}
-            onChange={(event) => updateField("picture", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="https://…"
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Banner URL</div>
-          <input
-            value={draft.banner}
-            onChange={(event) => updateField("banner", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="https://…"
-          />
-        </label>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Website</div>
-          <input
-            value={draft.website}
-            onChange={(event) => updateField("website", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="https://example.com"
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">NIP-05</div>
-          <input
-            value={draft.nip05}
-            onChange={(event) => updateField("nip05", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="alice@example.com"
-          />
-        </label>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Lightning Address (LUD-16)</div>
-          <input
-            value={draft.lud16}
-            onChange={(event) => updateField("lud16", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="satoshi@getalby.com"
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Bitcoin Address (BTC)</div>
-          <input
-            value={draft.btc}
-            onChange={(event) => updateField("btc", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="bc1q..."
-          />
-        </label>
-      </div>
-
-      {isPublicPaymentAsset("eth") || isPublicPaymentAsset("trx") ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {isPublicPaymentAsset("eth") ? (
-            <label className="space-y-1">
-              <div className="text-xs text-neutral-500">Ethereum Address (ETH)</div>
-              <input
-                value={draft.eth}
-                onChange={(event) => updateField("eth", event.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-                placeholder="0x..."
-              />
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-5">
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300"><UserRound className="h-4 w-4" /></span>
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-100">Public identity</h2>
+              <p className="mt-1 text-xs text-neutral-500">How viewers recognize you across dStream.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Username</span>
+              <input value={draft.name} onChange={(event) => updateField("name", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="alice" />
+              <span className="block text-[11px] text-neutral-600">A short, consistent handle.</span>
             </label>
-          ) : null}
-          {isPublicPaymentAsset("trx") ? (
-            <label className="space-y-1">
-              <div className="text-xs text-neutral-500">TRON Address (TRX)</div>
-              <input
-                value={draft.trx}
-                onChange={(event) => updateField("trx", event.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-                placeholder="T..."
-              />
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Display name</span>
+              <input value={draft.displayName} onChange={(event) => updateField("displayName", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="Alice" />
+              <span className="block text-[11px] text-neutral-600">The name shown beside your streams.</span>
             </label>
-          ) : null}
-        </div>
-      ) : null}
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-neutral-400">About</span>
+            <textarea value={draft.about} onChange={(event) => updateField("about", event.target.value)} className="min-h-28 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="Tell viewers what you create and stream." />
+          </label>
+        </section>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <div className="text-xs text-neutral-500">Monero Address (XMR)</div>
-          <input
-            value={draft.xmr}
-            onChange={(event) => updateField("xmr", event.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm"
-            placeholder="4..."
-          />
-        </label>
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300"><ImageIcon className="h-4 w-4" /></span>
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-100">Images and links</h2>
+              <p className="mt-1 text-xs text-neutral-500">Use direct image URLs; the preview updates as you type.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Avatar image URL</span>
+              <input value={draft.picture} onChange={(event) => updateField("picture", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="https://…" inputMode="url" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Banner image URL</span>
+              <input value={draft.banner} onChange={(event) => updateField("banner", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="https://…" inputMode="url" />
+            </label>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-neutral-400">Website</span>
+            <div className="relative">
+              <Globe2 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-neutral-600" />
+              <input value={draft.website} onChange={(event) => updateField("website", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 py-2.5 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none" placeholder="https://example.com" inputMode="url" />
+            </div>
+          </label>
+          <details className="group border-t border-neutral-800 pt-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium text-neutral-400 hover:text-neutral-200">
+              Nostr identity details
+              <ShieldCheck className="h-4 w-4" />
+            </summary>
+            <div className="mt-4 space-y-4">
+              <label className="block space-y-1.5">
+                <span className="text-xs text-neutral-400">Verified Nostr address</span>
+                <input value={draft.nip05} onChange={(event) => updateField("nip05", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="alice@example.com" />
+                <span className="block text-[11px] text-neutral-600">Also known as NIP-05. Verification is checked after publishing.</span>
+              </label>
+              <div className="text-[11px] text-neutral-600">Active identity: <span className="font-mono text-neutral-400">{shortenText(npub ?? identity.pubkey, { head: 22, tail: 10 })}</span></div>
+            </div>
+          </details>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-300"><WalletCards className="h-4 w-4" /></span>
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-100">Tips and payments</h2>
+                <p className="mt-1 text-xs text-neutral-500">Viewers can choose any destination you publish here.</p>
+              </div>
+            </div>
+            <Link href="/settings/monetization" className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white">Payment services <ExternalLink className="h-3.5 w-3.5" /></Link>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Lightning address</span>
+              <input value={draft.lud16} onChange={(event) => updateField("lud16", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="name@provider.com" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Bitcoin address</span>
+              <input value={draft.btc} onChange={(event) => updateField("btc", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none" placeholder="bc1q..." />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs text-neutral-400">Monero address</span>
+              <input value={draft.xmr} onChange={(event) => updateField("xmr", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none" placeholder="4..." />
+            </label>
+            {isPublicPaymentAsset("eth") ? (
+              <label className="space-y-1.5">
+                <span className="text-xs text-neutral-400">Ethereum address</span>
+                <input value={draft.eth} onChange={(event) => updateField("eth", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none" placeholder="0x..." />
+              </label>
+            ) : null}
+            {isPublicPaymentAsset("trx") ? (
+              <label className="space-y-1.5">
+                <span className="text-xs text-neutral-400">TRON address</span>
+                <input value={draft.trx} onChange={(event) => updateField("trx", event.target.value)} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none" placeholder="T..." />
+              </label>
+            ) : null}
+          </div>
+        </section>
+
+        <div className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-h-5 text-xs">
+            {status === "saved" ? <span className="text-emerald-300">Profile published successfully.</span> : null}
+            {error ? <span className="text-red-300">{error}</span> : null}
+            {dirty && status !== "saving" ? <span className="text-amber-300">You have unpublished changes.</span> : null}
+            {!dirty && status === "idle" ? <span className="text-neutral-500">Your published profile is up to date.</span> : null}
+            {report ? <span className="ml-2 text-neutral-600">Relay confirmation {report.okRelays.length}/{report.okRelays.length + report.failedRelays.length}</span> : null}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={resetDraft} disabled={!dirty || status === "saving"} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"><RotateCcw className="h-4 w-4" /> Reset</button>
+            <button type="button" onClick={() => void saveProfile()} disabled={status === "saving" || !dirty} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"><Save className="h-4 w-4" /> {status === "saving" ? "Publishing…" : "Publish profile"}</button>
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => void saveProfile()}
-          disabled={status === "saving"}
-          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-60"
-        >
-          {status === "saving" ? "Publishing…" : "Save Profile"}
-        </button>
-        <button
-          type="button"
-          onClick={resetDraft}
-          className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm"
-        >
-          Reset Draft
-        </button>
-      </div>
-
-      {status === "saved" && <div className="text-xs text-emerald-300">Profile published successfully.</div>}
-      {error && <div className="text-xs text-red-300">{error}</div>}
-      {report && (
-        <div className="text-[11px] text-neutral-500">
-          Relay ack: {report.okRelays.length}/{report.okRelays.length + report.failedRelays.length}
+      <aside className="lg:sticky lg:top-24 lg:self-start">
+        <div className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900/40">
+          <div className="relative h-28 bg-neutral-900">
+            {draft.banner.trim() ? <Image src={draft.banner.trim()} alt="Profile banner preview" fill sizes="320px" unoptimized className="object-cover" /> : <div className="absolute inset-0 bg-[linear-gradient(135deg,#171717,#0a0a0a)]" />}
+          </div>
+          <div className="px-4 pb-5">
+            <div className="relative -mt-9 h-[72px] w-[72px] overflow-hidden rounded-lg border-4 border-neutral-950 bg-neutral-800">
+              {draft.picture.trim() ? <Image src={draft.picture.trim()} alt="Profile avatar preview" fill sizes="72px" unoptimized className="object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xl font-semibold text-neutral-300">{previewInitial}</div>}
+            </div>
+            <div className="mt-3 min-w-0">
+              <div className="truncate text-lg font-semibold text-white">{previewName}</div>
+              <div className="truncate text-xs text-neutral-500">@{previewHandle}</div>
+            </div>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-neutral-300">{draft.about.trim() || "Your bio will appear here."}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {draft.website.trim() ? <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300"><Link2 className="h-3 w-3" /> Website</span> : null}
+              {draft.nip05.trim() ? <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300"><ShieldCheck className="h-3 w-3" /> {draft.nip05.trim()}</span> : null}
+            </div>
+            {paymentLabels.length > 0 ? (
+              <div className="mt-4 border-t border-neutral-800 pt-4">
+                <div className="text-[11px] uppercase tracking-wider text-neutral-600">Accepts tips</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">{paymentLabels.map((label) => <span key={label} className="rounded-md bg-neutral-800 px-2 py-1 text-[11px] text-neutral-300">{label}</span>)}</div>
+              </div>
+            ) : null}
+            <Link href={publicProfileHref} className="mt-5 inline-flex items-center gap-2 text-xs text-neutral-400 hover:text-white">Open public profile <ExternalLink className="h-3.5 w-3.5" /></Link>
+          </div>
         </div>
-      )}
-      {dirty && status !== "saving" && <div className="text-[11px] text-amber-300">Unsaved local profile draft.</div>}
+        <p className="mt-3 px-1 text-[11px] leading-5 text-neutral-600">Preview only. Publish changes to update your profile on configured Nostr relays.</p>
+      </aside>
     </div>
   );
 }
