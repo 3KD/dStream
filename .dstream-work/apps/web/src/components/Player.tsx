@@ -1541,17 +1541,6 @@ export function Player({
             video.dataset.dstreamMasterRefreshAt = String(Date.now());
             video.dataset.dstreamMasterRefreshChanges = `${update.levelsChanged}:${update.audioTracksChanged}`;
             markLiveHlsActivity("lastLevelUpdatedAt");
-            try {
-              const resumeAt = Number.isFinite(video.currentTime) ? video.currentTime : -1;
-              hls.stopLoad();
-              hls.startLoad(resumeAt, true);
-            } catch {
-              return false;
-            }
-            void video.play().catch(() => {
-              setStatus("Click to play");
-              setNeedsClick(true);
-            });
             return true;
           } catch {
             return false;

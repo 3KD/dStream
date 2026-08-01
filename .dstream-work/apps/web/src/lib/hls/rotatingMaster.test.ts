@@ -91,13 +91,16 @@ test("updates rotated rendition URLs in place while retaining quality identity",
       }
     ]
   };
+  const levelDetails = target.levels[0]?.details;
+  const audioDetails = target.audioTracks[0]?.details;
 
   const update = applyRotatingMasterSnapshot(target, snapshot);
   assert.deepEqual(update, { changed: true, levelsChanged: 2, audioTracksChanged: 1 });
   assert.match(target.levels[0]?.url[0] ?? "", /video-720-b/);
   assert.match(target.levels[1]?.url[0] ?? "", /video-360-b/);
   assert.match(target.audioTracks[0]?.url ?? "", /audio-b/);
-  assert.equal(target.levels[0]?.details, undefined);
+  assert.strictEqual(target.levels[0]?.details, levelDetails);
+  assert.strictEqual(target.audioTracks[0]?.details, audioDetails);
   assert.equal(target.levels[0]?.loadError, 0);
   assert.equal(target.levels[0]?.fragmentError, 0);
   assert.deepEqual(applyRotatingMasterSnapshot(target, snapshot), {

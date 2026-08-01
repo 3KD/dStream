@@ -28,7 +28,6 @@ type MutableLevel = {
   width?: number;
   height?: number;
   name?: string;
-  details?: unknown;
   loadError?: number;
   fragmentError?: number;
 };
@@ -38,7 +37,6 @@ type MutableAudioTrack = {
   groupId?: string;
   name?: string;
   lang?: string;
-  details?: unknown;
 };
 
 export type RotatingMasterTarget = {
@@ -178,7 +176,6 @@ export function applyRotatingMasterSnapshot(
     usedLevels.add(match.index);
     if (level.url[0] === match.candidate.url) return;
     level.url.splice(0, level.url.length, match.candidate.url);
-    level.details = undefined;
     level.loadError = 0;
     level.fragmentError = 0;
     levelsChanged += 1;
@@ -190,7 +187,6 @@ export function applyRotatingMasterSnapshot(
     usedAudioTracks.add(match.index);
     if (track.url === match.candidate.url) return;
     track.url = match.candidate.url;
-    track.details = undefined;
     audioTracksChanged += 1;
   });
 
