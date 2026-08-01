@@ -5,6 +5,12 @@ import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
 import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
+  applyRotatingMasterSnapshot,
+  isRotatingHlsProviderUrl,
+  isZapStreamHlsUrl,
+  parseRotatingMasterPlaylist
+} from "@/lib/hls/rotatingMaster";
+import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
   writeBackgroundPlayPreference
@@ -191,15 +197,6 @@ function isExternalPlaybackUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
-function isZapStreamHlsUrl(value: string): boolean {
-  try {
-    const hostname = new URL(value).hostname.toLowerCase();
-    return hostname === "zap.stream" || hostname.endsWith(".zap.stream");
-  } catch {
-    return false;
-  }
-}
-
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
   const height = typeof level.height === "number" && level.height > 0 ? `${level.height}p` : null;
   const bitrate =
@@ -378,8 +375,8 @@ export function Player({
   const playbackStartupPolicyReady =
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
-  const zapStreamCompatibilityMode = isZapStreamHlsUrl(normalizedSrc);
-  const stableHlsCompatibilityMode = isFirefoxPlayback || zapStreamCompatibilityMode;
+  const rotatingHlsProviderMode = isRotatingHlsProviderUrl(normalizedSrc);
+  const stableHlsCompatibilityMode = isFirefoxPlayback || rotatingHlsProviderMode;
   const effectiveLowLatencyEnabled = lowLatencyEnabled && !stableHlsCompatibilityMode;
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
@@ -1149,8 +1146,8 @@ export function Player({
         return;
       }
       const targetBufferSeconds =
-        effectiveBackgroundPlayEnabled || zapStreamCompatibilityMode ? 8 : effectiveLowLatencyEnabled ? 3 : 5;
-      const maxWaitMs = zapStreamCompatibilityMode
+        effectiveBackgroundPlayEnabled || rotatingHlsProviderMode ? 8 : effectiveLowLatencyEnabled ? 3 : 5;
+      const maxWaitMs = rotatingHlsProviderMode
         ? 20_000
         : effectiveBackgroundPlayEnabled
           ? 12_000
@@ -1465,7 +1462,8 @@ export function Player({
         bridgeLiveGaps: stableHlsCompatibilityMode
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
-      const useMonotonicPlaylistGuard = !isFirefoxPlayback && !isZapStreamHlsUrl(hlsSource);
+      const rotatingMasterMode = isRotatingHlsProviderUrl(hlsSource);
+      const useMonotonicPlaylistGuard = !isFirefoxPlayback && !rotatingMasterMode;
       let correctedZapPlaylistTiming = false;
       let switchZapSourceToAudio: (reason: string) => boolean = () => false;
       const hls = new Hls({
@@ -1507,6 +1505,68 @@ export function Player({
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
 
+      let rotatingMasterRefreshTimer: ReturnType<typeof setInterval> | null = null;
+      let rotatingMasterRefreshPromise: Promise<boolean> | null = null;
+      let rotatingMasterRefreshCount = 0;
+      const clearRotatingMasterRefresh = () => {
+        if (rotatingMasterRefreshTimer) clearInterval(rotatingMasterRefreshTimer);
+        rotatingMasterRefreshTimer = null;
+      };
+      const refreshRotatingMaster = (): Promise<boolean> => {
+        if (!rotatingMasterMode || cancelled || hlsRef.current !== hls) return Promise.resolve(false);
+        if (rotatingMasterRefreshPromise) return rotatingMasterRefreshPromise;
+
+        const refresh = (async () => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5_000);
+          try {
+            const response = await fetch(hlsSource, {
+              cache: "no-store",
+              credentials: "omit",
+              headers: { accept: "application/vnd.apple.mpegurl, application/x-mpegURL, text/plain" },
+              signal: controller.signal
+            });
+            if (!response.ok) return false;
+            const snapshot = parseRotatingMasterPlaylist(await response.text(), response.url || hlsSource);
+            if (!snapshot || cancelled || hlsRef.current !== hls) return false;
+
+            const update = applyRotatingMasterSnapshot(
+              { levels: hls.levels, audioTracks: hls.audioTracks },
+              snapshot
+            );
+            if (!update.changed) return false;
+
+            rotatingMasterRefreshCount += 1;
+            video.dataset.dstreamMasterRefreshCount = String(rotatingMasterRefreshCount);
+            video.dataset.dstreamMasterRefreshAt = String(Date.now());
+            video.dataset.dstreamMasterRefreshChanges = `${update.levelsChanged}:${update.audioTracksChanged}`;
+            markLiveHlsActivity("lastLevelUpdatedAt");
+            try {
+              const resumeAt = Number.isFinite(video.currentTime) ? video.currentTime : -1;
+              hls.stopLoad();
+              hls.startLoad(resumeAt, true);
+            } catch {
+              return false;
+            }
+            void video.play().catch(() => {
+              setStatus("Click to play");
+              setNeedsClick(true);
+            });
+            return true;
+          } catch {
+            return false;
+          } finally {
+            clearTimeout(timeout);
+          }
+        })();
+        rotatingMasterRefreshPromise = refresh;
+        void refresh.finally(() => {
+          if (rotatingMasterRefreshPromise === refresh) rotatingMasterRefreshPromise = null;
+        });
+        return refresh;
+      };
+      hls.on(Hls.Events.DESTROYING, clearRotatingMasterRefresh);
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         applyHlsPlaybackTuning(hls, {
           lowLatencyEnabled: effectiveLowLatencyEnabled,
@@ -1527,6 +1587,11 @@ export function Player({
             ? "Auto"
             : options.find((o) => o.value === selectedQualityRef.current)?.label ?? "Manual"
         );
+        if (rotatingMasterMode && !rotatingMasterRefreshTimer) {
+          rotatingMasterRefreshTimer = setInterval(() => {
+            void refreshRotatingMaster();
+          }, 2_500);
+        }
         waitForHlsStartupBuffer(hls);
       });
 
@@ -1600,6 +1665,20 @@ export function Player({
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (
+          rotatingMasterMode &&
+          data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+          [
+            Hls.ErrorDetails.LEVEL_LOAD_ERROR,
+            Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT,
+            Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR,
+            Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT,
+            Hls.ErrorDetails.FRAG_LOAD_ERROR,
+            Hls.ErrorDetails.FRAG_LOAD_TIMEOUT
+          ].includes(data.details)
+        ) {
+          void refreshRotatingMaster();
+        }
         if (!data.fatal) return;
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
