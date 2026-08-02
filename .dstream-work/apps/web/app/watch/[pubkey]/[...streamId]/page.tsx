@@ -370,7 +370,10 @@ export default function WatchPage() {
   // Keep the server and first client render identical; responsive mode is applied after hydration.
   const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>("portrait");
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
+  const mobilePortraitChatAnchorRef = useRef<HTMLDivElement | null>(null);
   const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
+  const dockedChatAnchorRef = useRef<HTMLDivElement | null>(null);
+  const dockedChatShellRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -397,47 +400,77 @@ export default function WatchPage() {
   const desktopWatchLayout = mobileLayoutMode === "desktop";
 
   useEffect(() => {
-    if (!mobilePortraitLayout) return;
-    const shell = mobilePortraitChatShellRef.current;
-    if (!shell) return;
+    const anchor = mobilePortraitLayout ? mobilePortraitChatAnchorRef.current : dockedChatAnchorRef.current;
+    const shell = mobilePortraitLayout ? mobilePortraitChatShellRef.current : dockedChatShellRef.current;
+    if (!anchor || !shell) return;
 
     let frame = 0;
-    let lastHeight = -1;
-    const updateHeight = () => {
+    let lastLayout = "";
+    const visualViewport = window.visualViewport;
+    const initialViewportTop = visualViewport?.offsetTop ?? 0;
+    const initialShellRect = shell.getBoundingClientRect();
+    const initialScrollY = window.scrollY;
+    const minimumTopInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
+    const bottomInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
+    const initialShellTop = Math.max(initialViewportTop + minimumTopInset, initialShellRect.top);
+    const portraitDocumentTop = initialShellTop + initialScrollY;
+
+    const updateChatViewport = () => {
       frame = 0;
-      const visualViewport = window.visualViewport;
       const viewportTop = visualViewport?.offsetTop ?? 0;
       const viewportHeight = visualViewport?.height ?? window.innerHeight;
       const viewportBottom = viewportTop + viewportHeight;
-      const shellTop = Math.max(shell.getBoundingClientRect().top, viewportTop);
-      const nextHeight = Math.max(1, Math.floor(viewportBottom - shellTop));
-      if (nextHeight === lastHeight) return;
-      lastHeight = nextHeight;
-      shell.style.setProperty("--watch-mobile-chat-height", `${nextHeight}px`);
+      const anchorRect = anchor.getBoundingClientRect();
+      const preferredTop = mobilePortraitLayout
+        ? Math.min(initialShellTop, portraitDocumentTop - window.scrollY)
+        : initialShellTop;
+      const shellTop = Math.max(
+        viewportTop + minimumTopInset,
+        Math.min(preferredTop, viewportBottom - bottomInset - 160)
+      );
+      const shellHeight = Math.max(1, Math.floor(viewportBottom - bottomInset - shellTop));
+      const layoutKey = [
+        Math.round(shellTop),
+        shellHeight,
+        Math.round(anchorRect.left),
+        Math.round(anchorRect.width)
+      ].join(":");
+
+      if (layoutKey === lastLayout) return;
+      lastLayout = layoutKey;
+      shell.style.position = "fixed";
+      shell.style.top = `${shellTop}px`;
+      shell.style.left = `${anchorRect.left}px`;
+      shell.style.width = `${anchorRect.width}px`;
+      shell.style.height = `${shellHeight}px`;
     };
-    const scheduleHeightUpdate = () => {
+    const scheduleChatViewportUpdate = () => {
       if (frame) return;
-      frame = window.requestAnimationFrame(updateHeight);
+      frame = window.requestAnimationFrame(updateChatViewport);
     };
 
-    const resizeObserver = new ResizeObserver(scheduleHeightUpdate);
-    resizeObserver.observe(document.body);
-    window.addEventListener("scroll", scheduleHeightUpdate, { passive: true });
-    window.addEventListener("resize", scheduleHeightUpdate);
-    visualViewport?.addEventListener("scroll", scheduleHeightUpdate);
-    visualViewport?.addEventListener("resize", scheduleHeightUpdate);
-    scheduleHeightUpdate();
+    const resizeObserver = new ResizeObserver(scheduleChatViewportUpdate);
+    resizeObserver.observe(anchor);
+    window.addEventListener("scroll", scheduleChatViewportUpdate, { passive: true });
+    window.addEventListener("resize", scheduleChatViewportUpdate);
+    visualViewport?.addEventListener("scroll", scheduleChatViewportUpdate);
+    visualViewport?.addEventListener("resize", scheduleChatViewportUpdate);
+    updateChatViewport();
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
-      window.removeEventListener("scroll", scheduleHeightUpdate);
-      window.removeEventListener("resize", scheduleHeightUpdate);
-      visualViewport?.removeEventListener("scroll", scheduleHeightUpdate);
-      visualViewport?.removeEventListener("resize", scheduleHeightUpdate);
-      shell.style.removeProperty("--watch-mobile-chat-height");
+      window.removeEventListener("scroll", scheduleChatViewportUpdate);
+      window.removeEventListener("resize", scheduleChatViewportUpdate);
+      visualViewport?.removeEventListener("scroll", scheduleChatViewportUpdate);
+      visualViewport?.removeEventListener("resize", scheduleChatViewportUpdate);
+      shell.style.removeProperty("position");
+      shell.style.removeProperty("top");
+      shell.style.removeProperty("left");
+      shell.style.removeProperty("width");
+      shell.style.removeProperty("height");
     };
-  }, [mobilePortraitLayout]);
+  }, [desktopWatchLayout, mobileLandscapeLayout, mobilePortraitLayout]);
 
   useEffect(() => {
     if (desktopWatchLayout || mobileLandscapeLayout) {
@@ -1835,16 +1868,18 @@ export default function WatchPage() {
 
             {mobilePortraitLayout && (
               <div
-                ref={mobilePortraitChatShellRef}
-                data-testid="watch-chat-panel-mobile-portrait"
-                className="order-2 sticky z-[60] isolate flex min-h-0 w-full flex-col bg-neutral-950"
-                style={{
-                  top: "env(safe-area-inset-top, 0px)",
-                  height: "var(--watch-mobile-chat-height, calc(100svh - 20rem))"
-                }}
+                ref={mobilePortraitChatAnchorRef}
+                data-testid="watch-chat-anchor-mobile-portrait"
+                className="order-2 h-[calc(100svh-20rem)] min-h-[15rem] max-h-[32rem] w-full"
               >
-                <div className="flex-1 flex flex-col h-full">
-                  {chatBox}
+                <div
+                  ref={mobilePortraitChatShellRef}
+                  data-testid="watch-chat-panel-mobile-portrait"
+                  className="fixed inset-x-4 bottom-0 z-[60] isolate flex h-[clamp(15rem,calc(100svh-20rem),32rem)] flex-col bg-neutral-950"
+                >
+                  <div className="flex h-full flex-1 flex-col">
+                    {chatBox}
+                  </div>
                 </div>
               </div>
             )}
@@ -2328,14 +2363,25 @@ export default function WatchPage() {
 
           {(desktopWatchLayout || mobileLandscapeLayout) && (
             <div
-              data-testid="watch-chat-panel"
+              ref={dockedChatAnchorRef}
+              data-testid="watch-chat-anchor"
               className={
                 desktopWatchLayout
-                  ? "sticky top-6 self-start h-[calc(100dvh-6.5rem)] min-h-[22rem] min-w-0"
-                  : "sticky top-4 self-start h-[calc(100dvh-5.5rem)] min-h-[19rem] min-w-0"
+                  ? "self-start h-[calc(100dvh-6.5rem)] min-w-0"
+                  : "self-start h-[calc(100dvh-5.5rem)] min-w-0"
               }
             >
-              {chatBox}
+              <div
+                ref={dockedChatShellRef}
+                data-testid="watch-chat-panel"
+                className={
+                  desktopWatchLayout
+                    ? "sticky top-[5.5rem] z-[60] isolate flex h-[calc(100dvh-7rem)] min-h-0 w-full flex-col bg-neutral-950"
+                    : "sticky top-[5.25rem] z-[60] isolate flex h-[calc(100dvh-6.25rem)] min-h-0 w-full flex-col bg-neutral-950"
+                }
+              >
+                {chatBox}
+              </div>
             </div>
           )}
         </div>

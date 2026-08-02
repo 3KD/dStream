@@ -96,6 +96,7 @@ async function collectLayout(page) {
     const composerSubmit = composer?.closest("form")?.querySelector('button[type="submit"]');
     const messageList = document.querySelector('[data-testid="chat-message-list"]');
     const mobileChat = document.querySelector('[data-testid="watch-chat-panel-mobile-portrait"]');
+    const dockedChat = document.querySelector('[data-testid="watch-chat-panel"]');
     const p2pTelemetry = document.querySelector('[data-testid="p2p-telemetry"]');
     const visualViewport = window.visualViewport;
     const viewportTop = visualViewport?.offsetTop ?? 0;
@@ -127,11 +128,16 @@ async function collectLayout(page) {
         bottom: viewportTop + viewportHeight
       },
       scrollY: Math.round(window.scrollY),
+      documentHeight: document.documentElement.scrollHeight,
       player: getRect('[data-testid="watch-player-panel"]'),
       playerHost: getRect('[data-global-player-host="true"]'),
       details: getRect('[data-testid="watch-details-panel"]'),
+      chatDesktopOrLandscapeAnchor: getRect('[data-testid="watch-chat-anchor"]'),
       chatDesktopOrLandscape: getRect('[data-testid="watch-chat-panel"]'),
+      chatDesktopOrLandscapePosition: dockedChat ? getComputedStyle(dockedChat).position : null,
+      chatMobilePortraitAnchor: getRect('[data-testid="watch-chat-anchor-mobile-portrait"]'),
       chatMobilePortrait: getRect('[data-testid="watch-chat-panel-mobile-portrait"]'),
+      chatMobilePortraitPosition: mobileChat ? getComputedStyle(mobileChat).position : null,
       composer: getRect('[data-testid="chat-message-input"]'),
       composerDisabled: composer?.disabled ?? null,
       composerValue: composer?.value ?? null,
@@ -161,6 +167,29 @@ async function typeComposerDraft(composer) {
   await composer.pressSequentially(COMPOSER_DRAFT, { delay: 8 });
 }
 
+async function validateEarlyPortraitAnchor(page, name) {
+  const panel = page.locator('[data-testid="watch-chat-panel-mobile-portrait"]');
+  await panel.waitFor({ state: "visible", timeout: MAX_WAIT_MS });
+  const initial = await collectLayout(page);
+  check(!!initial.chatMobilePortrait, `${name}: early portrait chat panel missing`);
+  check(initial.chatMobilePortraitPosition === "fixed", `${name}: early portrait chat is not viewport anchored`);
+  check(
+    Math.abs(initial.chatMobilePortrait.bottom - initial.viewport.bottom) <= 3,
+    `${name}: early portrait chat bottom is detached`
+  );
+
+  const scrolled = await scrollToAndCollect(page, 40);
+  check(
+    Math.abs(scrolled.chatMobilePortrait.bottom - scrolled.viewport.bottom) <= 3,
+    `${name}: an early swipe moves the portrait chat bottom`
+  );
+  const restored = await scrollToAndCollect(page, 0);
+  check(
+    Math.abs(restored.chatMobilePortrait.top - initial.chatMobilePortrait.top) <= 3,
+    `${name}: returning from an early swipe changes the initial chat height`
+  );
+}
+
 async function scrollToAndCollect(page, top) {
   await page.evaluate((nextTop) => window.scrollTo({ top: nextTop, behavior: "instant" }), top);
   await page.evaluate(
@@ -174,8 +203,10 @@ async function scrollToAndCollect(page, top) {
 }
 
 function validatePortraitAnchor(name, stage, layout, initial) {
+  check(!!layout.chatMobilePortraitAnchor, `${name}: ${stage} portrait chat anchor missing`);
   check(!!layout.chatMobilePortrait, `${name}: ${stage} portrait chat panel missing`);
   check(!!layout.composer, `${name}: ${stage} composer missing`);
+  check(layout.chatMobilePortraitPosition === "fixed", `${name}: ${stage} portrait chat is not viewport anchored`);
   check(
     Math.abs(layout.chatMobilePortrait.bottom - layout.viewport.bottom) <= 3,
     `${name}: ${stage} chat bottom is not anchored to the viewport`
@@ -188,15 +219,36 @@ function validatePortraitAnchor(name, stage, layout, initial) {
     Math.abs(layout.composer.height - initial.composer.height) <= 2,
     `${name}: ${stage} composer height changed while scrolling`
   );
+  check(
+    Math.abs(layout.chatMobilePortraitAnchor.height - initial.chatMobilePortraitAnchor.height) <= 2,
+    `${name}: ${stage} chat placeholder changed the document flow`
+  );
+  check(
+    Math.abs(layout.chatMobilePortrait.height - (layout.viewport.bottom - layout.chatMobilePortrait.top)) <= 3,
+    `${name}: ${stage} chat height exceeds its visible viewport space`
+  );
 }
 
 async function validatePortraitScroll(page, name) {
   const initial = await scrollToAndCollect(page, 0);
-  check(!!initial.chatMobilePortrait && !!initial.composer, `${name}: portrait chat geometry unavailable`);
+  check(
+    !!initial.chatMobilePortraitAnchor && !!initial.chatMobilePortrait && !!initial.composer,
+    `${name}: portrait chat geometry unavailable`
+  );
   validatePortraitAnchor(name, "initial", initial, initial);
   check(initial.messageListOverscrollY === "contain", `${name}: chat message scrolling can escape into the page`);
 
-  const chatDocumentTop = initial.chatMobilePortrait.top;
+  const chatDocumentTop = initial.chatMobilePortraitAnchor.top + initial.scrollY;
+  for (const target of [40, 80, 120].filter((value) => value < chatDocumentTop - 12)) {
+    const incremental = await scrollToAndCollect(page, target);
+    validatePortraitAnchor(name, `scroll-${target}`, incremental, initial);
+    const expectedTop = Math.max(incremental.viewport.top, chatDocumentTop - incremental.scrollY);
+    check(
+      Math.abs(incremental.chatMobilePortrait.top - expectedTop) <= 3,
+      `${name}: scroll-${target} chat jumped instead of tracking the page`
+    );
+  }
+
   const midpoint = await scrollToAndCollect(page, Math.max(24, Math.floor(chatDocumentTop / 2)));
   validatePortraitAnchor(name, "mid-scroll", midpoint, initial);
   check(midpoint.chatMobilePortrait.top < initial.chatMobilePortrait.top - 12, `${name}: chat top did not move toward the viewport top`);
@@ -217,6 +269,69 @@ async function validatePortraitScroll(page, name) {
   await scrollToAndCollect(page, 0);
 }
 
+async function validateDockedChatScroll(page, name, expect) {
+  const initial = await scrollToAndCollect(page, 0);
+  check(!!initial.chatDesktopOrLandscapeAnchor, `${name}: docked chat anchor missing`);
+  check(!!initial.chatDesktopOrLandscape && !!initial.composer, `${name}: docked chat geometry unavailable`);
+  check(initial.chatDesktopOrLandscapePosition === "fixed", `${name}: chat is not viewport anchored`);
+  const expectedBottomInset = expect === "desktop" ? 24 : 16;
+  check(
+    Math.abs(initial.viewport.bottom - initial.chatDesktopOrLandscape.bottom - expectedBottomInset) <= 3,
+    `${name}: chat does not start with the expected bottom buffer`
+  );
+
+  for (const target of [40, 120, 280]) {
+    const layout = await scrollToAndCollect(page, target);
+    check(layout.scrollY >= target - 2, `${name}: page did not reach scroll position ${target}`);
+    check(!!layout.chatDesktopOrLandscapeAnchor && !!layout.chatDesktopOrLandscape && !!layout.composer, `${name}: chat disappeared while scrolling`);
+    check(layout.chatDesktopOrLandscapePosition === "fixed", `${name}: chat lost its viewport anchor while scrolling`);
+    check(
+      Math.abs(layout.chatDesktopOrLandscape.top - initial.chatDesktopOrLandscape.top) <= 2,
+      `${name}: chat moved vertically while the page scrolled`
+    );
+    check(
+      Math.abs(layout.chatDesktopOrLandscape.bottom - initial.chatDesktopOrLandscape.bottom) <= 2,
+      `${name}: chat bottom buffer changed while the page scrolled`
+    );
+    check(
+      Math.abs(layout.chatDesktopOrLandscape.height - initial.chatDesktopOrLandscape.height) <= 2,
+      `${name}: chat height changed while the page scrolled`
+    );
+    check(
+      Math.abs(layout.composer.bottom - initial.composer.bottom) <= 2,
+      `${name}: composer moved while the page scrolled`
+    );
+    check(
+      Math.abs(layout.chatDesktopOrLandscapeAnchor.height - initial.chatDesktopOrLandscapeAnchor.height) <= 2,
+      `${name}: docked chat placeholder changed the document flow`
+    );
+  }
+
+  await scrollToAndCollect(page, 0);
+}
+
+async function validateAndroidPortraitViewportResize(page, name) {
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error(`${name}: browser viewport unavailable`);
+  const initial = await scrollToAndCollect(page, 0);
+  await page.setViewportSize({ width: viewport.width, height: Math.max(560, viewport.height - 96) });
+  await page.waitForTimeout(150);
+  const compact = await collectLayout(page);
+  check(!!compact.chatMobilePortrait && !!compact.composer, `${name}: chat disappeared after viewport resize`);
+  check(
+    Math.abs(compact.chatMobilePortrait.bottom - compact.viewport.bottom) <= 3,
+    `${name}: Android viewport resize detached the chat bottom`
+  );
+  check(
+    Math.abs(compact.composer.height - initial.composer.height) <= 2,
+    `${name}: Android viewport resize changed the composer height`
+  );
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(150);
+  const restored = await collectLayout(page);
+  validatePortraitAnchor(name, "viewport-restored", restored, initial);
+}
+
 function validateScenario(name, expect, layout) {
   check(!!layout.player, `${name}: player panel missing`);
   check(!!layout.playerHost, `${name}: persistent player host missing`);
@@ -235,6 +350,7 @@ function validateScenario(name, expect, layout) {
 
   if (expect === "desktop") {
     check(!!layout.chatDesktopOrLandscape, `${name}: desktop chat panel missing`);
+    check(!!layout.chatDesktopOrLandscapeAnchor, `${name}: desktop chat anchor missing`);
     check(!layout.chatMobilePortrait, `${name}: portrait chat panel should not render`);
     check(layout.chatDesktopOrLandscape.left > layout.player.left, `${name}: desktop chat should be to the right of player`);
     check(Math.abs(layout.chatDesktopOrLandscape.top - layout.player.top) <= 24, `${name}: desktop chat top should align with player top`);
@@ -243,6 +359,7 @@ function validateScenario(name, expect, layout) {
 
   if (expect === "mobile-portrait") {
     check(!!layout.chatMobilePortrait, `${name}: portrait chat panel missing`);
+    check(!!layout.chatMobilePortraitAnchor, `${name}: portrait chat anchor missing`);
     check(!layout.chatDesktopOrLandscape, `${name}: desktop/landscape chat panel should not render`);
     check(layout.chatMobilePortrait.top >= layout.player.bottom - 2, `${name}: portrait chat must be below player`);
     check(layout.details.top >= layout.chatMobilePortrait.bottom - 2, `${name}: details panel must be below chat`);
@@ -250,6 +367,7 @@ function validateScenario(name, expect, layout) {
   }
 
   check(!!layout.chatDesktopOrLandscape, `${name}: landscape chat panel missing`);
+  check(!!layout.chatDesktopOrLandscapeAnchor, `${name}: landscape chat anchor missing`);
   check(!layout.chatMobilePortrait, `${name}: portrait chat panel should not render in landscape`);
   check(layout.chatDesktopOrLandscape.left > layout.player.left, `${name}: landscape chat should be to the right of player`);
   check(Math.abs(layout.chatDesktopOrLandscape.top - layout.player.top) <= 24, `${name}: landscape chat top should align with player top`);
@@ -275,6 +393,15 @@ async function main() {
         }
       });
       await page.goto(WATCH_URL, { waitUntil: "domcontentloaded" });
+
+      let earlyPortraitError = null;
+      if (scenario.expect === "mobile-portrait" || scenario.rotateTo) {
+        try {
+          await validateEarlyPortraitAnchor(page, scenario.key);
+        } catch (error) {
+          earlyPortraitError = error instanceof Error ? error.message : String(error);
+        }
+      }
       await page.waitForTimeout(WAIT_MS);
 
       if (scenario.rotateTo) {
@@ -332,8 +459,16 @@ async function main() {
         if (errorMessage) {
           throw new Error(errorMessage);
         }
+        if (earlyPortraitError) {
+          throw new Error(earlyPortraitError);
+        }
         if (scenario.expect === "mobile-portrait") {
           await validatePortraitScroll(page, scenario.key);
+          if (scenario.key === "android-portrait") {
+            await validateAndroidPortraitViewportResize(page, scenario.key);
+          }
+        } else {
+          await validateDockedChatScroll(page, scenario.key, scenario.expect);
         }
         if (runtimeErrors.length > 0) {
           throw new Error(`${scenario.key}: runtime error: ${runtimeErrors[0]}`);
