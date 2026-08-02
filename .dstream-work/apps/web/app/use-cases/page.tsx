@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mic, Shield, Radio, Coins, Globe, Users } from "lucide-react";
+import { Mic, Shield, Radio, Coins, Globe, Users, UserRound, UsersRound, Server } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 
 const cases = [
@@ -10,7 +10,7 @@ const cases = [
     chipClass: "bg-blue-900/30 text-blue-300",
     watermarkClass: "text-blue-500",
     title: "Independent Journalists",
-    subtitle: "Censorship-Resistant Reality",
+    subtitle: "Censorship-Resistant",
     detail:
       "Broadcast on the Nostr network where your identity and content cannot be deplatformed, silenced, or restricted by corporate policies."
   },
@@ -73,19 +73,25 @@ const cases = [
 
 const implementationProfiles = [
   {
-    title: "Creator Solo Stack",
-    profile: "Single origin + relay + TURN",
-    outcome: "Fast setup, direct monetization, portable identity."
+    icon: UserRound,
+    title: "Solo Creator",
+    recommendedFor: "One person running one live channel.",
+    setup: "One streaming server, plus the basic services that help viewers find and connect to it.",
+    outcome: "Go live quickly, keep your identity, and receive payments directly."
   },
   {
-    title: "Community Cluster",
-    profile: "Shared relay set + multiple broadcasters",
-    outcome: "Moderation delegation and long-lived guild/community continuity."
+    icon: UsersRound,
+    title: "Community or Team",
+    recommendedFor: "A group with several hosts, shows, or channels.",
+    setup: "Broadcasters share discovery and moderation services while keeping control of their own streams.",
+    outcome: "Manage multiple channels with consistent moderation and a shared community presence."
   },
   {
-    title: "Self-Hosted Operator",
-    profile: "Production compose + gate checks + backups",
-    outcome: "Controlled runtime, predictable upgrades, and auditable deploy path."
+    icon: Server,
+    title: "Independent Operator",
+    recommendedFor: "A person or organization that wants full control of the service.",
+    setup: "Run the complete dStream system on your own server, with automated health checks and backups.",
+    outcome: "Control your hosting, upgrades, reliability, and recovery process."
   }
 ];
 
@@ -120,27 +126,38 @@ export default function UseCasesPage() {
           ))}
         </section>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold text-center">Implementation Profiles</h2>
-          <div className="overflow-x-auto rounded-xl border border-neutral-800">
-            <table className="w-full text-sm">
-              <thead className="bg-neutral-950/60 text-neutral-400">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">Profile</th>
-                  <th className="text-left px-4 py-2 font-medium">Runtime Pattern</th>
-                  <th className="text-left px-4 py-2 font-medium">Operational Outcome</th>
-                </tr>
-              </thead>
-              <tbody>
-                {implementationProfiles.map((row) => (
-                  <tr key={row.title} className="border-t border-neutral-800 text-neutral-200 align-top">
-                    <td className="px-4 py-2 font-semibold text-neutral-100">{row.title}</td>
-                    <td className="px-4 py-2 text-neutral-300">{row.profile}</td>
-                    <td className="px-4 py-2 text-neutral-300">{row.outcome}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <section className="space-y-5">
+          <div className="mx-auto max-w-2xl space-y-2 text-center">
+            <h2 className="text-2xl font-bold">Ways to Run dStream</h2>
+            <p className="text-sm leading-relaxed text-neutral-400">
+              Pick the setup that matches who is broadcasting and how much of the system you want to manage yourself.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {implementationProfiles.map(({ icon: Icon, title, recommendedFor, setup, outcome }) => (
+              <article key={title} className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-950 text-blue-300">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <h3 className="text-lg font-bold text-neutral-100">{title}</h3>
+                </div>
+                <dl className="mt-5 space-y-4 text-sm">
+                  <div>
+                    <dt className="font-semibold text-neutral-100">Recommended for</dt>
+                    <dd className="mt-1 leading-relaxed text-neutral-400">{recommendedFor}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-neutral-100">How it works</dt>
+                    <dd className="mt-1 leading-relaxed text-neutral-400">{setup}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-neutral-100">What you get</dt>
+                    <dd className="mt-1 leading-relaxed text-neutral-400">{outcome}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
           </div>
         </section>
 
