@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, useMemo } from "react";
 import { Smile, X } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -30,6 +30,12 @@ export function ChatInput({
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const appliedDraftVersionRef = useRef(draftVersion);
+
+  useLayoutEffect(() => {
+    const preHydrationMessage = textareaRef.current?.value ?? "";
+    if (preHydrationMessage) setMessage(preHydrationMessage);
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -78,6 +84,8 @@ export function ChatInput({
 
   useEffect(() => {
     if (draftVersion === undefined) return;
+    if (draftVersion === appliedDraftVersionRef.current) return;
+    appliedDraftVersionRef.current = draftVersion;
     setMessage(draftMessage ?? "");
   }, [draftMessage, draftVersion]);
 
