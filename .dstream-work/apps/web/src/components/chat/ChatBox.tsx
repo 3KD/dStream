@@ -58,7 +58,7 @@ export function ChatBox({
   paymentMethods?: StreamPaymentMethod[];
   className?: string;
 }) {
-  const { identity, signEvent } = useIdentity();
+  const { identity, ensureIdentity, signEvent } = useIdentity();
   const social = useSocial();
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
   const globalEmotesMap = useEmotes([streamPubkey, identity?.pubkey]);
@@ -239,6 +239,10 @@ export function ChatBox({
       setCommandNotice((current) => (current === value ? null : current));
     }, 3000);
   }, []);
+
+  const ensureChatIdentity = useCallback(() => {
+    if (!identity) ensureIdentity();
+  }, [ensureIdentity, identity]);
 
   const seedComposerDraft = useCallback(
     (value: string, notice?: string) => {
@@ -593,20 +597,16 @@ export function ChatBox({
         <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-neutral-900 to-transparent" />
       </div>
 
-      {!identity ? (
-        <div className="pt-3 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-neutral-800 bg-neutral-900 text-center text-sm text-neutral-500">
-          Connect an identity to chat.
-        </div>
-      ) : (
-        <ChatInput
-          onSend={handleSendInput}
-          disabled={!canSend || !!chatPolicyBlockReason}
-          placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
-          draftMessage={composerDraft}
-          draftVersion={composerDraftVersion}
-          emotesDict={globalEmotesMap}
-        />
-      )}
+      <ChatInput
+        onSend={handleSendInput}
+        onActivate={ensureChatIdentity}
+        disabled={!!chatPolicyBlockReason}
+        sendDisabled={!canSend}
+        placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
+        draftMessage={composerDraft}
+        draftVersion={composerDraftVersion}
+        emotesDict={globalEmotesMap}
+      />
 
       <ReportDialog
         open={!!reportTarget}

@@ -12,6 +12,7 @@ const OUTPUT_DIR = process.env.WATCH_LAYOUT_OUTPUT_DIR ?? path.resolve("output/p
 const WAIT_MS = Number(process.env.WATCH_LAYOUT_WAIT_MS ?? "1200");
 const MAX_WAIT_MS = Number(process.env.WATCH_LAYOUT_MAX_WAIT_MS ?? "18000");
 const RETRY_MS = Number(process.env.WATCH_LAYOUT_RETRY_MS ?? "650");
+const COMPOSER_DRAFT = "unsent watch layout check";
 
 const scenarios = [
   {
@@ -27,6 +28,11 @@ const scenarios = [
   {
     key: "mobile-portrait",
     context: { ...devices["iPhone 13"] },
+    expect: "mobile-portrait"
+  },
+  {
+    key: "android-portrait",
+    context: { ...devices["Pixel 5"] },
     expect: "mobile-portrait"
   },
   {
@@ -65,6 +71,9 @@ async function collectLayout(page) {
     const navRowSpread =
       navLinks.length > 1 ? Math.max(...navLinks.map((item) => item.getBoundingClientRect().top)) - Math.min(...navLinks.map((item) => item.getBoundingClientRect().top)) : 0;
 
+    const composer = document.querySelector('[data-testid="chat-message-input"]');
+    const composerSubmit = composer?.closest("form")?.querySelector('button[type="submit"]');
+
     return {
       viewport: {
         width: window.innerWidth,
@@ -75,6 +84,10 @@ async function collectLayout(page) {
       details: getRect('[data-testid="watch-details-panel"]'),
       chatDesktopOrLandscape: getRect('[data-testid="watch-chat-panel"]'),
       chatMobilePortrait: getRect('[data-testid="watch-chat-panel-mobile-portrait"]'),
+      composer: getRect('[data-testid="chat-message-input"]'),
+      composerDisabled: composer?.disabled ?? null,
+      composerValue: composer?.value ?? null,
+      composerSubmitDisabled: composerSubmit?.disabled ?? null,
       navRowSpread: Math.round(navRowSpread)
     };
   });
@@ -84,6 +97,12 @@ function validateScenario(name, expect, layout) {
   check(!!layout.player, `${name}: player panel missing`);
   check(!!layout.playerHost, `${name}: persistent player host missing`);
   check(!!layout.details, `${name}: details panel missing`);
+  check(!!layout.composer, `${name}: chat composer missing`);
+  check(layout.composerDisabled === false, `${name}: chat composer should accept typing on first load`);
+  check(layout.composerValue === COMPOSER_DRAFT, `${name}: chat composer did not retain typed text`);
+  check(layout.composerSubmitDisabled === false, `${name}: typed chat message cannot be sent`);
+  check(layout.composer.top >= -2, `${name}: chat composer starts above the viewport`);
+  check(layout.composer.bottom <= layout.viewport.height + 2, `${name}: chat composer is below the initial viewport`);
   check(layout.player.width >= 240 && layout.player.height >= 135, `${name}: player panel collapsed`);
   check(Math.abs(layout.playerHost.left - layout.player.left) <= 3, `${name}: player host left edge does not match its slot`);
   check(Math.abs(layout.playerHost.top - layout.player.top) <= 3, `${name}: player host top edge does not match its slot`);
@@ -134,10 +153,29 @@ async function main() {
       await page.goto(WATCH_URL, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(WAIT_MS);
 
+      const expectedChatSelector =
+        scenario.expect === "mobile-portrait"
+          ? '[data-testid="watch-chat-panel-mobile-portrait"]'
+          : '[data-testid="watch-chat-panel"]';
+      try {
+        await page.locator(expectedChatSelector).waitFor({ state: "visible", timeout: MAX_WAIT_MS });
+      } catch {
+        // The validation loop below will report the concrete layout failure.
+      }
+
       let layout = null;
       let errorMessage = null;
       const deadline = Date.now() + MAX_WAIT_MS;
       while (Date.now() <= deadline) {
+        const composer = page.locator('[data-testid="chat-message-input"]');
+        try {
+          if ((await composer.count()) > 0 && (await composer.inputValue()) !== COMPOSER_DRAFT) {
+            await composer.fill(COMPOSER_DRAFT, { timeout: RETRY_MS });
+          }
+        } catch {
+          // The next pass will retry after hydration/layout settles.
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
         layout = await collectLayout(page);
         try {
           validateScenario(scenario.key, scenario.expect, layout);

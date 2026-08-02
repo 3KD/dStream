@@ -32,6 +32,7 @@ interface IdentityContextValue {
   identity: Identity | null;
   isLoading: boolean;
   localIdentities: Array<{ pubkey: string; label: string | null; createdAt: number; isActive: boolean }>;
+  ensureIdentity: () => void;
   connectExtension: () => Promise<void>;
   generateLocal: () => Promise<void>;
   importLocalSecret: (input: string, label?: string) => { ok: true; pubkey: string } | { ok: false; error: string };
@@ -163,6 +164,36 @@ function parseSecretInput(inputRaw: string): string | null {
   return null;
 }
 
+function addGeneratedLocalIdentity(store: IdentityStoreV2): IdentityStoreV2 {
+  const secretKey = generateSecretKey();
+  const pubkey = getPublicKey(secretKey);
+  const secretKeyHex = bytesToHex(secretKey).toLowerCase();
+
+  return {
+    ...store,
+    active: { kind: "local", pubkey },
+    locals: {
+      ...store.locals,
+      [pubkey]: {
+        pubkey,
+        secretKeyHex,
+        createdAt: Date.now()
+      }
+    }
+  };
+}
+
+function readStoredIdentity(): IdentityStoreV2 | null {
+  try {
+    const v2 = localStorage.getItem(STORAGE_KEY_V2);
+    const parsedV2 = v2 ? toStoreV2(JSON.parse(v2)) : null;
+    if (parsedV2) return parsedV2;
+    return migrateFromV1(localStorage.getItem(STORAGE_KEY_V1));
+  } catch {
+    return null;
+  }
+}
+
 export function IdentityProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<IdentityStoreV2>({
     version: 2,
@@ -171,6 +202,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
   const storeRef = useRef(store);
+  const isLoadingRef = useRef(true);
 
   const persistStore = useCallback((nextStore: IdentityStoreV2) => {
     try {
@@ -182,47 +214,33 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    try {
-      const v2 = localStorage.getItem(STORAGE_KEY_V2);
-      const parsedV2 = v2 ? toStoreV2(JSON.parse(v2)) : null;
-      if (parsedV2) {
-        setStore(parsedV2);
-      } else {
-        const migrated = migrateFromV1(localStorage.getItem(STORAGE_KEY_V1));
-        if (migrated) setStore(migrated);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
+    let nextStore = readStoredIdentity() ?? { version: 2 as const, active: null, locals: {} };
+    if (!nextStore.active && Object.keys(nextStore.locals).length === 0) {
+      nextStore = addGeneratedLocalIdentity(nextStore);
     }
-  }, []);
 
-  useEffect(() => {
-    if (isLoading) return;
-    if (store.active) return;
-    if (Object.keys(store.locals).length > 0) return;
+    storeRef.current = nextStore;
+    isLoadingRef.current = false;
+    setStore(nextStore);
+    persistStore(nextStore);
+    setIsLoading(false);
+  }, [persistStore]);
 
-    const secretKey = generateSecretKey();
-    const pubkey = getPublicKey(secretKey);
-    const secretKeyHex = bytesToHex(secretKey).toLowerCase();
+  const ensureIdentity = useCallback(() => {
+    let nextStore = isLoadingRef.current ? readStoredIdentity() ?? storeRef.current : storeRef.current;
+    if (!nextStore.active) {
+      const existingLocalPubkey = Object.keys(nextStore.locals)[0];
+      nextStore = existingLocalPubkey
+        ? { ...nextStore, active: { kind: "local", pubkey: existingLocalPubkey } }
+        : addGeneratedLocalIdentity(nextStore);
+    }
 
-    setStore((prev) => {
-      if (prev.active || Object.keys(prev.locals).length > 0) return prev;
-      return {
-        ...prev,
-        active: { kind: "local", pubkey },
-        locals: {
-          ...prev.locals,
-          [pubkey]: {
-            pubkey,
-            secretKeyHex,
-            createdAt: Date.now()
-          }
-        }
-      };
-    });
-  }, [isLoading, store.active, store.locals]);
+    storeRef.current = nextStore;
+    isLoadingRef.current = false;
+    setStore(nextStore);
+    persistStore(nextStore);
+    setIsLoading(false);
+  }, [persistStore]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -285,21 +303,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const generateLocal = useCallback(async () => {
-    const sk = generateSecretKey();
-    const pubkey = getPublicKey(sk);
-    const secretKeyHex = bytesToHex(sk).toLowerCase();
-    setStore((prev) => ({
-      ...prev,
-      active: { kind: "local", pubkey },
-      locals: {
-        ...prev.locals,
-        [pubkey]: {
-          pubkey,
-          secretKeyHex,
-          createdAt: Date.now()
-        }
-      }
-    }));
+    setStore((prev) => addGeneratedLocalIdentity(prev));
   }, []);
 
   const importLocalSecret = useCallback((input: string, label?: string) => {
@@ -432,6 +436,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       identity,
       isLoading,
       localIdentities,
+      ensureIdentity,
       connectExtension,
       generateLocal,
       importLocalSecret,
@@ -448,6 +453,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       identity,
       isLoading,
       localIdentities,
+      ensureIdentity,
       connectExtension,
       generateLocal,
       importLocalSecret,

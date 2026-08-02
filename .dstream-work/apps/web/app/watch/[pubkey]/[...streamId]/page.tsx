@@ -1797,7 +1797,7 @@ export default function WatchPage() {
             ) : null}
 
             {mobilePortraitLayout && (
-              <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex flex-col w-full h-[calc(100svh-clamp(15rem,35vh,24rem))] min-h-[30rem]">
+              <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex h-[calc(100svh-20rem)] min-h-[15rem] max-h-[32rem] w-full flex-col">
                 <div className="flex-1 flex flex-col h-full">
                   {chatBox}
                 </div>

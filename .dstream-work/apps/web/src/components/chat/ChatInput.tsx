@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Smile, X } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -9,6 +9,8 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
 export function ChatInput({
   onSend,
   disabled,
+  sendDisabled,
+  onActivate,
   placeholder,
   draftMessage,
   draftVersion,
@@ -16,6 +18,8 @@ export function ChatInput({
 }: {
   onSend: (message: string) => Promise<boolean>;
   disabled?: boolean;
+  sendDisabled?: boolean;
+  onActivate?: () => void;
   placeholder?: string;
   draftMessage?: string;
   draftVersion?: number;
@@ -79,7 +83,7 @@ export function ChatInput({
 
   const submitMessage = async () => {
     const text = message.trim();
-    if (!text || disabled || isSending) return;
+    if (!text || disabled || sendDisabled || isSending) return;
     setIsSending(true);
     try {
       const ok = await onSend(text);
@@ -134,7 +138,9 @@ export function ChatInput({
       <div className="flex gap-2">
         <textarea
           ref={textareaRef}
+          data-testid="chat-message-input"
           value={message}
+          onFocus={onActivate}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -159,7 +165,7 @@ export function ChatInput({
         </button>
         <button
           type="submit"
-          disabled={!message.trim() || disabled || isSending}
+          disabled={!message.trim() || disabled || sendDisabled || isSending}
           className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium"
         >
           {isSending ? "…" : "Send"}
