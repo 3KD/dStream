@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, useRef, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, useRef, useMemo } from "react";
 import { Smile, X } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -14,6 +14,7 @@ export function ChatInput({
   placeholder,
   draftMessage,
   draftVersion,
+  draftStorageKey,
   emotesDict
 }: {
   onSend: (message: string) => Promise<boolean>;
@@ -23,18 +24,53 @@ export function ChatInput({
   placeholder?: string;
   draftMessage?: string;
   draftVersion?: number;
+  draftStorageKey?: string;
   emotesDict?: Record<string, { url: string }>;
 }) {
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(draftMessage ?? "");
   const [isSending, setIsSending] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const appliedDraftVersionRef = useRef(draftVersion);
+  const initialDraftMessageRef = useRef(draftMessage ?? "");
+
+  const updateMessage = useCallback(
+    (nextMessage: string) => {
+      setMessage(nextMessage);
+      if (textareaRef.current && textareaRef.current.value !== nextMessage) {
+        textareaRef.current.value = nextMessage;
+      }
+      if (!draftStorageKey) return;
+      try {
+        if (nextMessage) {
+          sessionStorage.setItem(draftStorageKey, nextMessage);
+        } else {
+          sessionStorage.removeItem(draftStorageKey);
+        }
+      } catch {
+        // Chat remains usable when storage is unavailable.
+      }
+    },
+    [draftStorageKey]
+  );
 
   useLayoutEffect(() => {
     const preHydrationMessage = textareaRef.current?.value ?? "";
-    if (preHydrationMessage) setMessage(preHydrationMessage);
+    let storedMessage = "";
+    if (draftStorageKey) {
+      try {
+        storedMessage = sessionStorage.getItem(draftStorageKey) ?? "";
+      } catch {
+        // Chat remains usable when storage is unavailable.
+      }
+    }
+    updateMessage(preHydrationMessage || storedMessage || initialDraftMessageRef.current);
+  }, [draftStorageKey, updateMessage]);
+
+  useEffect(() => {
+    setIsReady(true);
   }, []);
 
   useEffect(() => {
@@ -86,8 +122,8 @@ export function ChatInput({
     if (draftVersion === undefined) return;
     if (draftVersion === appliedDraftVersionRef.current) return;
     appliedDraftVersionRef.current = draftVersion;
-    setMessage(draftMessage ?? "");
-  }, [draftMessage, draftVersion]);
+    updateMessage(draftMessage ?? "");
+  }, [draftMessage, draftVersion, updateMessage]);
 
   const submitMessage = async () => {
     const text = message.trim();
@@ -96,7 +132,7 @@ export function ChatInput({
     try {
       const ok = await onSend(text);
       if (ok) {
-        setMessage("");
+        updateMessage("");
         setShowEmoji(false);
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
@@ -114,9 +150,9 @@ export function ChatInput({
 
   const onEmojiClick = (emojiObj: any) => {
     if (emojiObj.isCustom && emojiObj.names?.[0]) {
-      setMessage((prev) => prev + `:${emojiObj.names[0]}: `);
+      updateMessage(message + `:${emojiObj.names[0]}: `);
     } else if (emojiObj.emoji) {
-      setMessage((prev) => prev + emojiObj.emoji);
+      updateMessage(message + emojiObj.emoji);
     }
   };
 
@@ -147,9 +183,9 @@ export function ChatInput({
         <textarea
           ref={textareaRef}
           data-testid="chat-message-input"
-          value={message}
+          defaultValue={draftMessage ?? ""}
           onFocus={onActivate}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e) => updateMessage(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -157,14 +193,14 @@ export function ChatInput({
             }
           }}
           placeholder={placeholder ?? "Send a message…"}
-          disabled={disabled || isSending}
+          disabled={disabled || isSending || !isReady}
           rows={1}
           style={{ height: "38px" }}
           className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50 resize-none min-h-[38px] max-h-[150px] overflow-y-auto w-full leading-tight"
         />
         <button
           type="button"
-          disabled={disabled || isSending}
+          disabled={disabled || isSending || !isReady}
           onClick={() => setShowEmoji((prev) => !prev)}
           className="px-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-400 hover:text-white transition-colors disabled:opacity-50 flex items-center justify-center p-0.5"
           title="Add Emoji"
@@ -173,7 +209,7 @@ export function ChatInput({
         </button>
         <button
           type="submit"
-          disabled={!message.trim() || disabled || sendDisabled || isSending}
+          disabled={!message.trim() || disabled || sendDisabled || isSending || !isReady}
           className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium"
         >
           {isSending ? "…" : "Send"}

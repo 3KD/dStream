@@ -43,6 +43,7 @@ export function ChatBox({
   onMessageCountChange,
   headerRightSlot,
   paymentMethods,
+  draftStorageKey,
   className
 }: {
   streamPubkey: string;
@@ -56,6 +57,7 @@ export function ChatBox({
   onMessageCountChange?: (count: number) => void;
   headerRightSlot?: ReactNode;
   paymentMethods?: StreamPaymentMethod[];
+  draftStorageKey?: string;
   className?: string;
 }) {
   const { identity, ensureIdentity, signEvent } = useIdentity();
@@ -598,6 +600,7 @@ export function ChatBox({
       </div>
 
       <ChatInput
+        key={draftStorageKey}
         onSend={handleSendInput}
         onActivate={ensureChatIdentity}
         disabled={!!chatPolicyBlockReason}
@@ -605,6 +608,7 @@ export function ChatBox({
         placeholder={chatPolicyBlockReason ? "Chat restricted by stream policy" : "Send a message…"}
         draftMessage={composerDraft}
         draftVersion={composerDraftVersion}
+        draftStorageKey={draftStorageKey}
         emotesDict={globalEmotesMap}
       />
 

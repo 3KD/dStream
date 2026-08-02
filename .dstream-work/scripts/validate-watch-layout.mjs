@@ -13,6 +13,7 @@ const WAIT_MS = Number(process.env.WATCH_LAYOUT_WAIT_MS ?? "1200");
 const MAX_WAIT_MS = Number(process.env.WATCH_LAYOUT_MAX_WAIT_MS ?? "18000");
 const RETRY_MS = Number(process.env.WATCH_LAYOUT_RETRY_MS ?? "650");
 const COMPOSER_DRAFT = "unsent watch layout check";
+const SCENARIO_FILTER = process.env.WATCH_LAYOUT_SCENARIO?.trim() ?? "";
 
 const scenarios = [
   {
@@ -41,6 +42,12 @@ const scenarios = [
       ...devices["iPhone 13"],
       viewport: { width: 844, height: 390 }
     },
+    expect: "mobile-landscape"
+  },
+  {
+    key: "mobile-rotation",
+    context: { ...devices["iPhone 13"] },
+    rotateTo: { width: 844, height: 390 },
     expect: "mobile-landscape"
   }
 ];
@@ -93,6 +100,24 @@ async function collectLayout(page) {
   });
 }
 
+async function waitForComposerReady(page) {
+  await page.waitForFunction(
+    () => {
+      const composer = document.querySelector('[data-testid="chat-message-input"]');
+      return composer instanceof HTMLTextAreaElement && !composer.disabled;
+    },
+    undefined,
+    { timeout: MAX_WAIT_MS }
+  );
+}
+
+async function typeComposerDraft(composer) {
+  await composer.click();
+  await composer.selectText();
+  await composer.press("Backspace");
+  await composer.pressSequentially(COMPOSER_DRAFT, { delay: 8 });
+}
+
 function validateScenario(name, expect, layout) {
   check(!!layout.player, `${name}: player panel missing`);
   check(!!layout.playerHost, `${name}: persistent player host missing`);
@@ -138,7 +163,7 @@ async function main() {
   const results = [];
 
   try {
-    for (const scenario of scenarios) {
+    for (const scenario of scenarios.filter(({ key }) => !SCENARIO_FILTER || key === SCENARIO_FILTER)) {
       const context = await browser.newContext(scenario.context);
       const page = await context.newPage();
       const runtimeErrors = [];
@@ -153,12 +178,23 @@ async function main() {
       await page.goto(WATCH_URL, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(WAIT_MS);
 
+      if (scenario.rotateTo) {
+        const portraitChat = page.locator('[data-testid="watch-chat-panel-mobile-portrait"]');
+        await portraitChat.waitFor({ state: "visible", timeout: MAX_WAIT_MS });
+        await waitForComposerReady(page);
+        const portraitComposer = page.locator('[data-testid="chat-message-input"]');
+        await typeComposerDraft(portraitComposer);
+        await page.setViewportSize(scenario.rotateTo);
+        await page.waitForTimeout(WAIT_MS);
+      }
+
       const expectedChatSelector =
         scenario.expect === "mobile-portrait"
           ? '[data-testid="watch-chat-panel-mobile-portrait"]'
           : '[data-testid="watch-chat-panel"]';
       try {
         await page.locator(expectedChatSelector).waitFor({ state: "visible", timeout: MAX_WAIT_MS });
+        await waitForComposerReady(page);
       } catch {
         // The validation loop below will report the concrete layout failure.
       }
@@ -170,7 +206,7 @@ async function main() {
         const composer = page.locator('[data-testid="chat-message-input"]');
         try {
           if ((await composer.count()) > 0 && (await composer.inputValue()) !== COMPOSER_DRAFT) {
-            await composer.fill(COMPOSER_DRAFT, { timeout: RETRY_MS });
+            await typeComposerDraft(composer);
           }
         } catch {
           // The next pass will retry after hydration/layout settles.
