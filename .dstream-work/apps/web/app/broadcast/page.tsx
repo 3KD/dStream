@@ -2062,7 +2062,7 @@ export default function BroadcastPage() {
   return (
       <div className="min-h-screen bg-neutral-950 text-white">
       <SimpleHeader />
-      <main className="max-w-[1720px] mx-auto px-4 sm:px-6 pb-28 sm:pb-10 pt-5 sm:pt-6">
+      <main className="max-w-[1720px] mx-auto px-4 sm:px-6 pb-10 pt-5 sm:pt-6">
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Broadcast Studio</h1>
@@ -2138,9 +2138,9 @@ export default function BroadcastPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
-          <div className="space-y-5 min-w-0">
-            <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
+          <div className="contents xl:flex xl:min-w-0 xl:flex-col xl:gap-5">
+            <section data-testid="broadcast-stream-details" className="order-3 space-y-4 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 xl:order-2">
               <div>
                 <h2 className="text-sm font-semibold text-neutral-100">Stream details</h2>
                 <p className="mt-1 text-xs text-neutral-500">These details appear in browse, your profile, and the watch page.</p>
@@ -2208,8 +2208,9 @@ export default function BroadcastPage() {
               </details>
             </section>
 
-            {broadcastMethod === "browser" ? (
-              <>
+            <div data-testid="broadcast-primary-workspace" className="order-1 space-y-5 xl:order-1">
+              {broadcastMethod === "browser" ? (
+                <>
                 <div className="relative aspect-video max-h-[70vh] min-h-[220px] overflow-hidden rounded-lg border border-neutral-800 bg-black">
                   {mediaStream ? (
                     <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
@@ -2265,7 +2266,7 @@ export default function BroadcastPage() {
                     </div>
                   </div>
 
-                  <div className="hidden flex-wrap gap-2 border-t border-neutral-800 pt-4 sm:flex">
+                  <div className="flex flex-wrap gap-2 border-t border-neutral-800 pt-4">
                     {mediaStream ? (
                       <button type="button" onClick={stopPreview} disabled={status === "connecting" || status === "live"} className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50">Stop preview</button>
                     ) : (
@@ -2283,9 +2284,9 @@ export default function BroadcastPage() {
                     )}
                   </div>
                 </section>
-              </>
-            ) : (
-              <section className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900/40">
+                </>
+              ) : (
+                <section className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900/40">
                 <div className="flex flex-col gap-3 border-b border-neutral-800 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                   <div>
                     <h2 className="text-base font-semibold text-neutral-100">OBS setup</h2>
@@ -2363,7 +2364,7 @@ export default function BroadcastPage() {
                     {externalLastCheckedAt ? <span className="shrink-0 text-[11px] text-neutral-600">Checked {new Date(externalLastCheckedAt).toLocaleTimeString()}</span> : null}
                   </div>
 
-                  <div className="hidden flex-wrap gap-2 sm:flex">
+                  <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => void copyExternalEncoderSetup()} disabled={!externalStreamKey} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"><ClipboardCopy className="h-4 w-4" /> Copy OBS setup</button>
                     <button type="button" onClick={() => void probeExternalIngest()} disabled={!identity || !originStreamId || externalFeedState === "checking"} className="inline-flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${externalFeedState === "checking" ? "animate-spin" : ""}`} /> Check now</button>
                     {externalAnnounced ? (
@@ -2421,10 +2422,11 @@ export default function BroadcastPage() {
                     ) : null}
                   </div>
                 </div>
-              </section>
-            )}
+                </section>
+              )}
+            </div>
 
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-5">
+            <div data-testid="broadcast-advanced-settings-panel" className="order-5 space-y-5 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 xl:order-3">
               <button
                 type="button"
                 onClick={() => setAdvancedOpen((prev) => !prev)}
@@ -3270,8 +3272,8 @@ export default function BroadcastPage() {
             </div>
           </div>
 
-          <div className="space-y-5 xl:sticky xl:top-24">
-            <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 space-y-3 text-sm text-neutral-300">
+          <div className="contents xl:sticky xl:top-24 xl:flex xl:flex-col xl:gap-5">
+            <section data-testid="broadcast-status-panel" className="order-4 space-y-3 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300 xl:order-2">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="font-semibold text-neutral-100">Broadcast status</h2>
@@ -3321,7 +3323,7 @@ export default function BroadcastPage() {
               </label>
             </section>
 
-            <div className="h-[62vh] min-h-[560px] max-h-[760px] xl:h-[calc(100vh-23rem)] xl:min-h-[500px] xl:max-h-[720px]">
+            <div data-testid="broadcast-chat-panel" className="order-2 h-[62vh] min-h-[560px] max-h-[760px] xl:order-1 xl:h-[calc(100vh-23rem)] xl:min-h-[500px] xl:max-h-[720px]">
               <ChatBox
                 streamPubkey={identity?.pubkey ?? ""}
                 streamId={streamId}
@@ -3334,7 +3336,7 @@ export default function BroadcastPage() {
               />
             </div>
 
-            <details className="group rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300">
+            <details data-testid="broadcast-technical-status" className="group order-6 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300 xl:order-3">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium text-neutral-300 hover:text-white">
                 Technical status
                 <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
@@ -3352,27 +3354,6 @@ export default function BroadcastPage() {
           </div>
         </div>
 
-        <div className="fixed inset-x-3 bottom-3 z-50 flex min-w-0 items-center justify-between gap-3 rounded-lg border border-neutral-700 bg-neutral-950/95 p-3 shadow-2xl backdrop-blur sm:hidden">
-          <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-neutral-200">{broadcastMethod === "external" ? externalStatusLabel : publicBroadcastLive ? "Live" : mediaStream ? "Preview ready" : "Ready to set up"}</div>
-            <div className="mt-0.5 text-[11px] text-neutral-500">{broadcastMethod === "external" ? "OBS / Encoder" : "Browser"}</div>
-          </div>
-          {broadcastMethod === "external" ? (
-            externalAnnounced ? (
-              <button type="button" onClick={() => void endExternalBroadcast()} disabled={announceStep === "checking"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Square className="h-4 w-4" /> End</button>
-            ) : externalSignalDetected ? (
-              <button type="button" onClick={() => { externalAutoSuppressedRef.current = false; setExternalAutoSuppressed(false); void announceExternal("live"); }} disabled={announceStep === "checking"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Radio className="h-4 w-4" /> Go live</button>
-            ) : (
-              <button type="button" onClick={() => void copyExternalEncoderSetup()} disabled={!externalStreamKey} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"><ClipboardCopy className="h-4 w-4" /> Copy setup</button>
-            )
-          ) : status === "live" ? (
-            <button type="button" onClick={endStream} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"><Square className="h-4 w-4" /> End</button>
-          ) : mediaStream ? (
-            <button type="button" onClick={goLive} disabled={status === "connecting"} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Radio className="h-4 w-4" /> Go live</button>
-          ) : (
-            <button type="button" onClick={() => void startPreview()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Camera className="h-4 w-4" /> Preview</button>
-          )}
-        </div>
       </main>
     </div>
   );

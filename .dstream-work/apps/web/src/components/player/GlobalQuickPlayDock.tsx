@@ -14,16 +14,22 @@ import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/q
 import { buildWatchHref } from "@/lib/watchHref";
 import { setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import {
+  MINI_PLAYER_DEFAULT_WIDTH,
+  MINI_PLAYER_VIEWPORT_GAP,
+  clampMiniPlayerPosition,
+  clampMiniPlayerWidth,
+  miniPlayerHeight,
+  type MiniPlayerViewport
+} from "@/lib/miniPlayerLayout";
+import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
   writeBackgroundPlayPreference
 } from "@/lib/backgroundPlayback";
 
 const STORAGE_KEY = "dstream_mini_player_layout_v3";
-const MIN_WIDTH = 240;
-const MAX_WIDTH = 960;
-const DEFAULT_WIDTH = 320;
-const DEFAULT_GAP = 24;
+const DEFAULT_WIDTH = MINI_PLAYER_DEFAULT_WIDTH;
+const DEFAULT_GAP = MINI_PLAYER_VIEWPORT_GAP;
 const AUTO_PIP_RETRY_MS = 1200;
 const AUTO_PIP_MAX_ATTEMPTS = 8;
 const DRAG_BLOCK_SELECTOR = "video,button,a,input,select,textarea,label,[role='button'],[data-no-drag='true']";
@@ -58,12 +64,22 @@ function configureAudioSessionForPlayback(): void {
 }
 
 function toHeight(width: number): number {
-  return Math.round((width * 9) / 16);
+  return miniPlayerHeight(width);
+}
+
+function getBrowserViewport(): MiniPlayerViewport | undefined {
+  if (typeof window === "undefined") return undefined;
+  const viewport = window.visualViewport;
+  return {
+    width: viewport?.width ?? window.innerWidth,
+    height: viewport?.height ?? window.innerHeight,
+    offsetLeft: viewport?.offsetLeft ?? 0,
+    offsetTop: viewport?.offsetTop ?? 0
+  };
 }
 
 function clampWidth(width: number): number {
-  if (!Number.isFinite(width)) return DEFAULT_WIDTH;
-  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(width)));
+  return clampMiniPlayerWidth(width, getBrowserViewport());
 }
 
 function clampVolume(value: number): number {
@@ -72,17 +88,9 @@ function clampVolume(value: number): number {
 }
 
 function clampPosition(x: number, y: number, width: number, height: number) {
-  if (typeof window === "undefined") return { x, y };
-  const horizontalSpill = 24;
-  const verticalSpill = 24;
-  const minX = -width + horizontalSpill;
-  const maxX = window.innerWidth - horizontalSpill;
-  const minY = -height + verticalSpill;
-  const maxY = window.innerHeight - verticalSpill;
-  return {
-    x: Math.max(minX, Math.min(maxX, x)),
-    y: Math.max(minY, Math.min(maxY, y))
-  };
+  const viewport = getBrowserViewport();
+  if (!viewport) return { x, y };
+  return clampMiniPlayerPosition(x, y, width, height, viewport);
 }
 
 function readLayoutState(): LayoutState | null {
@@ -277,12 +285,15 @@ export function GlobalQuickPlayDock() {
       setReady(true);
       return;
     }
-    const defaultHeight = toHeight(DEFAULT_WIDTH);
-    setWidth(DEFAULT_WIDTH);
-    setPosition({
-      x: DEFAULT_GAP,
-      y: Math.max(DEFAULT_GAP, window.innerHeight - defaultHeight - DEFAULT_GAP)
-    });
+    const defaultWidth = clampWidth(DEFAULT_WIDTH);
+    const defaultHeight = toHeight(defaultWidth);
+    const viewport = getBrowserViewport();
+    const bottom = viewport
+      ? (viewport.offsetTop ?? 0) + viewport.height - defaultHeight - DEFAULT_GAP
+      : DEFAULT_GAP;
+    const defaultPosition = clampPosition(DEFAULT_GAP, bottom, defaultWidth, defaultHeight);
+    setWidth(defaultWidth);
+    setPosition(defaultPosition);
     setReady(true);
   }, [ready]);
 
@@ -302,10 +313,19 @@ export function GlobalQuickPlayDock() {
   useEffect(() => {
     if (!ready) return;
     const onResize = () => {
-      setPosition((prev) => clampPosition(prev.x, prev.y, width, toHeight(width)));
+      const nextWidth = clampWidth(width);
+      if (nextWidth !== width) setWidth(nextWidth);
+      setPosition((prev) => clampPosition(prev.x, prev.y, nextWidth, toHeight(nextWidth)));
     };
+    onResize();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("scroll", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("scroll", onResize);
+    };
   }, [ready, width]);
 
   useEffect(() => {
@@ -508,8 +528,6 @@ export function GlobalQuickPlayDock() {
         nextWidth = clampWidth(activeResize.startWidth + deltaX);
       } else if (activeResize.handle.includes("left")) {
         nextWidth = clampWidth(activeResize.startWidth - deltaX);
-        if (nextWidth <= MIN_WIDTH) nextWidth = MIN_WIDTH;
-        if (nextWidth >= MAX_WIDTH) nextWidth = MAX_WIDTH;
       } else if (activeResize.handle.includes("bottom")) {
         const potentialWidth = Math.round(((activeResize.startHeight + deltaY) * 16) / 9);
         nextWidth = clampWidth(potentialWidth);

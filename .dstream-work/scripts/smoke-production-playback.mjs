@@ -45,6 +45,9 @@ function runDetails(run, sample) {
 }
 
 async function launchChromium() {
+  if (process.env.PLAYBACK_CHROMIUM_CHANNEL?.trim().toLowerCase() === "bundled") {
+    return chromium.launch({ headless: true });
+  }
   try {
     return await chromium.launch({ channel: "chrome", headless: true });
   } catch {
@@ -412,6 +415,7 @@ async function openRun(context, scenario, stream, index) {
 
 async function verifyRouteHandoff(run) {
   if (run.background) await setSyntheticVisibility(run.page, "visible");
+  const routeStartedAt = Date.now();
   const preferenceBeforeRoute = run.background
     ? await run.page.evaluate(() => localStorage.getItem("dstream_player_background_play_v1"))
     : null;
@@ -436,11 +440,29 @@ async function verifyRouteHandoff(run) {
   let after = await sampleVideo(run.page);
   if (after.marker !== run.marker) fail(`${run.scenario}/${run.title}: player DOM was remounted during route handoff`);
   if (after.currentTime + 10 < before.currentTime) {
-    fail(
-      `${run.scenario}/${run.title}: timeline reset during route handoff (${before.currentTime.toFixed(1)} -> ${after.currentTime.toFixed(1)}); ` +
-        `session ${before.session ?? "n/a"} -> ${after.session ?? "n/a"}; ` +
-        `signature ${before.signature ?? "n/a"} -> ${after.signature ?? "n/a"}; recovery=${after.recoveryReason ?? "none"}`
-    );
+    const routeElapsedSeconds = (Date.now() - routeStartedAt) / 1000;
+    const programDateDelta =
+      after.programDateTime !== null && before.programDateTime !== null
+        ? (after.programDateTime - before.programDateTime) / 1000
+        : null;
+    const sourceAdvanced =
+      (after.frames !== null && before.frames !== null && after.frames > before.frames) ||
+      (after.hlsFragment !== null && before.hlsFragment !== null && after.hlsFragment !== before.hlsFragment);
+    const upstreamTimelineEpochChanged =
+      programDateDelta !== null &&
+      programDateDelta >= -2 &&
+      programDateDelta <= routeElapsedSeconds + 5 &&
+      sourceAdvanced;
+    if (upstreamTimelineEpochChanged) {
+      run.sourceTimelineEpochChanges += 1;
+    } else {
+      fail(
+        `${run.scenario}/${run.title}: timeline reset during route handoff (${before.currentTime.toFixed(1)} -> ${after.currentTime.toFixed(1)}); ` +
+          `program-date delta=${programDateDelta?.toFixed(1) ?? "n/a"}s; ` +
+          `session ${before.session ?? "n/a"} -> ${after.session ?? "n/a"}; ` +
+          `signature ${before.signature ?? "n/a"} -> ${after.signature ?? "n/a"}; recovery=${after.recoveryReason ?? "none"}`
+      );
+    }
   }
   if (after.paused || after.ended) fail(`${run.scenario}/${run.title}: playback stopped during route handoff`);
   if (after.muted !== before.muted || Math.abs(after.volume - before.volume) > 0.01) {
@@ -451,6 +473,7 @@ async function verifyRouteHandoff(run) {
   }
 
   await verifyMiniPlayerDragAlignment(run, miniPlayer);
+  await verifyMiniPlayerAtFooter(run, miniPlayer);
 
   await miniPlayer.hover();
   const pauseButton = miniPlayer.getByRole("button", { name: "Pause", exact: true });
@@ -507,6 +530,62 @@ async function verifyRouteHandoff(run) {
   run.last = after;
   run.lastSampledAt = Date.now();
   run.lastProgressAt = Date.now();
+}
+
+async function verifyMiniPlayerAtFooter(run, miniPlayer) {
+  const footer = run.page.locator("#global-site-footer");
+  await footer.scrollIntoViewIfNeeded();
+  await run.page.waitForTimeout(400);
+
+  const state = await run.page.evaluate(() => {
+    const dock = document.querySelector('[aria-label="Floating mini player"]');
+    const slot = document.querySelector('[data-player-slot="quickplay-dock"]');
+    const host = document.querySelector("[data-global-player-host]");
+    const footerElement = document.querySelector("#global-site-footer");
+    const video = host?.querySelector("video");
+    if (!(dock instanceof HTMLElement) || !(slot instanceof HTMLElement) || !(host instanceof HTMLElement) || !(footerElement instanceof HTMLElement) || !(video instanceof HTMLVideoElement)) {
+      return null;
+    }
+
+    const dockRect = dock.getBoundingClientRect();
+    const slotRect = slot.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const footerRect = footerElement.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
+    const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+
+    return {
+      footerVisible: footerRect.bottom > viewportTop && footerRect.top < viewportBottom,
+      fullyVisible:
+        dockRect.left >= viewportLeft - 2 &&
+        dockRect.top >= viewportTop - 2 &&
+        dockRect.right <= viewportRight + 2 &&
+        dockRect.bottom <= viewportBottom + 2,
+      alignment: Math.max(
+        Math.abs(slotRect.left - hostRect.left),
+        Math.abs(slotRect.top - hostRect.top),
+        Math.abs(slotRect.width - hostRect.width),
+        Math.abs(slotRect.height - hostRect.height)
+      ),
+      paused: video.paused,
+      ended: video.ended,
+      readyState: video.readyState
+    };
+  });
+
+  if (!state) fail(`${run.scenario}/${run.title}: footer mini-player elements are missing`);
+  if (!state.footerVisible) fail(`${run.scenario}/${run.title}: footer was not visible during mini-player validation`);
+  if (!state.fullyVisible) fail(`${run.scenario}/${run.title}: mini-player escaped the usable viewport at the footer`);
+  if (state.alignment > 1.5) fail(`${run.scenario}/${run.title}: video host detached from mini-player at the footer (${state.alignment}px)`);
+  if (state.paused || state.ended || state.readyState < 2) {
+    fail(`${run.scenario}/${run.title}: footer mini-player was not actively playing (${JSON.stringify(state)})`);
+  }
+
+  const box = await miniPlayer.boundingBox();
+  if (!box) fail(`${run.scenario}/${run.title}: footer mini-player has no visible bounds`);
 }
 
 async function verifyMiniPlayerDragAlignment(run, miniPlayer) {
@@ -666,9 +745,9 @@ async function main() {
         const sourceFragmentAdvancedWhileHidden =
           run.background &&
           timeAdvanced &&
-          next.fragment !== null &&
-          run.last.fragment !== null &&
-          next.fragment !== run.last.fragment;
+          next.hlsFragment !== null &&
+          run.last.hlsFragment !== null &&
+          next.hlsFragment !== run.last.hlsFragment;
         const sourceTimelineAdvanced = framesAdvanced || sourceFragmentAdvancedWhileHidden;
         if (timeAdvanced || framesAdvanced) run.lastProgressAt = Date.now();
         if (next.ended) fail(`${run.scenario}/${run.title}: live media entered ended state (${runDetails(run, next)})`);
