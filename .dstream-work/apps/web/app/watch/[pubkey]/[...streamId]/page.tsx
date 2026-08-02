@@ -125,9 +125,10 @@ function calculateWatchChatViewport({
   footerInset: number;
 }) {
   const normalTop = Math.max(viewportTop + topInset, naturalTop);
-  const bottom = Math.min(viewportBottom - bottomInset, footerTop - footerInset);
-  const top = Math.min(normalTop, bottom - 160);
-  return { top, height: Math.max(1, Math.floor(bottom - top)) };
+  const viewportBottomBoundary = viewportBottom - bottomInset;
+  const height = Math.max(160, Math.floor(viewportBottomBoundary - normalTop));
+  const bottom = Math.min(viewportBottomBoundary, footerTop - footerInset);
+  return { top: bottom - height, height };
 }
 
 

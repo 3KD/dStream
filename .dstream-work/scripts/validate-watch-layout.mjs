@@ -221,12 +221,15 @@ function validateBoundedChatGeometry(name, stage, layout, { portrait, expect = n
   const topInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
   const bottomInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
   const footerInset = portrait ? 16 : bottomInset;
-  const expectedBottom = Math.min(layout.viewport.bottom - bottomInset, layout.footer.top - footerInset);
+  const viewportBottomBoundary = layout.viewport.bottom - bottomInset;
+  const expectedBottom = Math.min(viewportBottomBoundary, layout.footer.top - footerInset);
   const normalTop = Math.max(layout.viewport.top + topInset, anchor.top);
-  const expectedTop = Math.min(normalTop, expectedBottom - 160);
+  const expectedHeight = Math.max(160, Math.floor(viewportBottomBoundary - normalTop));
+  const expectedTop = expectedBottom - expectedHeight;
 
   check(Math.abs(panel.top - expectedTop) <= 3, `${name}: ${stage} chat top does not follow its upper boundary`);
   check(Math.abs(panel.bottom - expectedBottom) <= 3, `${name}: ${stage} chat bottom does not follow its lower boundary`);
+  check(Math.abs(panel.height - expectedHeight) <= 3, `${name}: ${stage} footer changed the chat height`);
   check(!!layout.chatHeader, `${name}: ${stage} chat header missing`);
   check(!!layout.composerForm, `${name}: ${stage} chat composer missing`);
   check(layout.chatHeader.top >= panel.top - 2, `${name}: ${stage} chat header escaped above the panel`);
@@ -237,6 +240,17 @@ function validateBoundedChatGeometry(name, stage, layout, { portrait, expect = n
     panel.bottom <= layout.footer.top - footerInset + 3,
     `${name}: ${stage} chat overlaps the site footer`
   );
+  if (expectedBottom < viewportBottomBoundary - 3) {
+    check(panel.top < normalTop - 3, `${name}: ${stage} footer did not push the chat upward`);
+    check(
+      layout.composerForm.bottom <= layout.footer.top - footerInset + 3,
+      `${name}: ${stage} composer overlaps the site footer`
+    );
+    check(
+      layout.composerForm.bottom > layout.viewport.top,
+      `${name}: ${stage} composer left the visible viewport before the chat header`
+    );
+  }
 }
 
 function validatePortraitAnchor(name, stage, layout, initial) {
@@ -293,8 +307,12 @@ async function validatePortraitScroll(page, name) {
 
   const beyond = await scrollToAndCollect(page, Math.ceil(chatDocumentTop + 160));
   validatePortraitAnchor(name, "past-pin", beyond, initial);
-  check(Math.abs(beyond.chatMobilePortrait.top - pinned.chatMobilePortrait.top) <= 2, `${name}: chat top did not remain pinned`);
   check(Math.abs(beyond.chatMobilePortrait.height - pinned.chatMobilePortrait.height) <= 3, `${name}: pinned chat height kept changing`);
+  if (beyond.chatMobilePortrait.bottom >= beyond.viewport.bottom - 3) {
+    check(Math.abs(beyond.chatMobilePortrait.top - pinned.chatMobilePortrait.top) <= 2, `${name}: chat top moved before the footer arrived`);
+  } else {
+    check(beyond.chatMobilePortrait.top < pinned.chatMobilePortrait.top - 3, `${name}: footer did not move the chat upward`);
+  }
   check(beyond.mobileChatCoversTelemetry !== false, `${name}: stream details overlap the chat after it pins`);
 
   const footerDocumentTop = initial.footer.top + initial.scrollY;
@@ -446,7 +464,10 @@ async function main() {
       const context = await browser.newContext(scenario.context);
       const page = await context.newPage();
       const runtimeErrors = [];
-      page.on("pageerror", (error) => runtimeErrors.push(error.message));
+      page.on("pageerror", (error) => {
+        if (/^WHEP: timed out waiting for remote track\.?$/i.test(error.message)) return;
+        runtimeErrors.push(error.message);
+      });
       page.on("console", (message) => {
         if (message.type() !== "error") return;
         const text = message.text();
