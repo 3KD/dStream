@@ -556,6 +556,18 @@ async function verifyMiniPlayerAtFooter(run, miniPlayer) {
     const viewportTop = viewport?.offsetTop ?? 0;
     const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
     const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+    const sampleX = dockRect.left + dockRect.width / 2;
+    const sampleY = dockRect.top + dockRect.height / 2;
+    const previousPointerEvents = host.style.pointerEvents;
+    let paintStack;
+    try {
+      host.style.pointerEvents = "auto";
+      paintStack = document.elementsFromPoint(sampleX, sampleY);
+    } finally {
+      host.style.pointerEvents = previousPointerEvents;
+    }
+    const videoSurfaceIndex = paintStack.findIndex((element) => host.contains(element));
+    const footerIndex = paintStack.findIndex((element) => footerElement.contains(element));
 
     return {
       footerVisible: footerRect.bottom > viewportTop && footerRect.top < viewportBottom,
@@ -570,6 +582,7 @@ async function verifyMiniPlayerAtFooter(run, miniPlayer) {
         Math.abs(slotRect.width - hostRect.width),
         Math.abs(slotRect.height - hostRect.height)
       ),
+      videoAboveFooter: videoSurfaceIndex >= 0 && (footerIndex < 0 || videoSurfaceIndex < footerIndex),
       paused: video.paused,
       ended: video.ended,
       readyState: video.readyState
@@ -580,6 +593,7 @@ async function verifyMiniPlayerAtFooter(run, miniPlayer) {
   if (!state.footerVisible) fail(`${run.scenario}/${run.title}: footer was not visible during mini-player validation`);
   if (!state.fullyVisible) fail(`${run.scenario}/${run.title}: mini-player escaped the usable viewport at the footer`);
   if (state.alignment > 1.5) fail(`${run.scenario}/${run.title}: video host detached from mini-player at the footer (${state.alignment}px)`);
+  if (!state.videoAboveFooter) fail(`${run.scenario}/${run.title}: footer painted over the mini-player video`);
   if (state.paused || state.ended || state.readyState < 2) {
     fail(`${run.scenario}/${run.title}: footer mini-player was not actively playing (${JSON.stringify(state)})`);
   }

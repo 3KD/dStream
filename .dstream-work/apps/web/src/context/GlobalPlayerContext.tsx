@@ -145,7 +145,7 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
       <div
         ref={permanentHostRootRef}
         data-global-player-root="true"
-        className="fixed left-0 top-0 h-0 w-0"
+        className="contents"
       />
       {playerHost && activeRequest ? createPortal(<Player {...(activeRequest.props || {})} />, playerHost) : null}
     </GlobalPlayerContext.Provider>
