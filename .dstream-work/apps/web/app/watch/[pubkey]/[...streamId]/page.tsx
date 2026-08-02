@@ -107,6 +107,29 @@ function detectWatchLayoutMode(): WatchLayoutMode {
   return isLandscape ? "landscape" : "portrait";
 }
 
+function calculateWatchChatViewport({
+  naturalTop,
+  viewportTop,
+  viewportBottom,
+  topInset,
+  bottomInset,
+  footerTop,
+  footerInset
+}: {
+  naturalTop: number;
+  viewportTop: number;
+  viewportBottom: number;
+  topInset: number;
+  bottomInset: number;
+  footerTop: number;
+  footerInset: number;
+}) {
+  const normalTop = Math.max(viewportTop + topInset, naturalTop);
+  const bottom = Math.min(viewportBottom - bottomInset, footerTop - footerInset);
+  const top = Math.min(normalTop, bottom - 160);
+  return { top, height: Math.max(1, Math.floor(bottom - top)) };
+}
+
 
 function P2PStatsPanel({ stats }: { stats: P2PSwarmStats | null }) {
   const [open, setOpen] = useState(false);
@@ -407,13 +430,9 @@ export default function WatchPage() {
     let frame = 0;
     let lastLayout = "";
     const visualViewport = window.visualViewport;
-    const initialViewportTop = visualViewport?.offsetTop ?? 0;
-    const initialShellRect = shell.getBoundingClientRect();
-    const initialScrollY = window.scrollY;
     const minimumTopInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
     const bottomInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
-    const initialShellTop = Math.max(initialViewportTop + minimumTopInset, initialShellRect.top);
-    const portraitDocumentTop = initialShellTop + initialScrollY;
+    const footerInset = mobilePortraitLayout ? 16 : bottomInset;
 
     const updateChatViewport = () => {
       frame = 0;
@@ -421,14 +440,16 @@ export default function WatchPage() {
       const viewportHeight = visualViewport?.height ?? window.innerHeight;
       const viewportBottom = viewportTop + viewportHeight;
       const anchorRect = anchor.getBoundingClientRect();
-      const preferredTop = mobilePortraitLayout
-        ? Math.min(initialShellTop, portraitDocumentTop - window.scrollY)
-        : initialShellTop;
-      const shellTop = Math.max(
-        viewportTop + minimumTopInset,
-        Math.min(preferredTop, viewportBottom - bottomInset - 160)
-      );
-      const shellHeight = Math.max(1, Math.floor(viewportBottom - bottomInset - shellTop));
+      const footerTop = document.getElementById("global-site-footer")?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+      const { top: shellTop, height: shellHeight } = calculateWatchChatViewport({
+        naturalTop: anchorRect.top,
+        viewportTop,
+        viewportBottom,
+        topInset: minimumTopInset,
+        bottomInset,
+        footerTop,
+        footerInset
+      });
       const layoutKey = [
         Math.round(shellTop),
         shellHeight,
@@ -451,6 +472,7 @@ export default function WatchPage() {
 
     const resizeObserver = new ResizeObserver(scheduleChatViewportUpdate);
     resizeObserver.observe(anchor);
+    resizeObserver.observe(document.body);
     window.addEventListener("scroll", scheduleChatViewportUpdate, { passive: true });
     window.addEventListener("resize", scheduleChatViewportUpdate);
     visualViewport?.addEventListener("scroll", scheduleChatViewportUpdate);

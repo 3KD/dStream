@@ -74,8 +74,8 @@ function check(condition, message) {
 
 async function collectLayout(page) {
   return page.evaluate(() => {
-    const getRect = (selector) => {
-      const node = document.querySelector(selector);
+    const getRect = (selectorOrNode) => {
+      const node = typeof selectorOrNode === "string" ? document.querySelector(selectorOrNode) : selectorOrNode;
       if (!node) return null;
       const rect = node.getBoundingClientRect();
       return {
@@ -95,6 +95,9 @@ async function collectLayout(page) {
     const composer = document.querySelector('[data-testid="chat-message-input"]');
     const composerSubmit = composer?.closest("form")?.querySelector('button[type="submit"]');
     const messageList = document.querySelector('[data-testid="chat-message-list"]');
+    const chatRoot = messageList?.parentElement?.parentElement;
+    const chatHeader = chatRoot?.firstElementChild;
+    const composerForm = composer?.closest("form");
     const mobileChat = document.querySelector('[data-testid="watch-chat-panel-mobile-portrait"]');
     const dockedChat = document.querySelector('[data-testid="watch-chat-panel"]');
     const p2pTelemetry = document.querySelector('[data-testid="p2p-telemetry"]');
@@ -129,15 +132,19 @@ async function collectLayout(page) {
       },
       scrollY: Math.round(window.scrollY),
       documentHeight: document.documentElement.scrollHeight,
+      maxScrollY: Math.max(0, Math.round(document.documentElement.scrollHeight - window.innerHeight)),
       player: getRect('[data-testid="watch-player-panel"]'),
       playerHost: getRect('[data-global-player-host="true"]'),
       details: getRect('[data-testid="watch-details-panel"]'),
+      footer: getRect("#global-site-footer"),
       chatDesktopOrLandscapeAnchor: getRect('[data-testid="watch-chat-anchor"]'),
       chatDesktopOrLandscape: getRect('[data-testid="watch-chat-panel"]'),
       chatDesktopOrLandscapePosition: dockedChat ? getComputedStyle(dockedChat).position : null,
       chatMobilePortraitAnchor: getRect('[data-testid="watch-chat-anchor-mobile-portrait"]'),
       chatMobilePortrait: getRect('[data-testid="watch-chat-panel-mobile-portrait"]'),
       chatMobilePortraitPosition: mobileChat ? getComputedStyle(mobileChat).position : null,
+      chatHeader: getRect(chatHeader),
+      composerForm: getRect(composerForm),
       composer: getRect('[data-testid="chat-message-input"]'),
       composerDisabled: composer?.disabled ?? null,
       composerValue: composer?.value ?? null,
@@ -202,18 +209,46 @@ async function scrollToAndCollect(page, top) {
   return collectLayout(page);
 }
 
-function validatePortraitAnchor(name, stage, layout, initial) {
-  check(!!layout.chatMobilePortraitAnchor, `${name}: ${stage} portrait chat anchor missing`);
-  check(!!layout.chatMobilePortrait, `${name}: ${stage} portrait chat panel missing`);
-  check(!!layout.composer, `${name}: ${stage} composer missing`);
-  check(layout.chatMobilePortraitPosition === "fixed", `${name}: ${stage} portrait chat is not viewport anchored`);
+function validateBoundedChatGeometry(name, stage, layout, { portrait, expect = null }) {
+  const anchor = portrait ? layout.chatMobilePortraitAnchor : layout.chatDesktopOrLandscapeAnchor;
+  const panel = portrait ? layout.chatMobilePortrait : layout.chatDesktopOrLandscape;
+  const position = portrait ? layout.chatMobilePortraitPosition : layout.chatDesktopOrLandscapePosition;
+  check(!!anchor, `${name}: ${stage} chat anchor missing`);
+  check(!!panel, `${name}: ${stage} chat panel missing`);
+  check(!!layout.footer, `${name}: ${stage} site footer missing`);
+  check(position === "fixed", `${name}: ${stage} chat is not viewport anchored`);
+
+  const topInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
+  const bottomInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
+  const footerInset = portrait ? 16 : bottomInset;
+  const expectedBottom = Math.min(layout.viewport.bottom - bottomInset, layout.footer.top - footerInset);
+  const normalTop = Math.max(layout.viewport.top + topInset, anchor.top);
+  const expectedTop = Math.min(normalTop, expectedBottom - 160);
+
+  check(Math.abs(panel.top - expectedTop) <= 3, `${name}: ${stage} chat top does not follow its upper boundary`);
+  check(Math.abs(panel.bottom - expectedBottom) <= 3, `${name}: ${stage} chat bottom does not follow its lower boundary`);
+  check(!!layout.chatHeader, `${name}: ${stage} chat header missing`);
+  check(!!layout.composerForm, `${name}: ${stage} chat composer missing`);
+  check(layout.chatHeader.top >= panel.top - 2, `${name}: ${stage} chat header escaped above the panel`);
+  check(layout.chatHeader.bottom <= panel.bottom + 2, `${name}: ${stage} chat header escaped below the panel`);
+  check(layout.composerForm.top >= panel.top - 2, `${name}: ${stage} chat composer escaped above the panel`);
+  check(layout.composerForm.bottom <= panel.bottom + 2, `${name}: ${stage} chat composer escaped below the panel`);
   check(
-    Math.abs(layout.chatMobilePortrait.bottom - layout.viewport.bottom) <= 3,
-    `${name}: ${stage} chat bottom is not anchored to the viewport`
+    panel.bottom <= layout.footer.top - footerInset + 3,
+    `${name}: ${stage} chat overlaps the site footer`
   );
+}
+
+function validatePortraitAnchor(name, stage, layout, initial) {
+  validateBoundedChatGeometry(name, stage, layout, { portrait: true });
+  check(!!layout.composer, `${name}: ${stage} composer missing`);
   check(
-    Math.abs(layout.composer.bottom - initial.composer.bottom) <= 3,
-    `${name}: ${stage} composer moved away from its bottom anchor`
+    Math.abs(
+      layout.chatMobilePortrait.bottom -
+        layout.composer.bottom -
+        (initial.chatMobilePortrait.bottom - initial.composer.bottom)
+    ) <= 3,
+    `${name}: ${stage} composer moved relative to the chat bottom`
   );
   check(
     Math.abs(layout.composer.height - initial.composer.height) <= 2,
@@ -222,10 +257,6 @@ function validatePortraitAnchor(name, stage, layout, initial) {
   check(
     Math.abs(layout.chatMobilePortraitAnchor.height - initial.chatMobilePortraitAnchor.height) <= 2,
     `${name}: ${stage} chat placeholder changed the document flow`
-  );
-  check(
-    Math.abs(layout.chatMobilePortrait.height - (layout.viewport.bottom - layout.chatMobilePortrait.top)) <= 3,
-    `${name}: ${stage} chat height exceeds its visible viewport space`
   );
 }
 
@@ -266,6 +297,18 @@ async function validatePortraitScroll(page, name) {
   check(Math.abs(beyond.chatMobilePortrait.height - pinned.chatMobilePortrait.height) <= 3, `${name}: pinned chat height kept changing`);
   check(beyond.mobileChatCoversTelemetry !== false, `${name}: stream details overlap the chat after it pins`);
 
+  const footerDocumentTop = initial.footer.top + initial.scrollY;
+  const footerCollisionTarget = Math.min(
+    initial.maxScrollY,
+    Math.max(beyond.scrollY + 40, Math.ceil(footerDocumentTop - initial.viewport.bottom + 48))
+  );
+  const footerBound = await scrollToAndCollect(page, footerCollisionTarget);
+  validatePortraitAnchor(name, "footer-bound", footerBound, initial);
+  check(
+    footerBound.chatMobilePortrait.bottom < footerBound.viewport.bottom - 20,
+    `${name}: footer did not take over as the portrait chat lower boundary`
+  );
+
   await scrollToAndCollect(page, 0);
 }
 
@@ -273,40 +316,59 @@ async function validateDockedChatScroll(page, name, expect) {
   const initial = await scrollToAndCollect(page, 0);
   check(!!initial.chatDesktopOrLandscapeAnchor, `${name}: docked chat anchor missing`);
   check(!!initial.chatDesktopOrLandscape && !!initial.composer, `${name}: docked chat geometry unavailable`);
-  check(initial.chatDesktopOrLandscapePosition === "fixed", `${name}: chat is not viewport anchored`);
-  const expectedBottomInset = expect === "desktop" ? 24 : 16;
+  validateBoundedChatGeometry(name, "initial", initial, { portrait: false, expect });
+  const inset = expect === "desktop" ? 24 : 16;
   check(
-    Math.abs(initial.viewport.bottom - initial.chatDesktopOrLandscape.bottom - expectedBottomInset) <= 3,
+    Math.abs(initial.viewport.bottom - initial.chatDesktopOrLandscape.bottom - inset) <= 3,
     `${name}: chat does not start with the expected bottom buffer`
   );
 
-  for (const target of [40, 120, 280]) {
+  const initialComposerBottomGap = initial.chatDesktopOrLandscape.bottom - initial.composer.bottom;
+  const pinnedTarget = Math.ceil(initial.chatDesktopOrLandscapeAnchor.top - inset + 24);
+  const footerDocumentTop = initial.footer.top + initial.scrollY;
+  const footerCollisionTarget = Math.ceil(footerDocumentTop - initial.viewport.bottom + 48);
+  const targets = Array.from(
+    new Set(
+      [40, 120, 280, pinnedTarget, footerCollisionTarget]
+        .map((target) => Math.max(0, Math.min(initial.maxScrollY, target)))
+        .sort((left, right) => left - right)
+    )
+  );
+  let pinnedLayout = null;
+  let sawFooterBoundary = false;
+
+  for (const target of targets) {
     const layout = await scrollToAndCollect(page, target);
     check(layout.scrollY >= target - 2, `${name}: page did not reach scroll position ${target}`);
     check(!!layout.chatDesktopOrLandscapeAnchor && !!layout.chatDesktopOrLandscape && !!layout.composer, `${name}: chat disappeared while scrolling`);
-    check(layout.chatDesktopOrLandscapePosition === "fixed", `${name}: chat lost its viewport anchor while scrolling`);
+    validateBoundedChatGeometry(name, `scroll-${target}`, layout, { portrait: false, expect });
     check(
-      Math.abs(layout.chatDesktopOrLandscape.top - initial.chatDesktopOrLandscape.top) <= 2,
-      `${name}: chat moved vertically while the page scrolled`
-    );
-    check(
-      Math.abs(layout.chatDesktopOrLandscape.bottom - initial.chatDesktopOrLandscape.bottom) <= 2,
-      `${name}: chat bottom buffer changed while the page scrolled`
-    );
-    check(
-      Math.abs(layout.chatDesktopOrLandscape.height - initial.chatDesktopOrLandscape.height) <= 2,
-      `${name}: chat height changed while the page scrolled`
-    );
-    check(
-      Math.abs(layout.composer.bottom - initial.composer.bottom) <= 2,
-      `${name}: composer moved while the page scrolled`
+      Math.abs(layout.chatDesktopOrLandscape.bottom - layout.composer.bottom - initialComposerBottomGap) <= 2,
+      `${name}: composer moved relative to the chat bottom`
     );
     check(
       Math.abs(layout.chatDesktopOrLandscapeAnchor.height - initial.chatDesktopOrLandscapeAnchor.height) <= 2,
       `${name}: docked chat placeholder changed the document flow`
     );
+
+    if (target === Math.max(0, Math.min(initial.maxScrollY, pinnedTarget))) {
+      pinnedLayout = layout;
+    }
+    if (layout.footer.top - inset < layout.viewport.bottom - inset - 3) {
+      sawFooterBoundary = true;
+      check(
+        layout.chatDesktopOrLandscape.bottom < layout.viewport.bottom - inset - 3,
+        `${name}: footer did not take over as the chat lower boundary`
+      );
+    }
   }
 
+  check(!!pinnedLayout, `${name}: pinned chat geometry unavailable`);
+  check(
+    Math.abs(pinnedLayout.chatDesktopOrLandscape.top - (pinnedLayout.viewport.top + inset)) <= 3,
+    `${name}: chat did not stop at its top buffer`
+  );
+  check(sawFooterBoundary, `${name}: footer boundary was not exercised`);
   await scrollToAndCollect(page, 0);
 }
 
