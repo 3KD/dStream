@@ -114,7 +114,7 @@ function P2PStatsPanel({ stats }: { stats: P2PSwarmStats | null }) {
   const toMB = (b: number) => (b / (1024 * 1024)).toFixed(2) + " MB";
 
   return (
-    <div className="relative z-50">
+    <div data-testid="p2p-telemetry" className="relative z-50">
       <button 
         type="button"
         onClick={() => setOpen(!open)}
@@ -370,14 +370,7 @@ export default function WatchPage() {
   // Keep the server and first client render identical; responsive mode is applied after hydration.
   const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>("portrait");
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
-  const [scrollY, setScrollY] = useState(0);
   const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -402,6 +395,49 @@ export default function WatchPage() {
   const mobileLandscapeLayout = mobileLayoutMode === "landscape";
   const mobilePortraitLayout = mobileLayoutMode === "portrait";
   const desktopWatchLayout = mobileLayoutMode === "desktop";
+
+  useEffect(() => {
+    if (!mobilePortraitLayout) return;
+    const shell = mobilePortraitChatShellRef.current;
+    if (!shell) return;
+
+    let frame = 0;
+    let lastHeight = -1;
+    const updateHeight = () => {
+      frame = 0;
+      const visualViewport = window.visualViewport;
+      const viewportTop = visualViewport?.offsetTop ?? 0;
+      const viewportHeight = visualViewport?.height ?? window.innerHeight;
+      const viewportBottom = viewportTop + viewportHeight;
+      const shellTop = Math.max(shell.getBoundingClientRect().top, viewportTop);
+      const nextHeight = Math.max(1, Math.floor(viewportBottom - shellTop));
+      if (nextHeight === lastHeight) return;
+      lastHeight = nextHeight;
+      shell.style.setProperty("--watch-mobile-chat-height", `${nextHeight}px`);
+    };
+    const scheduleHeightUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateHeight);
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleHeightUpdate);
+    resizeObserver.observe(document.body);
+    window.addEventListener("scroll", scheduleHeightUpdate, { passive: true });
+    window.addEventListener("resize", scheduleHeightUpdate);
+    visualViewport?.addEventListener("scroll", scheduleHeightUpdate);
+    visualViewport?.addEventListener("resize", scheduleHeightUpdate);
+    scheduleHeightUpdate();
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("scroll", scheduleHeightUpdate);
+      window.removeEventListener("resize", scheduleHeightUpdate);
+      visualViewport?.removeEventListener("scroll", scheduleHeightUpdate);
+      visualViewport?.removeEventListener("resize", scheduleHeightUpdate);
+      shell.style.removeProperty("--watch-mobile-chat-height");
+    };
+  }, [mobilePortraitLayout]);
 
   useEffect(() => {
     if (desktopWatchLayout || mobileLandscapeLayout) {
@@ -1798,7 +1834,15 @@ export default function WatchPage() {
             ) : null}
 
             {mobilePortraitLayout && (
-              <div ref={mobilePortraitChatShellRef} data-testid="watch-chat-panel-mobile-portrait" className="order-2 flex h-[calc(100svh-20rem)] min-h-[15rem] max-h-[32rem] w-full flex-col">
+              <div
+                ref={mobilePortraitChatShellRef}
+                data-testid="watch-chat-panel-mobile-portrait"
+                className="order-2 sticky z-[60] isolate flex min-h-0 w-full flex-col bg-neutral-950"
+                style={{
+                  top: "env(safe-area-inset-top, 0px)",
+                  height: "var(--watch-mobile-chat-height, calc(100svh - 20rem))"
+                }}
+              >
                 <div className="flex-1 flex flex-col h-full">
                   {chatBox}
                 </div>

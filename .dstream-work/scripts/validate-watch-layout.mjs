@@ -37,7 +37,7 @@ const scenarios = [
     expect: "mobile-portrait"
   },
   {
-    key: "mobile-landscape",
+    key: "ios-landscape",
     context: {
       ...devices["iPhone 13"],
       viewport: { width: 844, height: 390 }
@@ -45,9 +45,23 @@ const scenarios = [
     expect: "mobile-landscape"
   },
   {
-    key: "mobile-rotation",
+    key: "android-landscape",
+    context: {
+      ...devices["Pixel 5"],
+      viewport: { width: 727, height: 393 }
+    },
+    expect: "mobile-landscape"
+  },
+  {
+    key: "ios-rotation",
     context: { ...devices["iPhone 13"] },
     rotateTo: { width: 844, height: 390 },
+    expect: "mobile-landscape"
+  },
+  {
+    key: "android-rotation",
+    context: { ...devices["Pixel 5"] },
+    rotateTo: { width: 727, height: 393 },
     expect: "mobile-landscape"
   }
 ];
@@ -80,12 +94,39 @@ async function collectLayout(page) {
 
     const composer = document.querySelector('[data-testid="chat-message-input"]');
     const composerSubmit = composer?.closest("form")?.querySelector('button[type="submit"]');
+    const messageList = document.querySelector('[data-testid="chat-message-list"]');
+    const mobileChat = document.querySelector('[data-testid="watch-chat-panel-mobile-portrait"]');
+    const p2pTelemetry = document.querySelector('[data-testid="p2p-telemetry"]');
+    const visualViewport = window.visualViewport;
+    const viewportTop = visualViewport?.offsetTop ?? 0;
+    const viewportHeight = visualViewport?.height ?? window.innerHeight;
+    let mobileChatCoversTelemetry = null;
+
+    if (mobileChat && p2pTelemetry) {
+      const chatRect = mobileChat.getBoundingClientRect();
+      const telemetryRect = p2pTelemetry.getBoundingClientRect();
+      const overlapLeft = Math.max(chatRect.left, telemetryRect.left);
+      const overlapTop = Math.max(chatRect.top, telemetryRect.top);
+      const overlapRight = Math.min(chatRect.right, telemetryRect.right);
+      const overlapBottom = Math.min(chatRect.bottom, telemetryRect.bottom);
+
+      if (overlapLeft < overlapRight && overlapTop < overlapBottom) {
+        const topElement = document.elementFromPoint(
+          overlapLeft + (overlapRight - overlapLeft) / 2,
+          overlapTop + (overlapBottom - overlapTop) / 2
+        );
+        mobileChatCoversTelemetry = topElement ? mobileChat.contains(topElement) : false;
+      }
+    }
 
     return {
       viewport: {
         width: window.innerWidth,
-        height: window.innerHeight
+        height: viewportHeight,
+        top: viewportTop,
+        bottom: viewportTop + viewportHeight
       },
+      scrollY: Math.round(window.scrollY),
       player: getRect('[data-testid="watch-player-panel"]'),
       playerHost: getRect('[data-global-player-host="true"]'),
       details: getRect('[data-testid="watch-details-panel"]'),
@@ -95,6 +136,8 @@ async function collectLayout(page) {
       composerDisabled: composer?.disabled ?? null,
       composerValue: composer?.value ?? null,
       composerSubmitDisabled: composerSubmit?.disabled ?? null,
+      messageListOverscrollY: messageList ? getComputedStyle(messageList).overscrollBehaviorY : null,
+      mobileChatCoversTelemetry,
       navRowSpread: Math.round(navRowSpread)
     };
   });
@@ -116,6 +159,62 @@ async function typeComposerDraft(composer) {
   await composer.selectText();
   await composer.press("Backspace");
   await composer.pressSequentially(COMPOSER_DRAFT, { delay: 8 });
+}
+
+async function scrollToAndCollect(page, top) {
+  await page.evaluate((nextTop) => window.scrollTo({ top: nextTop, behavior: "instant" }), top);
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      })
+  );
+  await page.waitForTimeout(80);
+  return collectLayout(page);
+}
+
+function validatePortraitAnchor(name, stage, layout, initial) {
+  check(!!layout.chatMobilePortrait, `${name}: ${stage} portrait chat panel missing`);
+  check(!!layout.composer, `${name}: ${stage} composer missing`);
+  check(
+    Math.abs(layout.chatMobilePortrait.bottom - layout.viewport.bottom) <= 3,
+    `${name}: ${stage} chat bottom is not anchored to the viewport`
+  );
+  check(
+    Math.abs(layout.composer.bottom - initial.composer.bottom) <= 3,
+    `${name}: ${stage} composer moved away from its bottom anchor`
+  );
+  check(
+    Math.abs(layout.composer.height - initial.composer.height) <= 2,
+    `${name}: ${stage} composer height changed while scrolling`
+  );
+}
+
+async function validatePortraitScroll(page, name) {
+  const initial = await scrollToAndCollect(page, 0);
+  check(!!initial.chatMobilePortrait && !!initial.composer, `${name}: portrait chat geometry unavailable`);
+  validatePortraitAnchor(name, "initial", initial, initial);
+  check(initial.messageListOverscrollY === "contain", `${name}: chat message scrolling can escape into the page`);
+
+  const chatDocumentTop = initial.chatMobilePortrait.top;
+  const midpoint = await scrollToAndCollect(page, Math.max(24, Math.floor(chatDocumentTop / 2)));
+  validatePortraitAnchor(name, "mid-scroll", midpoint, initial);
+  check(midpoint.chatMobilePortrait.top < initial.chatMobilePortrait.top - 12, `${name}: chat top did not move toward the viewport top`);
+  check(midpoint.chatMobilePortrait.height > initial.chatMobilePortrait.height + 12, `${name}: chat did not grow during page scroll`);
+
+  const pinned = await scrollToAndCollect(page, Math.ceil(chatDocumentTop + 32));
+  validatePortraitAnchor(name, "pinned", pinned, initial);
+  check(pinned.chatMobilePortrait.top >= initial.viewport.top - 2, `${name}: pinned chat moved above the viewport`);
+  check(pinned.chatMobilePortrait.top <= initial.viewport.top + 2, `${name}: chat did not stop at the viewport top`);
+  check(pinned.mobileChatCoversTelemetry !== false, `${name}: stream details overlap the pinned chat`);
+
+  const beyond = await scrollToAndCollect(page, Math.ceil(chatDocumentTop + 160));
+  validatePortraitAnchor(name, "past-pin", beyond, initial);
+  check(Math.abs(beyond.chatMobilePortrait.top - pinned.chatMobilePortrait.top) <= 2, `${name}: chat top did not remain pinned`);
+  check(Math.abs(beyond.chatMobilePortrait.height - pinned.chatMobilePortrait.height) <= 3, `${name}: pinned chat height kept changing`);
+  check(beyond.mobileChatCoversTelemetry !== false, `${name}: stream details overlap the chat after it pins`);
+
+  await scrollToAndCollect(page, 0);
 }
 
 function validateScenario(name, expect, layout) {
@@ -232,6 +331,9 @@ async function main() {
         }
         if (errorMessage) {
           throw new Error(errorMessage);
+        }
+        if (scenario.expect === "mobile-portrait") {
+          await validatePortraitScroll(page, scenario.key);
         }
         if (runtimeErrors.length > 0) {
           throw new Error(`${scenario.key}: runtime error: ${runtimeErrors[0]}`);

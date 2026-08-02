@@ -509,7 +509,8 @@ export function ChatBox({
       <div className="relative flex-1 min-h-0">
         <div 
           ref={scrollRef} 
-          className="absolute inset-0 overflow-y-auto min-h-0 p-1"
+          data-testid="chat-message-list"
+          className="absolute inset-0 min-h-0 touch-pan-y overflow-y-auto overscroll-contain p-1"
           onScroll={(e) => {
             const target = e.currentTarget;
             // Increased threshold to 150 to prevent bouncy scroll dropout on mobile
