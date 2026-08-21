@@ -1,11 +1,9 @@
 import Link from "next/link";
-import { BookOpenText, ExternalLink, Heart, Network, ShieldCheck, Sparkles, Download, Monitor, Smartphone, Terminal } from "lucide-react";
+import { Heart, Network, ShieldCheck, Download, Monitor, Smartphone, Terminal } from "lucide-react";
 import { SupportAddressCopyChip } from "@/components/layout/SupportXmrAddress";
-import { getSupportLinks } from "@/lib/support";
 
 const supportXmrAddress = (process.env.NEXT_PUBLIC_SUPPORT_XMR_ADDRESS ?? "").trim();
 const supportBtcAddress = (process.env.NEXT_PUBLIC_SUPPORT_BTC_ADDRESS ?? "").trim();
-const supportLinks = getSupportLinks();
 
 const protocolLinks = [
   { href: "/whitepaper", label: "Whitepaper" },
@@ -38,11 +36,6 @@ export function SiteFooter() {
             </div>
             <p className="text-sm text-neutral-400 leading-relaxed">
               World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
-            </p>
-            <p className="text-xs text-neutral-500 inline-flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              <BookOpenText className="w-4 h-4" />
-              Production docs reflect live stack behavior
             </p>
           </div>
 
