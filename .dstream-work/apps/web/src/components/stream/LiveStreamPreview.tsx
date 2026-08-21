@@ -22,11 +22,11 @@ function randomMs(minMs: number, maxMs: number): number {
 
 const INITIAL_CAPTURE_MIN_MS = 900;
 const INITIAL_CAPTURE_MAX_MS = 3400;
-const REFRESH_CAPTURE_MIN_MS = 12000;
-const REFRESH_CAPTURE_MAX_MS = 28000;
+const CAPTURE_START_TIMEOUT_MS = 30_000;
 
 export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl, fallbackImage, enabled = true }: LiveStreamPreviewProps) {
-  const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
+  const [capturedFrame, setCapturedFrame] = useState<{ sourceUrl: string; dataUrl: string } | null>(null);
+  const [failedFallbackImage, setFailedFallbackImage] = useState<string | null>(null);
 
   const hlsPreviewUrl = useMemo(() => {
     const explicit = streamingUrl?.trim();
@@ -36,8 +36,13 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
     return `/api/hls/${encodeURIComponent(originStreamId)}/index.m3u8`;
   }, [streamId, streamPubkey, streamingUrl]);
 
+  const fallbackImageUrl = fallbackImage?.trim() || null;
+  const fallbackImageFailed = Boolean(fallbackImageUrl && failedFallbackImage === fallbackImageUrl);
+  const frameDataUrl = capturedFrame?.sourceUrl === hlsPreviewUrl ? capturedFrame.dataUrl : null;
+  const shouldCaptureFrame = enabled && (!fallbackImageUrl || fallbackImageFailed);
+
   useEffect(() => {
-    if (!enabled || !hlsPreviewUrl) return;
+    if (!shouldCaptureFrame || !hlsPreviewUrl) return;
 
     let cancelled = false;
     let captureTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,11 +66,32 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
       captureTimer = null;
     };
 
-    const scheduleCapture = (minMs: number, maxMs: number) => {
+    const stopPreviewLoading = () => {
       clearTimer();
+      try {
+        hls?.destroy();
+      } catch {
+        // ignore
+      }
+      hls = null;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        // ignore
+      }
+    };
+
+    const scheduleCapture = (minMs: number, maxMs: number) => {
+      if (captureTimer) return;
       captureTimer = setTimeout(() => {
+        captureTimer = null;
         if (cancelled) return;
-        if (!hasCapturedFrame && Date.now() - startedAt > 15_000) return;
+        if (!hasCapturedFrame && Date.now() - startedAt > CAPTURE_START_TIMEOUT_MS) {
+          stopPreviewLoading();
+          return;
+        }
         if (video.readyState < 2 || video.videoWidth < 32 || video.videoHeight < 32) {
           scheduleCapture(INITIAL_CAPTURE_MIN_MS, INITIAL_CAPTURE_MAX_MS);
           return;
@@ -82,12 +108,14 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
           const nextFrame = canvas.toDataURL("image/jpeg", 0.78);
           if (!cancelled) {
             hasCapturedFrame = true;
-            setFrameDataUrl(nextFrame);
+            setCapturedFrame({ sourceUrl: hlsPreviewUrl, dataUrl: nextFrame });
+            stopPreviewLoading();
+            return;
           }
         } catch {
           // ignore draw errors (usually cross-origin/tainting or decode transitions)
         }
-        scheduleCapture(REFRESH_CAPTURE_MIN_MS, REFRESH_CAPTURE_MAX_MS);
+        scheduleCapture(INITIAL_CAPTURE_MIN_MS, INITIAL_CAPTURE_MAX_MS);
       }, randomMs(minMs, maxMs));
     };
 
@@ -106,6 +134,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
+        startLevel: 0,
         manifestLoadingMaxRetry: 3,
         levelLoadingMaxRetry: 3,
         fragLoadingMaxRetry: 2
@@ -113,6 +142,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
       hls.attachMedia(video);
       hls.loadSource(hlsPreviewUrl);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (hls && hls.levels.length > 0) hls.autoLevelCapping = 0;
         onPlayable();
       });
     } else if (sourceKind === "hls" && video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -123,42 +153,44 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
 
     return () => {
       cancelled = true;
-      clearTimer();
       video.removeEventListener("loadeddata", onPlayable);
       video.removeEventListener("playing", onPlayable);
-      try {
-        video.pause();
-      } catch {
-        // ignore
-      }
-      try {
-        video.removeAttribute("src");
-      } catch {
-        // ignore
-      }
-      try {
-        video.load();
-      } catch {
-        // ignore
-      }
-      try {
-        hls?.destroy();
-      } catch {
-        // ignore
-      }
+      stopPreviewLoading();
     };
-  }, [enabled, hlsPreviewUrl]);
+  }, [hlsPreviewUrl, shouldCaptureFrame]);
 
-  const displayImage = frameDataUrl ?? (fallbackImage?.trim() || null);
-
-  if (!displayImage) {
+  if (frameDataUrl) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
-        <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
-        <span className="text-[11px] font-semibold tracking-wider text-neutral-700">dStream</span>
-      </div>
+      <img
+        src={frameDataUrl}
+        alt={title}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        data-live-preview-state="frame"
+      />
     );
   }
 
-  return <img src={displayImage} alt={title} className="w-full h-full object-cover" loading="lazy" />;
+  if (fallbackImageUrl && !fallbackImageFailed) {
+    return (
+      <img
+        src={fallbackImageUrl}
+        alt={title}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        data-live-preview-state="poster"
+        onError={() => setFailedFallbackImage(fallbackImageUrl)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2"
+      data-live-preview-state={shouldCaptureFrame ? "loading-frame" : "placeholder"}
+    >
+      <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
+      <span className="text-[11px] font-semibold tracking-wider text-neutral-700">dStream</span>
+    </div>
+  );
 }

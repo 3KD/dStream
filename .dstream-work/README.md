@@ -194,4 +194,4 @@ Stake refund anti-abuse policy:
 - Refund session must age past a minimum window before settlement.
 - Refund responses include `creditPercentBps` against a configurable full-credit served-bytes target.
 
-Home (`/`) and browse (`/browse`) stream cards attempt periodic live preview frame sampling from each stream’s proxied HLS path, with automatic fallback to announced poster image when frame capture is unavailable.
+Home (`/`) and browse (`/browse`) stream cards use the announced poster when it loads, then capture one frame from the announced media URL when the poster is missing or fails.

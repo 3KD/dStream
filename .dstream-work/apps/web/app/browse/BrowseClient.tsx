@@ -286,7 +286,7 @@ export default function BrowseClient() {
                             title={stream.title || "Live stream preview"}
                             streamingUrl={stream.streaming}
                             fallbackImage={stream.image}
-                            enabled={index < 6 && !stream.image}
+                            enabled={index < 12}
                           />
                           </div>
                           {stream.contentWarningReason && (

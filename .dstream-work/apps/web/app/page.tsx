@@ -168,6 +168,7 @@ export default function HomePage() {
                         streamPubkey={stream.pubkey}
                         streamId={stream.streamId}
                         title={stream.title || "Live stream preview"}
+                        streamingUrl={stream.streaming}
                         fallbackImage={stream.image}
                         enabled={index < 12}
                       />
