@@ -81,3 +81,7 @@ Product policy target is independence-by-default:
   - drop-out replacement,
   - waiver eligibility and denial paths,
   - abuse/failure eviction paths.
+
+## Proposed Follow-up
+
+ADR `0032` records the project owner's future preference for broader broadcaster control: selectable helper admission instead of mandatory FCFS, signed short-lived leases, schedules, per-helper limits, capped reward pools, receiver-confirmed delivery receipts, and batched Lightning/Monero payouts. ADR `0029` remains the description of the current accepted baseline until that proposal is accepted and implemented.
