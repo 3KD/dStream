@@ -1,15 +1,20 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { statSync } from "node:fs";
 import { makeOriginStreamId } from "./origin";
 import { parseStreamAnnounceEvent, type NostrEvent } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import { evaluateAccess } from "./access/evaluator";
 import { buildVideoAccessResourceCandidates } from "./access/packages";
+import { readTextFileWithBackup, updateJsonFileAtomic } from "./storage/jsonFileStore";
 
 const ACCESS_TOKEN_TTL_SEC = 15 * 60;
-const ACCESS_TOKEN_MAX_FUTURE_SEC = 60 * 60;
+const LIVE_ACCESS_TOKEN_TTL_SEC = 36 * 60 * 60;
+const ACCESS_TOKEN_MAX_TTL_SEC = LIVE_ACCESS_TOKEN_TTL_SEC;
+const VIEWER_PROOF_MAX_FUTURE_SEC = 60 * 60;
 const VIEWER_PROOF_MAX_AGE_SEC = 10 * 60;
 const POLICY_TTL_SEC = 36 * 60 * 60;
 const POLICY_ENDED_TTL_SEC = 5 * 60;
+const DEFAULT_POLICY_STORE_PATH = "/var/lib/dstream/playback-policies.json";
 const ORIGIN_SEGMENT_RE = /^([a-f0-9]{64}--[A-Za-z0-9][A-Za-z0-9_-]{0,127})(?:__r[A-Za-z0-9_-]+)?$/;
 const HEX64_RE = /^[a-f0-9]{64}$/;
 const RENDITION_SUFFIX_RE = /^__r[A-Za-z0-9_-]+$/;
@@ -25,6 +30,12 @@ interface PlaybackPolicy {
   status: "live" | "ended";
   createdAt: number;
   updatedAtSec: number;
+}
+
+interface PlaybackPolicyStore {
+  version: 1;
+  updatedAtSec: number;
+  policies: PlaybackPolicy[];
 }
 
 interface AccessTokenPayload {
@@ -43,6 +54,8 @@ interface SignedEvent extends NostrEvent {
 
 const playbackPolicies = new Map<string, PlaybackPolicy>();
 let cachedTokenSecret: Buffer | null = null;
+let policyStoreLoaded = false;
+let policyStoreMtimeMs = -1;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -50,9 +63,117 @@ function nowSec(): number {
 
 function getTokenSecret(): Buffer {
   if (cachedTokenSecret) return cachedTokenSecret;
-  const configured = (process.env.DSTREAM_PLAYBACK_ACCESS_SECRET ?? "").trim();
+  const configured = (process.env.DSTREAM_PLAYBACK_ACCESS_SECRET ?? process.env.DSTREAM_ACCESS_TOKEN_SECRET ?? "").trim();
   cachedTokenSecret = configured ? Buffer.from(configured, "utf8") : randomBytes(32);
   return cachedTokenSecret;
+}
+
+function getPolicyStorePath(): string {
+  return (process.env.DSTREAM_PLAYBACK_POLICY_STORE_PATH ?? DEFAULT_POLICY_STORE_PATH).trim() || DEFAULT_POLICY_STORE_PATH;
+}
+
+function parseStoredPolicy(input: unknown): PlaybackPolicy | null {
+  if (!input || typeof input !== "object") return null;
+  const row = input as Partial<PlaybackPolicy>;
+  const streamPubkey = normalizePubkey(row.streamPubkey);
+  const streamId = typeof row.streamId === "string" ? row.streamId.trim() : "";
+  const originStreamId = streamPubkey && streamId ? makeOriginStreamId(streamPubkey, streamId) : null;
+  if (!streamPubkey || !streamId || !originStreamId || row.originStreamId !== originStreamId) return null;
+  if (row.status !== "live" && row.status !== "ended") return null;
+  if (row.videoVisibility !== "public" && row.videoVisibility !== "private") return null;
+  if (!Number.isInteger(row.createdAt) || !Number.isInteger(row.updatedAtSec)) return null;
+  const viewerAllowPubkeys = Array.isArray(row.viewerAllowPubkeys)
+    ? Array.from(new Set(row.viewerAllowPubkeys.map((value) => normalizePubkey(value)).filter((value): value is string => !!value)))
+    : [];
+  return {
+    streamPubkey,
+    streamId,
+    originStreamId,
+    viewerAllowPubkeys,
+    privateStream: row.privateStream === true,
+    videoArchiveEnabled: row.videoArchiveEnabled === true,
+    videoVisibility: row.videoVisibility,
+    status: row.status,
+    createdAt: row.createdAt as number,
+    updatedAtSec: row.updatedAtSec as number
+  };
+}
+
+function refreshPlaybackPoliciesFromDisk(): void {
+  const storePath = getPolicyStorePath();
+  let mtimeMs = -1;
+  try {
+    mtimeMs = statSync(storePath).mtimeMs;
+  } catch {
+    policyStoreLoaded = true;
+    return;
+  }
+  if (policyStoreLoaded && mtimeMs === policyStoreMtimeMs) return;
+
+  try {
+    const raw = readTextFileWithBackup(storePath);
+    const parsed = raw ? (JSON.parse(raw) as { policies?: unknown[] } | null) : null;
+    const nextPolicies = Array.isArray(parsed?.policies)
+      ? parsed!.policies!.map(parseStoredPolicy).filter((policy): policy is PlaybackPolicy => !!policy)
+      : [];
+    playbackPolicies.clear();
+    for (const policy of nextPolicies) playbackPolicies.set(policy.originStreamId, policy);
+    policyStoreMtimeMs = mtimeMs;
+  } catch {
+    // Keep the last known in-memory policies if the durable store is temporarily unreadable.
+  } finally {
+    policyStoreLoaded = true;
+  }
+}
+
+function isPlaybackPolicyExpired(policy: PlaybackPolicy, atSec: number): boolean {
+  const age = atSec - policy.updatedAtSec;
+  return policy.status === "ended" ? age > POLICY_ENDED_TTL_SEC : age > POLICY_TTL_SEC;
+}
+
+function shouldReplaceStoredPolicy(current: PlaybackPolicy | undefined, candidate: PlaybackPolicy): boolean {
+  if (!current) return true;
+  if (candidate.createdAt !== current.createdAt) return candidate.createdAt > current.createdAt;
+  return candidate.updatedAtSec >= current.updatedAtSec;
+}
+
+function persistPlaybackPolicies(): boolean {
+  try {
+    const storePath = getPolicyStorePath();
+    const atSec = nowSec();
+    const localPolicies = Array.from(playbackPolicies.values());
+    const persisted = updateJsonFileAtomic<PlaybackPolicyStore>(
+      storePath,
+      { version: 1, updatedAtSec: atSec, policies: [] },
+      (current) => {
+        const merged = new Map<string, PlaybackPolicy>();
+        const currentPolicies = Array.isArray(current?.policies) ? current.policies : [];
+        for (const rawPolicy of currentPolicies) {
+          const policy = parseStoredPolicy(rawPolicy);
+          if (!policy || isPlaybackPolicyExpired(policy, atSec)) continue;
+          merged.set(policy.originStreamId, policy);
+        }
+        for (const policy of localPolicies) {
+          if (isPlaybackPolicyExpired(policy, atSec)) continue;
+          if (shouldReplaceStoredPolicy(merged.get(policy.originStreamId), policy)) {
+            merged.set(policy.originStreamId, policy);
+          }
+        }
+        return { version: 1, updatedAtSec: atSec, policies: Array.from(merged.values()) };
+      }
+    );
+    playbackPolicies.clear();
+    for (const rawPolicy of persisted.policies) {
+      const policy = parseStoredPolicy(rawPolicy);
+      if (policy) playbackPolicies.set(policy.originStreamId, policy);
+    }
+    policyStoreMtimeMs = -1;
+    policyStoreLoaded = false;
+    refreshPlaybackPoliciesFromDisk();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isSignedEvent(input: NostrEvent): input is SignedEvent {
@@ -71,15 +192,16 @@ function normalizePubkey(input: string | null | undefined): string | null {
 }
 
 function prunePlaybackPolicies(): void {
+  refreshPlaybackPoliciesFromDisk();
   const now = nowSec();
+  let changed = false;
   for (const [originStreamId, policy] of playbackPolicies.entries()) {
-    const age = now - policy.updatedAtSec;
-    if (policy.status === "ended") {
-      if (age > POLICY_ENDED_TTL_SEC) playbackPolicies.delete(originStreamId);
-      continue;
+    if (isPlaybackPolicyExpired(policy, now)) {
+      playbackPolicies.delete(originStreamId);
+      changed = true;
     }
-    if (age > POLICY_TTL_SEC) playbackPolicies.delete(originStreamId);
   }
+  if (changed) persistPlaybackPolicies();
 }
 
 function findTagValue(tags: string[][], name: string): string | null {
@@ -186,7 +308,7 @@ export function registerPlaybackPolicyFromAnnounceEvent(
     streamId: parsed.streamId,
     originStreamId,
     viewerAllowPubkeys: parsed.viewerAllowPubkeys.map((value) => value.toLowerCase()),
-    privateStream: parsed.viewerAllowPubkeys.length > 0,
+    privateStream: parsed.streamVisibility === "private",
     videoArchiveEnabled: parsed.videoArchiveEnabled === true,
     videoVisibility: parsed.videoVisibility === "private" ? "private" : "public",
     status: parsed.status,
@@ -195,6 +317,10 @@ export function registerPlaybackPolicyFromAnnounceEvent(
   };
 
   playbackPolicies.set(originStreamId, policy);
+  const persisted = persistPlaybackPolicies();
+  if (policy.privateStream && !persisted) {
+    return { ok: false, status: 503, error: "private playback policy could not be written to durable storage" };
+  }
   return { ok: true, policy };
 }
 
@@ -202,10 +328,12 @@ export function issuePlaybackAccessToken(params: {
   originStreamId: string;
   viewerPubkey?: string | null;
   privateStream: boolean;
+  liveStream?: boolean;
   ttlSec?: number;
 }): { token: string; expiresAtSec: number } {
   const issuedAt = nowSec();
-  const ttlSec = Math.max(30, Math.min(params.ttlSec ?? ACCESS_TOKEN_TTL_SEC, ACCESS_TOKEN_MAX_FUTURE_SEC));
+  const defaultTtlSec = params.liveStream ? LIVE_ACCESS_TOKEN_TTL_SEC : ACCESS_TOKEN_TTL_SEC;
+  const ttlSec = Math.max(30, Math.min(params.ttlSec ?? defaultTtlSec, ACCESS_TOKEN_MAX_TTL_SEC));
   const expiresAtSec = issuedAt + ttlSec;
   const payload: AccessTokenPayload = {
     o: params.originStreamId,
@@ -308,6 +436,7 @@ export function refreshPlaybackAccessToken(params: {
     originStreamId: policy.originStreamId,
     viewerPubkey: subjectPubkey,
     privateStream: policy.privateStream,
+    liveStream: policy.status === "live",
     ttlSec: params.ttlSec
   });
 
@@ -377,7 +506,7 @@ export function verifyViewerProofEvent(
   if (!Number.isInteger(expSec) || expSec <= now) {
     return { ok: false, status: 401, error: "viewerProofEvent is expired." };
   }
-  if (expSec > now + ACCESS_TOKEN_MAX_FUTURE_SEC) {
+  if (expSec > now + VIEWER_PROOF_MAX_FUTURE_SEC) {
     return { ok: false, status: 401, error: "viewerProofEvent expiry is too far in the future." };
   }
   if (event.created_at > now + 30 || now - event.created_at > VIEWER_PROOF_MAX_AGE_SEC) {

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { authorizePlaybackProxyRequest } from "@/lib/playback-access";
+import { readPlaybackAccessToken } from "@/lib/playback-cookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,8 @@ function rewriteLocationHeader(req: NextRequest, upstreamLocation: string, upstr
     const path = resolved.pathname.replace(/^\/+/, "");
     const next = new URL(`/api/whep/${path}`, req.nextUrl.origin);
     next.search = resolved.search;
+    const accessToken = req.nextUrl.searchParams.get("access");
+    if (accessToken && !next.searchParams.has("access")) next.searchParams.set("access", accessToken);
     return `${next.pathname}${next.search}`;
   } catch {
     return upstreamLocation;
@@ -25,7 +28,7 @@ function rewriteLocationHeader(req: NextRequest, upstreamLocation: string, upstr
 }
 
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response> {
-  const authz = authorizePlaybackProxyRequest(pathSegments, req.nextUrl.searchParams.get("access"));
+  const authz = authorizePlaybackProxyRequest(pathSegments, readPlaybackAccessToken(req));
   if (!authz.ok) {
     return new Response(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
   }

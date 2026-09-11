@@ -377,11 +377,12 @@ function checkProdRules(options = {}) {
   if (!isDigits(paymentTimeout) || Number(paymentTimeout) < 1000) {
     errors.push("DSTREAM_PAYMENT_RPC_TIMEOUT_MS must be digits and at least 1000.");
   }
-  const paymentStores = [
+  const persistentStores = [
     ["DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH", "/var/lib/dstream/payment-settlements.json"],
     ["DSTREAM_PAYMENT_INTENT_STORE_PATH", "/var/lib/dstream/payment-intents.json"],
+    ["DSTREAM_PLAYBACK_POLICY_STORE_PATH", "/var/lib/dstream/playback-policies.json"],
   ];
-  for (const [storeName, defaultPath] of paymentStores) {
+  for (const [storeName, defaultPath] of persistentStores) {
     const storePath = readEnv(storeName).trim() || defaultPath;
     if (!storePath.startsWith("/")) {
       errors.push(`${storeName} must be an absolute path.`);
@@ -576,6 +577,15 @@ function checkProdRules(options = {}) {
     errors.push("DSTREAM_XMR_SESSION_SECRET should be at least 32 characters.");
   } else if (/replace|example|change-before-public-deploy|changeme/i.test(sessionSecret)) {
     errors.push("DSTREAM_XMR_SESSION_SECRET appears to be a placeholder; set a high-entropy production secret.");
+  }
+
+  const playbackAccessSecret = readEnv("DSTREAM_PLAYBACK_ACCESS_SECRET").trim();
+  if (!playbackAccessSecret) {
+    errors.push("DSTREAM_PLAYBACK_ACCESS_SECRET is required in production.");
+  } else if (playbackAccessSecret.length < 32) {
+    errors.push("DSTREAM_PLAYBACK_ACCESS_SECRET should be at least 32 characters.");
+  } else if (/replace|example|change-before-public-deploy|changeme/i.test(playbackAccessSecret)) {
+    errors.push("DSTREAM_PLAYBACK_ACCESS_SECRET appears to be a placeholder; set a high-entropy production secret.");
   }
 
   if (strictExternal) {

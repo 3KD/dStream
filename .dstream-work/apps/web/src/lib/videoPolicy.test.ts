@@ -22,7 +22,8 @@ function buildAnnounce(overrides: Partial<StreamAnnounce>): StreamAnnounce {
     topics: [],
     createdAt: 1_700_000_000,
     raw: { pubkey: "f".repeat(64), created_at: 1_700_000_000, kind: 30311, tags: [], content: "" },
-    ...overrides
+    ...overrides,
+    streamVisibility: overrides.streamVisibility ?? "public"
   };
 }
 

@@ -33,6 +33,7 @@ function releaseFileLock(path: string): void {
 }
 
 function withFileLock<T>(filePath: string, fn: () => T): T {
+  mkdirSync(dirname(filePath), { recursive: true });
   const lock = lockPath(filePath);
   const startedAt = Date.now();
   const timeoutMs = 5000;
@@ -73,11 +74,9 @@ export function readTextFileWithBackup(filePath: string): string | null {
 
 export function writeJsonFileAtomic(filePath: string, value: unknown): void {
   withFileLock(filePath, () => {
-    const baseDir = dirname(filePath);
     const backup = backupPath(filePath);
     const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
 
-    mkdirSync(baseDir, { recursive: true });
     const body = `${JSON.stringify(value, null, 2)}\n`;
 
     try {
@@ -107,11 +106,8 @@ export function updateJsonFileAtomic<T>(
   update: (current: T) => T
 ): T {
   return withFileLock(filePath, () => {
-    const baseDir = dirname(filePath);
     const backup = backupPath(filePath);
     const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
-    mkdirSync(baseDir, { recursive: true });
-
     let current = fallback;
     let primaryWasValid = false;
     const primaryRaw = readTextFile(filePath);

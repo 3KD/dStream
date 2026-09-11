@@ -29,11 +29,17 @@ import { getNostrRelays } from "@/lib/config";
 import { comparePaymentAssetOrder } from "@/lib/payments/catalog";
 import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
-import { listVideoAccessPackagesClient, type VideoAccessPackage } from "@/lib/access/client";
+import {
+  buildPlaybackAccessProof,
+  issuePlaybackAccessTokenClient,
+  listVideoAccessPackagesClient,
+  type VideoAccessPackage
+} from "@/lib/access/client";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
+import { canEnableP2pAssist, isP2pStakeSatisfied, normalizeStakeRequiredAtomic } from "@/lib/p2p/stakeGate";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
 
 function base64EncodeUtf8(input: string): string {
@@ -222,6 +228,11 @@ export default function WatchPage() {
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
 
   const { announce, announceEvent, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
+  const latestAnnounceEventRef = useRef(announceEvent);
+  useEffect(() => {
+    latestAnnounceEventRef.current = announceEvent;
+  }, [announceEvent]);
+  const hasAnnounceEvent = !!announceEvent;
   const hostProfile = useNostrProfile(pubkey);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
   const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
@@ -236,17 +247,10 @@ export default function WatchPage() {
     manifestSignerPubkey
   });
 
-  const stakeRequiredAtomic = useMemo(() => {
-    const raw = announce?.stakeAmountAtomic;
-    if (!raw) return null;
-    try {
-      const v = BigInt(raw);
-      if (v <= 0n) return null;
-      return raw;
-    } catch {
-      return null;
-    }
-  }, [announce?.stakeAmountAtomic]);
+  const stakeRequiredAtomic = useMemo(
+    () => normalizeStakeRequiredAtomic(announce?.stakeAmountAtomic),
+    [announce?.stakeAmountAtomic]
+  );
 
   const presenceEnabled = social.settings.presenceEnabled;
 
@@ -307,6 +311,9 @@ export default function WatchPage() {
   const [videoAccessToken, setVideoAccessToken] = useState<string | null>(null);
   const [videoAccessTokenParam, setVideoAccessTokenParam] = useState<"access" | "vat">("vat");
   const [videoAccessRefreshable, setVideoAccessRefreshable] = useState(false);
+  const [liveAccessToken, setLiveAccessToken] = useState<string | null>(null);
+  const [liveAccessBusy, setLiveAccessBusy] = useState(false);
+  const [liveAccessError, setLiveAccessError] = useState<string | null>(null);
   const [videoUnlockSession, setVideoUnlockSession] = useState<{ session: string; address: string } | null>(null);
   const [videoUnlockQr, setVideoUnlockQr] = useState<string | null>(null);
   const [videoUnlockCopyStatus, setVideoUnlockCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -353,15 +360,10 @@ export default function WatchPage() {
   const videoPackageRequiresUnlock = announce?.status === "ended" && videoPackages.length > 0;
   const videoAccessRequired = videoPaidRequiresUnlock || videoPackageRequiresUnlock;
 
-  const stakeSatisfied = useMemo(() => {
-    if (!stakeRequiredAtomic) return true;
-    if (!stakeStatus) return false;
-    try {
-      return BigInt(stakeStatus.confirmedAtomic) >= BigInt(stakeRequiredAtomic);
-    } catch {
-      return false;
-    }
-  }, [stakeRequiredAtomic, stakeStatus]);
+  const stakeSatisfied = useMemo(
+    () => isP2pStakeSatisfied(stakeRequiredAtomic, stakeStatus?.confirmedAtomic),
+    [stakeRequiredAtomic, stakeStatus?.confirmedAtomic]
+  );
 
   const ephemeralSignalIdentityRef = useRef<SignalIdentity | null>(null);
   const signalIdentity = useMemo<SignalIdentity | null>(() => {
@@ -383,11 +385,17 @@ export default function WatchPage() {
     return ephemeralSignalIdentityRef.current;
   }, [identity, nip04, signEvent, stakeRequiredAtomic]);
 
-  const p2pAllowed = useMemo(() => {
-    if (!signalIdentity) return false;
-    if (!stakeRequiredAtomic) return true;
-    return stakeSatisfied && !!identity && !!nip04;
-  }, [identity, nip04, signalIdentity, stakeRequiredAtomic, stakeSatisfied]);
+  const p2pAllowed = useMemo(
+    () =>
+      canEnableP2pAssist({
+        hasSignalIdentity: !!signalIdentity,
+        hasConnectedIdentity: !!identity,
+        hasNip04: !!nip04,
+        requiredAtomic: stakeRequiredAtomic,
+        confirmedAtomic: stakeStatus?.confirmedAtomic
+      }),
+    [identity, nip04, signalIdentity, stakeRequiredAtomic, stakeStatus?.confirmedAtomic]
+  );
 
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
@@ -550,6 +558,70 @@ export default function WatchPage() {
   const isEnded = announce?.status === "ended";
   const streamPath = isEnded ? "/api/video/file" : "/api/hls";
   const fallbackUrl = originStreamId ? `${streamPath}/${originStreamId}/index.m3u8` : `${streamPath}/${streamId}/index.m3u8`;
+  const livePrivateAccessRequired = announce?.status === "live" && announce.streamVisibility === "private";
+
+  useEffect(() => {
+    if (!announceEvent) return;
+    void fetch("/api/playback-access/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ announceEvent }),
+      cache: "no-store"
+    }).catch(() => undefined);
+  }, [announceEvent]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renewalTimer: ReturnType<typeof setTimeout> | null = null;
+    setLiveAccessToken(null);
+    setLiveAccessError(null);
+    setLiveAccessBusy(false);
+
+    if (!livePrivateAccessRequired) return;
+    if (!hasAnnounceEvent || !originStreamId || !pubkey) {
+      setLiveAccessError("Private stream access cannot be verified until the signed stream announcement is available.");
+      return;
+    }
+    if (!identity?.pubkey) {
+      setLiveAccessError("Connect the owner or an approved viewer identity to watch this private stream.");
+      return;
+    }
+
+    setLiveAccessBusy(true);
+    const requestAccess = async (initial: boolean) => {
+      try {
+        const currentAnnounceEvent = latestAnnounceEventRef.current;
+        if (!currentAnnounceEvent) throw new Error("Signed stream announcement is unavailable.");
+        const viewerProofEvent = await buildPlaybackAccessProof(signEvent, identity.pubkey, originStreamId);
+        if (!viewerProofEvent) throw new Error("Unable to sign private playback access proof.");
+        const issued = await issuePlaybackAccessTokenClient({
+          announceEvent: currentAnnounceEvent,
+          viewerProofEvent,
+          streamPubkey: pubkey,
+          streamId,
+          originStreamId
+        });
+        if (cancelled) return;
+        setLiveAccessToken(issued.token);
+        setLiveAccessError(null);
+        const renewInMs = Math.max(60_000, issued.expiresAtSec * 1000 - Date.now() - 5 * 60_000);
+        renewalTimer = setTimeout(() => void requestAccess(false), renewInMs);
+      } catch (error) {
+        if (cancelled) return;
+        setLiveAccessError(error instanceof Error ? error.message : "Private stream access was denied.");
+        renewalTimer = setTimeout(() => void requestAccess(false), initial ? 15_000 : 30_000);
+      } finally {
+        if (!cancelled) setLiveAccessBusy(false);
+      }
+    };
+    void requestAccess(true);
+
+    return () => {
+      cancelled = true;
+      if (renewalTimer) clearTimeout(renewalTimer);
+    };
+  }, [hasAnnounceEvent, identity?.pubkey, livePrivateAccessRequired, originStreamId, pubkey, signEvent, streamId]);
+
   const renditionHints = useMemo(() => {
     return (announce?.renditions ?? [])
       .map((rendition) => ({
@@ -595,6 +667,7 @@ export default function WatchPage() {
   }, [announceStreamingHint, directPlaybackHint, e2eHlsOverride, streamId]);
 
   const streamUrl = useMemo(() => {
+    if (livePrivateAccessRequired) return fallbackUrl;
     if (e2eHlsOverride) return e2eHlsOverride;
     if (directPlaybackHint) return directPlaybackHint;
     if (renditionMasterUrl) return renditionMasterUrl;
@@ -611,13 +684,16 @@ export default function WatchPage() {
     directPlaybackHint,
     e2eHlsOverride,
     fallbackUrl,
+    livePrivateAccessRequired,
     renditionHints,
     renditionMasterUrl
   ]);
+  const playbackAccessToken = livePrivateAccessRequired ? liveAccessToken : videoAccessToken;
+  const playbackAccessTokenParam = livePrivateAccessRequired ? "access" : videoAccessTokenParam;
   const playbackStreamUrl = useMemo(() => {
-    if (!videoAccessToken) return streamUrl;
-    return withQueryParam(streamUrl, videoAccessTokenParam, videoAccessToken);
-  }, [streamUrl, videoAccessToken, videoAccessTokenParam]);
+    if (!playbackAccessToken) return streamUrl;
+    return withQueryParam(streamUrl, playbackAccessTokenParam, playbackAccessToken);
+  }, [playbackAccessToken, playbackAccessTokenParam, streamUrl]);
   const playbackStateKey = useMemo(() => {
     if (!pubkey || !playbackStreamUrl) return undefined;
     return deriveQuickPlayPlaybackStateKey({ pubkey, streamId, hlsUrl: playbackStreamUrl });
@@ -636,13 +712,15 @@ export default function WatchPage() {
 
   const whepSrc = useMemo(() => {
     if (!originStreamId || !shouldTryWhep) return null;
-    return `/api/whep/${encodeURIComponent(originStreamId)}/whep`;
-  }, [originStreamId, shouldTryWhep]);
+    const base = `/api/whep/${encodeURIComponent(originStreamId)}/whep`;
+    return liveAccessToken ? withQueryParam(base, "access", liveAccessToken) : base;
+  }, [liveAccessToken, originStreamId, shouldTryWhep]);
 
   useEffect(() => {
     if (!pubkey || !streamId) return;
     const nextUrl = playbackStreamUrl.trim();
     if (!nextUrl || !isLikelyPlayableMediaUrl(nextUrl)) return;
+    if (livePrivateAccessRequired && !liveAccessToken) return;
     
     // Prevent the broadcaster's own screen from queueing into the global mini-player
     if (identity?.pubkey === pubkey) return;
@@ -654,7 +732,7 @@ export default function WatchPage() {
       hlsUrl: nextUrl,
       whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
     });
-  }, [announce?.title, identity?.pubkey, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -1614,7 +1692,12 @@ export default function WatchPage() {
 
   const globalPlayerProps = useMemo(() => ({
     src: playbackStreamUrl,
-    fallbackSrc: announce?.status === "live" && canUseLocalFallback ? fallbackUrl : null,
+    fallbackSrc:
+      announce?.status === "live" && canUseLocalFallback
+        ? liveAccessToken
+          ? withQueryParam(fallbackUrl, "access", liveAccessToken)
+          : fallbackUrl
+        : null,
     posterSrc: announce?.image ?? null,
     whepSrc: whepSrc,
     p2pSwarm: p2pSwarm,
@@ -1653,6 +1736,7 @@ export default function WatchPage() {
     announce?.status,
     canUseLocalFallback,
     fallbackUrl,
+    liveAccessToken,
     whepSrc,
     p2pSwarm,
     integritySession,
@@ -1871,7 +1955,19 @@ export default function WatchPage() {
 	                    : "h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]"
 	                }`}
 	              >
-                {streamUrl ? (
+                {livePrivateAccessRequired && !liveAccessToken ? (
+                  <div
+                    data-testid="private-live-access-gate"
+                    className="flex h-full items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900/40 px-6 text-center"
+                  >
+                    <div className="max-w-md space-y-2">
+                      <div className="text-sm font-semibold text-neutral-200">Private stream</div>
+                      <div className={`text-sm ${liveAccessError ? "text-red-300" : "text-neutral-400"}`}>
+                        {liveAccessBusy ? "Verifying your private playback access..." : liveAccessError ?? "Playback access is required."}
+                      </div>
+                    </div>
+                  </div>
+                ) : streamUrl ? (
                   <>
                     <GlobalPlayerSlot
                     id="watch-page"

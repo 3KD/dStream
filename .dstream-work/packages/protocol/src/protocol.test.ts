@@ -44,6 +44,8 @@ test("stream announce: build + parse roundtrip", () => {
     streamId: STREAM_ID,
     title: "Hello",
     status: "live",
+    streamVisibility: "private",
+    viewerAllowPubkeys: [VIEWER_PUBKEY],
     summary: "Summary",
     image: "https://example.com/img.png",
     streaming: "https://example.com/index.m3u8",
@@ -86,6 +88,7 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(unsigned.kind, NOSTR_KINDS.STREAM_ANNOUNCE);
   assert.equal(unsigned.pubkey, STREAM_PUBKEY);
   assert.equal(unsigned.created_at, 123);
+  assert.ok(unsigned.tags.some((tag) => tag[0] === "stream_visibility" && tag[1] === "private"));
 
   const parsed = parseStreamAnnounceEvent(unsigned as NostrEvent);
   assert.ok(parsed);
@@ -93,6 +96,8 @@ test("stream announce: build + parse roundtrip", () => {
   assert.equal(parsed.streamId, STREAM_ID);
   assert.equal(parsed.title, "Hello");
   assert.equal(parsed.status, "live");
+  assert.equal(parsed.streamVisibility, "private");
+  assert.deepEqual(parsed.viewerAllowPubkeys, [VIEWER_PUBKEY]);
   assert.equal(parsed.summary, "Summary");
   assert.equal(parsed.image, "https://example.com/img.png");
   assert.equal(parsed.streaming, "https://example.com/index.m3u8");
@@ -131,6 +136,57 @@ test("stream announce: build + parse roundtrip", () => {
     }
   ]);
   assert.deepEqual(parsed.topics, ["alpha", "zeta"]);
+});
+
+test("stream announce: explicit private visibility supports an owner-only stream", () => {
+  const unsigned = buildStreamAnnounceEvent({
+    pubkey: STREAM_PUBKEY,
+    createdAt: 124,
+    streamId: "owner-only",
+    title: "Owner only",
+    status: "live",
+    streamVisibility: "private",
+    viewerAllowPubkeys: []
+  });
+  const parsed = parseStreamAnnounceEvent(unsigned as NostrEvent);
+  assert.ok(parsed);
+  assert.equal(parsed.streamVisibility, "private");
+  assert.deepEqual(parsed.viewerAllowPubkeys, []);
+});
+
+test("stream announce: legacy allowlists remain private without a visibility tag", () => {
+  const parsed = parseStreamAnnounceEvent({
+    kind: NOSTR_KINDS.STREAM_ANNOUNCE,
+    pubkey: STREAM_PUBKEY,
+    created_at: 125,
+    tags: [
+      ["d", "legacy-private"],
+      ["title", "Legacy private"],
+      ["status", "live"],
+      ["viewer_allow", VIEWER_PUBKEY]
+    ],
+    content: ""
+  });
+  assert.ok(parsed);
+  assert.equal(parsed.streamVisibility, "private");
+  assert.deepEqual(parsed.viewerAllowPubkeys, [VIEWER_PUBKEY]);
+});
+
+test("stream announce: explicit public visibility does not publish an inactive allowlist", () => {
+  const unsigned = buildStreamAnnounceEvent({
+    pubkey: STREAM_PUBKEY,
+    createdAt: 126,
+    streamId: "explicit-public",
+    title: "Public",
+    status: "live",
+    streamVisibility: "public",
+    viewerAllowPubkeys: [VIEWER_PUBKEY]
+  });
+  assert.equal(unsigned.tags.some((tag) => tag[0] === "viewer_allow"), false);
+  const parsed = parseStreamAnnounceEvent(unsigned as NostrEvent);
+  assert.ok(parsed);
+  assert.equal(parsed.streamVisibility, "public");
+  assert.deepEqual(parsed.viewerAllowPubkeys, []);
 });
 
 test("stream announce: rejects wrong kind", () => {

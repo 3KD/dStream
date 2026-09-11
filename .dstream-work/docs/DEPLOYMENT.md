@@ -51,6 +51,8 @@ See `.env.example`. Quick reference:
 - `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
 - `DSTREAM_WHEP_PROXY_ORIGIN`: where `/api/whep/*` proxies to (defaults to `DSTREAM_WHIP_PROXY_ORIGIN`).
 - `DSTREAM_HLS_PROXY_ORIGIN`: where `/api/hls/*` proxies to.
+- `DSTREAM_PLAYBACK_ACCESS_SECRET`: stable high-entropy secret used to sign private playback tokens; required in production.
+- `DSTREAM_PLAYBACK_POLICY_STORE_PATH`: durable signed-announcement policy store (default `/var/lib/dstream/playback-policies.json`).
 - `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. The dstream.stream public scope requires `btc:lightning,btc:utxo,xmr:xmr`; backend-only rails are exercised separately by the real-chain smoke.
 - `scripts/ops-disk-cleanup.sh`: threshold-triggered cleanup for deploy/build artifacts, old journals, stopped containers, dangling images, and inactive Docker build cache. It never prunes Docker volumes or `/var/lib/dstream` settlement state.
 

@@ -9,6 +9,7 @@ import type {
   StreamHostMode,
   StreamRendition,
   StreamStatus,
+  StreamVisibility,
   StreamVideoMode,
   StreamVideoPolicy,
   StreamVideoVisibility
@@ -203,6 +204,13 @@ function normalizeHostMode(input: string | undefined): StreamHostMode | undefine
   return undefined;
 }
 
+function normalizeStreamVisibility(input: string | undefined): StreamVisibility | undefined {
+  if (!input) return undefined;
+  const value = input.trim().toLowerCase();
+  if (value === "public" || value === "private") return value;
+  return undefined;
+}
+
 function normalizeVideoVisibility(input: string | undefined): StreamVideoVisibility | undefined {
   if (!input) return undefined;
   const value = input.trim().toLowerCase();
@@ -374,6 +382,7 @@ export interface BuildStreamAnnounceInput {
   discoverable?: boolean;
   matureContent?: boolean;
   contentWarningReason?: string;
+  streamVisibility?: StreamVisibility;
   viewerAllowPubkeys?: string[];
   videoArchiveEnabled?: boolean;
   videoVisibility?: StreamVideoVisibility;
@@ -437,8 +446,12 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   }
 
   const viewerAllowPubkeys = normalizeVipPubkeys(input.viewerAllowPubkeys ?? []);
-  for (const viewerPubkey of viewerAllowPubkeys) {
-    tags.push(["viewer_allow", viewerPubkey]);
+  const streamVisibility = input.streamVisibility ?? (viewerAllowPubkeys.length > 0 ? "private" : "public");
+  tags.push(["stream_visibility", streamVisibility]);
+  if (streamVisibility === "private") {
+    for (const viewerPubkey of viewerAllowPubkeys) {
+      tags.push(["viewer_allow", viewerPubkey]);
+    }
   }
   if (typeof input.videoArchiveEnabled === "boolean") {
     tags.push(["video_archive", input.videoArchiveEnabled ? "1" : "0"]);
@@ -547,6 +560,9 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   const discoverable = parseBooleanFlag(getFirstTagValue(event.tags, "discoverable")) ?? true;
   const matureContent = parseBooleanFlag(getFirstTagValue(event.tags, "mature")) ?? false;
   const viewerAllowPubkeys = normalizeVipPubkeys(getAllTagValues(event.tags, "viewer_allow"));
+  const streamVisibility =
+    normalizeStreamVisibility(getFirstTagValue(event.tags, "stream_visibility")) ??
+    (viewerAllowPubkeys.length > 0 ? "private" : "public");
   const videoArchiveEnabled = parseBooleanFlag(getFirstTagValue(event.tags, "video_archive"));
   const videoVisibility = normalizeVideoVisibility(getFirstTagValue(event.tags, "video_visibility")) ?? "public";
   const videoMode = normalizeVideoMode(getFirstTagValue(event.tags, "video_mode"));
@@ -609,6 +625,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     discoverable,
     matureContent,
     contentWarningReason: getFirstTagValue(event.tags, "content-warning"),
+    streamVisibility,
     viewerAllowPubkeys,
     videoArchiveEnabled,
     videoVisibility,

@@ -6,15 +6,10 @@ import {
 import { makeOriginStreamId } from "@/lib/origin";
 import { evaluateAccess } from "@/lib/access/evaluator";
 import type { AccessDecision } from "@/lib/access/types";
+import { buildPlaybackAccessCookies } from "@/lib/playback-cookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function playbackCookie(req: Request, originStreamId: string, token: string, expiresAtSec: number): string {
-  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  const maxAge = Math.max(1, expiresAtSec - Math.floor(Date.now() / 1000));
-  return `dstream_playback_access=${encodeURIComponent(token)}; Path=/api/video/file/${encodeURIComponent(originStreamId)}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
-}
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -140,7 +135,8 @@ export async function POST(req: Request): Promise<Response> {
   const issued = issuePlaybackAccessToken({
     originStreamId: expectedOriginStreamId,
     viewerPubkey,
-    privateStream: policy.privateStream
+    privateStream: policy.privateStream,
+    liveStream: policy.status === "live"
   });
 
   const response = Response.json({
@@ -154,6 +150,8 @@ export async function POST(req: Request): Promise<Response> {
     reasonCode: liveDecision?.reasonCode ?? "allow_public",
     entitlementId: liveDecision?.entitlementId ?? null
   });
-  response.headers.append("set-cookie", playbackCookie(req, expectedOriginStreamId, issued.token, issued.expiresAtSec));
+  for (const cookie of buildPlaybackAccessCookies(req, expectedOriginStreamId, issued.token, issued.expiresAtSec)) {
+    response.headers.append("set-cookie", cookie);
+  }
   return response;
 }

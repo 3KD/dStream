@@ -1,13 +1,8 @@
 import { refreshPlaybackAccessToken } from "@/lib/playback-access";
+import { buildPlaybackAccessCookies } from "@/lib/playback-cookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function playbackCookie(req: Request, originStreamId: string, token: string, expiresAtSec: number): string {
-  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  const maxAge = Math.max(1, expiresAtSec - Math.floor(Date.now() / 1000));
-  return `dstream_playback_access=${encodeURIComponent(token)}; Path=/api/video/file/${encodeURIComponent(originStreamId)}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
-}
 
 function parsePositiveInt(value: unknown): number | undefined {
   const parsed = Number(value);
@@ -46,6 +41,8 @@ export async function POST(req: Request): Promise<Response> {
     reasonCode: result.reasonCode,
     entitlementId: result.entitlementId
   });
-  response.headers.append("set-cookie", playbackCookie(req, result.originStreamId, result.token, result.expiresAtSec));
+  for (const cookie of buildPlaybackAccessCookies(req, result.originStreamId, result.token, result.expiresAtSec)) {
+    response.headers.append("set-cookie", cookie);
+  }
   return response;
 }

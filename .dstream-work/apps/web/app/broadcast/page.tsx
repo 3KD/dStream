@@ -56,6 +56,7 @@ import {
   type StreamPaymentAsset,
   type StreamPaymentMethod,
   type StreamRendition,
+  type StreamVisibility,
   type StreamVideoVisibility
 } from "@dstream/protocol";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
@@ -270,6 +271,7 @@ export default function BroadcastPage() {
   const [videoVisibility, setVideoVisibility] = useState<StreamVideoVisibility>("public");
   const [feeWaiverGuilds, setFeeWaiverGuilds] = useState<StreamGuildFeeWaiver[]>([]);
   const [vipPubkeys, setVipPubkeys] = useState<string[]>([]);
+  const [streamVisibility, setStreamVisibility] = useState<StreamVisibility>("public");
   const [viewerAllowPubkeys, setViewerAllowPubkeys] = useState<string[]>([]);
   const [waiverGuildPubkeyInput, setWaiverGuildPubkeyInput] = useState("");
   const [waiverGuildIdInput, setWaiverGuildIdInput] = useState("");
@@ -502,6 +504,7 @@ export default function BroadcastPage() {
         setVideoVisibility("public");
         setFeeWaiverGuilds([]);
         setVipPubkeys([]);
+        setStreamVisibility("public");
         setViewerAllowPubkeys([]);
         setCaptionLines("");
         setRenditionLines("");
@@ -573,13 +576,17 @@ export default function BroadcastPage() {
       } else {
         setVipPubkeys([]);
       }
-      if (Array.isArray(parsed.viewerAllowPubkeys)) {
-        const normalizedAllow = parsed.viewerAllowPubkeys
+      const normalizedViewerAllow = Array.isArray(parsed.viewerAllowPubkeys)
+        ? parsed.viewerAllowPubkeys
           .map((item: any) => pubkeyParamToHex(typeof item === "string" ? item : "") ?? "")
-          .filter((item: string) => !!item);
-        setViewerAllowPubkeys(Array.from(new Set(normalizedAllow)));
+          .filter((item: string) => !!item)
+        : [];
+      const uniqueViewerAllow = Array.from(new Set<string>(normalizedViewerAllow));
+      setViewerAllowPubkeys(uniqueViewerAllow);
+      if (parsed.streamVisibility === "public" || parsed.streamVisibility === "private") {
+        setStreamVisibility(parsed.streamVisibility);
       } else {
-        setViewerAllowPubkeys([]);
+        setStreamVisibility(uniqueViewerAllow.length > 0 ? "private" : "public");
       }
       if (typeof parsed.captionLines === "string") setCaptionLines(parsed.captionLines);
       if (typeof parsed.renditionLines === "string") setRenditionLines(parsed.renditionLines);
@@ -624,6 +631,7 @@ export default function BroadcastPage() {
       setVideoArchiveEnabled(false);
       setFeeWaiverGuilds([]);
       setVipPubkeys([]);
+      setStreamVisibility("public");
       setViewerAllowPubkeys([]);
       setCaptionLines("");
       setRenditionLines("");
@@ -670,6 +678,7 @@ export default function BroadcastPage() {
           videoVisibility,
           feeWaiverGuilds,
           vipPubkeys,
+          streamVisibility,
           viewerAllowPubkeys,
           captionLines,
           renditionLines,
@@ -714,6 +723,7 @@ export default function BroadcastPage() {
     videoVisibility,
     feeWaiverGuilds,
     vipPubkeys,
+    streamVisibility,
     viewerAllowPubkeys,
     streamId,
     summary,
@@ -920,9 +930,11 @@ export default function BroadcastPage() {
       return;
     }
     if (viewerPubkey === identity?.pubkey?.toLowerCase()) {
-      setViewerAllowInputError("You are always allowed as stream owner.");
+      setStreamVisibility("private");
+      setViewerAllowInput("");
       return;
     }
+    setStreamVisibility("private");
     setViewerAllowPubkeys((prev) => (prev.includes(viewerPubkey) ? prev : [...prev, viewerPubkey]));
     setViewerAllowInput("");
   }, [identity?.pubkey, viewerAllowInput]);
@@ -1486,6 +1498,7 @@ export default function BroadcastPage() {
       discoverable,
       matureContent,
       contentWarningReason,
+      streamVisibility,
       viewerAllowPubkeys,
       videoArchiveEnabled,
       videoVisibility,
@@ -1501,14 +1514,21 @@ export default function BroadcastPage() {
 
     const signed = await signEvent(unsigned);
     try {
-      await fetch("/api/playback-access/register", {
+      const registrationResponse = await fetch("/api/playback-access/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ announceEvent: signed }),
         cache: "no-store"
       });
-    } catch {
-      // ignore (playback policy registration is best-effort)
+      if (!registrationResponse.ok) {
+        const body = (await registrationResponse.json().catch(() => null)) as { error?: unknown } | null;
+        throw new Error(typeof body?.error === "string" ? body.error : `access policy registration returned ${registrationResponse.status}`);
+      }
+    } catch (registrationError) {
+      if (nextStatus === "live" && streamVisibility === "private") {
+        const detail = registrationError instanceof Error ? registrationError.message : "unknown registration error";
+        throw new Error(`Private stream access policy could not be registered: ${detail}`);
+      }
     }
     const report = await publishEventDetailed(relays, signed);
     setAnnounceReport(report);
@@ -1534,6 +1554,7 @@ export default function BroadcastPage() {
     discoverable,
     matureContent,
     contentWarningReason,
+    streamVisibility,
     viewerAllowPubkeys,
     videoArchiveEnabled,
     videoVisibility,
@@ -1773,7 +1794,19 @@ export default function BroadcastPage() {
         }
       } catch (e: any) {
         setAnnounceStep("fail");
-        setError(e?.message ?? "Stream is live, but announce failed.");
+        if (streamVisibility === "private") {
+          try {
+            whipRef.current?.close();
+            whipRef.current = null;
+          } catch {
+            // ignore
+          }
+          clearStoredSession();
+          setStatus("preview");
+          setError(e?.message ?? "Private stream was stopped because access policy registration failed.");
+        } else {
+          setError(e?.message ?? "Stream is live, but announce failed.");
+        }
       }
     } catch (e: any) {
       setError(e?.message ?? "Failed to publish via WHIP.");
@@ -2490,6 +2523,7 @@ export default function BroadcastPage() {
                           setVideoArchiveEnabled(false);
                           setFeeWaiverGuilds([]);
                           setVipPubkeys([]);
+                          setStreamVisibility("public");
                           setViewerAllowPubkeys([]);
                           setWaiverGuildPubkeyInput("");
                           setWaiverGuildIdInput("");
@@ -2954,10 +2988,25 @@ export default function BroadcastPage() {
                   </div>
 
                   <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-3">
-                    <div className="text-sm font-semibold text-neutral-200">Private stream allowlist (optional)</div>
-                    <div className="text-xs text-neutral-500">
-                      If one or more viewers are listed here, playback is restricted to these pubkeys plus the stream owner.
-                    </div>
+                    <div className="text-sm font-semibold text-neutral-200">Live stream access</div>
+                    <label className="flex items-start gap-3 rounded-lg border border-neutral-800 bg-neutral-900/50 px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={streamVisibility === "private"}
+                        onChange={(event) => {
+                          setStreamVisibility(event.target.checked ? "private" : "public");
+                          setViewerAllowInputError(null);
+                        }}
+                        disabled={status === "connecting"}
+                        className="mt-0.5 h-4 w-4 accent-blue-500"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm text-neutral-200">Private stream</span>
+                        <span className="block text-xs text-neutral-500">
+                          Only you and the additional viewers listed below can play the live media.
+                        </span>
+                      </span>
+                    </label>
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
                       <input
                         value={viewerAllowInput}
@@ -2997,8 +3046,18 @@ export default function BroadcastPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs text-neutral-500">No private viewer allowlist. Stream is open to everyone.</div>
+                      <div className="text-xs text-neutral-500">
+                        {streamVisibility === "private"
+                          ? "Owner-only private stream. Your signed owner identity is the only viewer allowed."
+                          : "Public stream. Anyone with the watch link can play it."}
+                      </div>
                     )}
+
+                    {streamVisibility === "public" && viewerAllowPubkeys.length > 0 ? (
+                      <div className="text-xs text-amber-300">
+                        The saved viewer list is inactive while the stream is public. Adding a viewer switches privacy on automatically.
+                      </div>
+                    ) : null}
 
                     {viewerAllowInputError ? <div className="text-xs text-red-300">{viewerAllowInputError}</div> : null}
                   </div>

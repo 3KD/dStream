@@ -30,6 +30,7 @@ export const NOSTR_KINDS = {
 
 export type StreamStatus = "live" | "ended";
 export type StreamHostMode = "p2p_economy" | "host_only";
+export type StreamVisibility = "public" | "private";
 export type StreamVideoVisibility = "public" | "private";
 export type StreamVideoMode = "off" | "public" | "paid";
 export type StreamVideoAccessScope = "stream" | "playlist";
@@ -91,6 +92,7 @@ export interface StreamAnnounce {
   discoverable: boolean;
   matureContent: boolean;
   contentWarningReason?: string;
+  streamVisibility: StreamVisibility;
   viewerAllowPubkeys: string[];
   videoArchiveEnabled?: boolean;
   videoVisibility: StreamVideoVisibility;

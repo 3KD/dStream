@@ -26,6 +26,8 @@ services:
       # Next.js reverse proxy targets (server-only).
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
       DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
+      DSTREAM_PLAYBACK_ACCESS_SECRET: "${DSTREAM_PLAYBACK_ACCESS_SECRET:-dev-playback-access-secret-0123456789abcdef}"
+      DSTREAM_PLAYBACK_POLICY_STORE_PATH: "${DSTREAM_PLAYBACK_POLICY_STORE_PATH:-/var/lib/dstream/playback-policies.json}"
       # Read-only Video archive mount path exposed by API routes.
       DSTREAM_VIDEO_DIR: "${DSTREAM_VIDEO_DIR:-/recordings}"
       # Monero verified tips (server-only). Set to real wallet-rpc in real deployments.
