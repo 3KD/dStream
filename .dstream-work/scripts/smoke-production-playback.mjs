@@ -490,6 +490,11 @@ async function observeStartupStability(page, label) {
   const result = await page.locator("video").first().evaluate((video, maxInterruptionMs) => {
     const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
     const firstPlaying = events.findIndex((entry) => entry.event === "playing");
+    const readMetric = (value) => {
+      if (!value) return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
     const playbackEvents = firstPlaying < 0 ? [] : events.slice(firstPlaying + 1);
     const interruptions = [];
     for (let index = 0; index < playbackEvents.length; index += 1) {
@@ -511,6 +516,9 @@ async function observeStartupStability(page, label) {
       interruptions,
       sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
       startupBuffer: Number(video.dataset.dstreamStartupBuffer),
+      startupMs: firstPlaying < 0 ? null : events[firstPlaying].at,
+      hlsLatency: readMetric(video.dataset.dstreamHlsLatency),
+      hlsTargetLatency: readMetric(video.dataset.dstreamHlsTargetLatency),
       startupGate: video.dataset.dstreamStartupGate ?? "unknown",
       fallbackVisualVisible: !!fallbackVisual && !!fallbackRect && fallbackRect.width > 0 && fallbackRect.height > 0,
       fallbackArtworkLoaded: fallbackArtwork instanceof HTMLImageElement && fallbackArtwork.complete && fallbackArtwork.naturalWidth > 0
@@ -737,7 +745,12 @@ async function openRun(context, scenario, stream, index) {
     startupStage = "observe startup stability";
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
     console.log(
-      `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
+      `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, ` +
+        `startup=${startup.startupMs === null ? "n/a" : (startup.startupMs / 1_000).toFixed(2)}s, ` +
+        `latency=${startup.hlsLatency === null ? "n/a" : startup.hlsLatency.toFixed(2)}s, ` +
+        `target=${startup.hlsTargetLatency === null ? "n/a" : startup.hlsTargetLatency.toFixed(2)}s, ` +
+        `buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, ` +
+        `events=${startup.events.map((entry) => entry.event).join(",")}`
     );
     if (background) {
       const toggle = page.getByTitle("Keep audio playing when the app is backgrounded");
