@@ -152,10 +152,12 @@ parse_local_build_services() {
   local raw="$1"
   local token normalized
   local requested=()
+  LOCAL_BUILD_SERVICE_COUNT=0
 
   if [[ "${raw}" == "auto" ]]; then
     if docker_ready; then
       LOCAL_BUILD_SERVICES=(web manifest transcoder)
+      LOCAL_BUILD_SERVICE_COUNT=3
     else
       echo "🔹 Local Docker unavailable; falling back to remote app builds."
       LOCAL_BUILD_SERVICES=()
@@ -183,11 +185,17 @@ parse_local_build_services() {
       all)
         normalized=(web manifest transcoder)
         for token in "${normalized[@]}"; do
-          [[ " ${LOCAL_BUILD_SERVICES[*]} " == *" ${token} "* ]] || LOCAL_BUILD_SERVICES+=("${token}")
+          if [[ " ${LOCAL_BUILD_SERVICES[*]-} " != *" ${token} "* ]]; then
+            LOCAL_BUILD_SERVICES+=("${token}")
+            LOCAL_BUILD_SERVICE_COUNT=$((LOCAL_BUILD_SERVICE_COUNT + 1))
+          fi
         done
         ;;
       web|manifest|transcoder)
-        [[ " ${LOCAL_BUILD_SERVICES[*]} " == *" ${token} "* ]] || LOCAL_BUILD_SERVICES+=("${token}")
+        if [[ " ${LOCAL_BUILD_SERVICES[*]-} " != *" ${token} "* ]]; then
+          LOCAL_BUILD_SERVICES+=("${token}")
+          LOCAL_BUILD_SERVICE_COUNT=$((LOCAL_BUILD_SERVICE_COUNT + 1))
+        fi
         ;;
       *)
         echo "ERROR: unsupported DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES value: ${token}"
@@ -201,7 +209,7 @@ parse_local_build_services() {
 service_selected_for_local_build() {
   local service="$1"
   local selected
-  for selected in "${LOCAL_BUILD_SERVICES[@]}"; do
+  for selected in "${LOCAL_BUILD_SERVICES[@]-}"; do
     if [[ "${selected}" == "${service}" ]]; then
       return 0
     fi
@@ -210,7 +218,7 @@ service_selected_for_local_build() {
 }
 
 build_local_service_images() {
-  if (( ${#LOCAL_BUILD_SERVICES[@]} == 0 )); then
+  if (( LOCAL_BUILD_SERVICE_COUNT == 0 )); then
     return
   fi
 
@@ -226,7 +234,7 @@ stream_local_service_images_to_remote() {
   local image_names=()
   local service
 
-  if (( ${#LOCAL_BUILD_SERVICES[@]} == 0 )); then
+  if (( LOCAL_BUILD_SERVICE_COUNT == 0 )); then
     return
   fi
 
@@ -311,7 +319,7 @@ echo "   source: ${PROJECT_DIR_SOURCE}"
 if [[ -n "${DEPLOY_GIT_HEAD}" ]]; then
   echo "   git:    ${DEPLOY_GIT_BRANCH}@${DEPLOY_GIT_HEAD}"
 fi
-if (( ${#LOCAL_BUILD_SERVICES[@]} > 0 )); then
+if (( LOCAL_BUILD_SERVICE_COUNT > 0 )); then
   echo "   local app images: ${LOCAL_BUILD_SERVICES[*]}"
 else
   echo "   local app images: none"
