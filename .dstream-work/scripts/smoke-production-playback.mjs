@@ -53,6 +53,7 @@ const EXPECT_PRIVATE_ALLOWLISTED = process.env.PLAYBACK_EXPECT_PRIVATE_ALLOWLIST
 const IDENTITY_STORE_JSON = String(process.env.PLAYBACK_IDENTITY_STORE_JSON || "").trim();
 const INITIAL_VISIBILITY = String(process.env.PLAYBACK_INITIAL_VISIBILITY || "").trim().toLowerCase();
 const STARTUP_ONLY = process.env.PLAYBACK_STARTUP_ONLY === "1";
+const EMIT_BROWSER_AUDIO = process.env.PLAYBACK_EMIT_BROWSER_AUDIO === "1";
 const PLAY_AFTER_GATE_MAX_MS = positiveNumber(process.env.PLAYBACK_PLAY_AFTER_GATE_MAX_MS, 1_000);
 const STUB_HIDDEN_PLAY_REJECTION =
   process.env.PLAYBACK_STUB_HIDDEN_PLAY_REJECTION === "1" ||
@@ -95,20 +96,28 @@ function runDetails(run, sample) {
 }
 
 async function launchChromium() {
+  const launchOptions = {
+    headless: true,
+    ...(EMIT_BROWSER_AUDIO ? {} : { args: ["--mute-audio"] })
+  };
   if (process.env.PLAYBACK_CHROMIUM_CHANNEL?.trim().toLowerCase() === "bundled") {
-    return chromium.launch({ headless: true });
+    return chromium.launch(launchOptions);
   }
   try {
-    return await chromium.launch({ channel: "chrome", headless: true });
+    return await chromium.launch({ ...launchOptions, channel: "chrome" });
   } catch {
-    return chromium.launch({ headless: true });
+    return chromium.launch(launchOptions);
   }
 }
 
 async function launchFirefox() {
   const executablePath = process.env.PLAYBACK_FIREFOX_EXECUTABLE?.trim();
-  if (executablePath) return firefox.launch({ executablePath, headless: true });
-  return firefox.launch({ headless: true });
+  const launchOptions = {
+    headless: true,
+    ...(EMIT_BROWSER_AUDIO ? {} : { firefoxUserPrefs: { "media.volume_scale": "0.0" } })
+  };
+  if (executablePath) return firefox.launch({ ...launchOptions, executablePath });
+  return firefox.launch(launchOptions);
 }
 
 async function loadSources() {
