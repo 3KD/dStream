@@ -6,7 +6,7 @@ export type BufferedTimeRange = {
 export function getLiveLatencyRecoveryLimit(targetLatency: number, targetDuration: number): number | null {
   if (!Number.isFinite(targetLatency) || targetLatency < 0) return null;
   if (!Number.isFinite(targetDuration) || targetDuration <= 0) return null;
-  return targetLatency + Math.max(2, targetDuration);
+  return targetLatency + Math.max(6, targetDuration * 3);
 }
 
 export function findBufferedLiveSyncTarget(
@@ -22,6 +22,34 @@ export function findBufferedLiveSyncTarget(
     if (liveSyncPosition >= range.start && liveSyncPosition <= range.end - endPadding) return liveSyncPosition;
   }
   return null;
+}
+
+export function findBufferedLiveStartupTarget(
+  ranges: readonly BufferedTimeRange[],
+  liveSyncPosition: number | null | undefined,
+  minimumBufferAhead = 0.5
+): number | null {
+  if (!Number.isFinite(minimumBufferAhead) || minimumBufferAhead < 0) return null;
+
+  let latestRange: BufferedTimeRange | null = null;
+  for (const range of ranges) {
+    if (!Number.isFinite(range.start) || !Number.isFinite(range.end) || range.end <= range.start) continue;
+    if (!latestRange || range.end > latestRange.end) latestRange = range;
+  }
+  if (!latestRange) return null;
+
+  const duration = latestRange.end - latestRange.start;
+  const safeEnd = latestRange.end - Math.min(minimumBufferAhead, duration / 2);
+  if (
+    typeof liveSyncPosition === "number" &&
+    Number.isFinite(liveSyncPosition) &&
+    liveSyncPosition >= latestRange.start &&
+    liveSyncPosition <= latestRange.end
+  ) {
+    return Math.min(liveSyncPosition, safeEnd);
+  }
+
+  return safeEnd;
 }
 
 export function hasRepeatedMediaGaps(

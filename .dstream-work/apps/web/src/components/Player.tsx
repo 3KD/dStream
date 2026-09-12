@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
 import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
+  findBufferedLiveStartupTarget,
   findBufferedLiveSyncTarget,
   getLiveLatencyRecoveryLimit,
   hasRepeatedMediaGaps
@@ -237,8 +238,8 @@ function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
     backBufferLength: 60,
     ...(lowLatencyMode
       ? {
-          maxLiveSyncPlaybackRate: 1.05,
-          liveSyncOnStallIncrease: 0
+          maxLiveSyncPlaybackRate: 1.1,
+          liveSyncOnStallIncrease: 0.25
         }
       : {
           liveSyncDuration: stableLiveSyncDuration,
@@ -1133,23 +1134,27 @@ export function Player({
       }
       return 0;
     };
-    const getBestStartupRange = () => {
-      let best: { start: number; end: number; duration: number } | null = null;
+    const readBufferedRanges = () => {
       try {
-        for (let index = 0; index < video.buffered.length; index++) {
-          const start = video.buffered.start(index);
-          const end = video.buffered.end(index);
-          const duration = Math.max(0, end - start);
-          if (
-            !best ||
-            duration > best.duration + 0.05 ||
-            (Math.abs(duration - best.duration) <= 0.05 && end > best.end)
-          ) {
-            best = { start, end, duration };
-          }
-        }
+        return Array.from({ length: video.buffered.length }, (_, index) => ({
+          start: video.buffered.start(index),
+          end: video.buffered.end(index)
+        }));
       } catch {
-        // ignore
+        return [];
+      }
+    };
+    const getBestStartupRange = (ranges = readBufferedRanges()) => {
+      let best: { start: number; end: number; duration: number } | null = null;
+      for (const range of ranges) {
+        const duration = Math.max(0, range.end - range.start);
+        if (
+          !best ||
+          duration > best.duration + 0.05 ||
+          (Math.abs(duration - best.duration) <= 0.05 && range.end > best.end)
+        ) {
+          best = { start: range.start, end: range.end, duration };
+        }
       }
       return best;
     };
@@ -1167,7 +1172,7 @@ export function Player({
         setNeedsClick(true);
       });
     };
-    const waitForHlsStartupBuffer = (hls: Hls) => {
+    const waitForHlsStartupBuffer = (hls: Hls, onUnbufferedLiveTimeout?: () => boolean) => {
       clearHlsStartupListener();
       if (!isLiveStream) {
         beginHlsPlayback();
@@ -1185,6 +1190,7 @@ export function Player({
           : effectiveBackgroundPlayEnabled
           ? 12_000
           : 8_000;
+      const liveStartupWaitMs = onUnbufferedLiveTimeout ? Math.max(maxWaitMs, 8_000) : maxWaitMs;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1212,15 +1218,48 @@ export function Player({
         if (started || cancelled) return;
         const waitedMs = Date.now() - startedAt;
         const bufferedAhead = getBufferedAheadSeconds();
-        const startupRange = bufferedAhead > 0 ? null : getBestStartupRange();
+        const startupRanges = effectiveLowLatencyEnabled || bufferedAhead === 0 ? readBufferedRanges() : [];
+        const startupRange = getBestStartupRange(startupRanges);
+        const hasStartupMedia = bufferedAhead > 0 || (startupRange?.duration ?? 0) > 0;
+        const liveSyncPosition = hls.liveSyncPosition;
+        const bufferedLiveSyncTarget =
+          effectiveLowLatencyEnabled && typeof liveSyncPosition === "number"
+            ? findBufferedLiveSyncTarget(startupRanges, liveSyncPosition)
+            : null;
+        const waitingForBufferedLiveSync = effectiveLowLatencyEnabled && bufferedLiveSyncTarget === null;
+        if (waitingForBufferedLiveSync && onUnbufferedLiveTimeout && waitedMs >= liveStartupWaitMs) {
+          if (onUnbufferedLiveTimeout()) {
+            started = true;
+            cleanup();
+            removeHlsStartupListener = null;
+            return;
+          }
+        }
+        if (waitingForBufferedLiveSync && waitedMs < liveStartupWaitMs) return;
         if (
           bufferedAhead >= targetBufferSeconds ||
           (startupRange?.duration ?? 0) >= targetBufferSeconds ||
-          waitedMs >= maxWaitMs
+          waitedMs >= (hasStartupMedia ? maxWaitMs : liveStartupWaitMs)
         ) {
-          if (bufferedAhead === 0 && startupRange && startupRange.duration > 0.25) {
+          const shouldAlignToLiveSync =
+            bufferedLiveSyncTarget !== null && Math.abs(bufferedLiveSyncTarget - video.currentTime) > 0.25;
+          if ((bufferedAhead === 0 || shouldAlignToLiveSync) && startupRange && startupRange.duration > 0.25) {
             try {
-              video.currentTime = startupRange.start + Math.min(0.1, startupRange.duration / 4);
+              const liveStartupTarget = effectiveLowLatencyEnabled
+                ? bufferedLiveSyncTarget ??
+                  findBufferedLiveStartupTarget(startupRanges, liveSyncPosition, targetBufferSeconds)
+                : null;
+              const startupTarget =
+                liveStartupTarget ?? startupRange.start + Math.min(0.1, startupRange.duration / 4);
+              video.dataset.dstreamStartupSeekMode =
+                bufferedLiveSyncTarget !== null
+                  ? "live-sync"
+                  : liveStartupTarget !== null
+                    ? "buffered-edge"
+                    : "range-start";
+              video.dataset.dstreamStartupSeekFrom = video.currentTime.toFixed(3);
+              video.dataset.dstreamStartupSeekTo = startupTarget.toFixed(3);
+              video.currentTime = startupTarget;
             } catch {
               // ignore
             }
@@ -1232,7 +1271,7 @@ export function Player({
       hls.on(Hls.Events.FRAG_BUFFERED, maybeStart);
       video.addEventListener("canplay", maybeStart);
       video.addEventListener("progress", maybeStart);
-      startupTimer = setTimeout(maybeStart, maxWaitMs);
+      startupTimer = setTimeout(maybeStart, liveStartupWaitMs);
       removeHlsStartupListener = cleanup;
       maybeStart();
     };
@@ -1357,6 +1396,13 @@ export function Player({
       let networkRecoveryAttempts = 0;
       let networkRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
       let hasBufferedHlsFragment = false;
+      delete video.dataset.dstreamStartupSeekMode;
+      delete video.dataset.dstreamStartupSeekFrom;
+      delete video.dataset.dstreamStartupSeekTo;
+      delete video.dataset.dstreamHlsResyncCount;
+      delete video.dataset.dstreamHlsResyncFrom;
+      delete video.dataset.dstreamHlsResyncTo;
+      delete video.dataset.dstreamHlsResyncReason;
       setStartupGatePending(true);
       setPlaybackMode("hls");
       liveHlsActivityRef.current = {
@@ -1552,10 +1598,7 @@ export function Player({
 
         const now = Date.now();
         if (now - lastBufferedLiveResyncAt < 10_000) return false;
-        const ranges = Array.from({ length: video.buffered.length }, (_, index) => ({
-          start: video.buffered.start(index),
-          end: video.buffered.end(index)
-        }));
+        const ranges = readBufferedRanges();
         const target = findBufferedLiveSyncTarget(ranges, liveSyncPosition);
         if (target === null) return false;
 
@@ -1653,7 +1696,10 @@ export function Player({
             void refreshRotatingMaster();
           }, 2_500);
         }
-        waitForHlsStartupBuffer(hls);
+        waitForHlsStartupBuffer(
+          hls,
+          rotatingMasterMode ? () => switchZapSourceToAudio("video-startup-timeout") : undefined
+        );
       });
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -1689,7 +1735,9 @@ export function Player({
       switchZapSourceToAudio = (reason: string) => {
         if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
         if (
-          (reason === "playlist-timing-corrected" || reason === "repeated-video-buffer-gap") &&
+          (reason === "playlist-timing-corrected" ||
+            reason === "repeated-video-buffer-gap" ||
+            reason === "video-startup-timeout") &&
           preferSourceVideoRef.current
         ) return false;
         if (
