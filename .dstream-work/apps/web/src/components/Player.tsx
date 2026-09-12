@@ -5,6 +5,11 @@ import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
 import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
+  findBufferedLiveSyncTarget,
+  getLiveLatencyRecoveryLimit,
+  hasRepeatedMediaGaps
+} from "@/lib/hls/liveLatency";
+import {
   applyRotatingMasterSnapshot,
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
@@ -230,11 +235,17 @@ function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
     maxBufferLength: options.backgroundPlayEnabled ? 180 : lowLatencyMode ? 45 : 90,
     maxMaxBufferLength: options.backgroundPlayEnabled ? 240 : lowLatencyMode ? 90 : 120,
     backBufferLength: 60,
-    liveSyncDurationCount: lowLatencyMode ? 4 : undefined,
-    liveSyncDuration: lowLatencyMode ? undefined : stableLiveSyncDuration,
-    liveMaxLatencyDurationCount: lowLatencyMode ? Number.POSITIVE_INFINITY : undefined,
-    liveMaxLatencyDuration: lowLatencyMode ? undefined : Number.POSITIVE_INFINITY,
-    liveSyncOnStallIncrease: 1,
+    ...(lowLatencyMode
+      ? {
+          maxLiveSyncPlaybackRate: 1.05,
+          liveSyncOnStallIncrease: 0
+        }
+      : {
+          liveSyncDuration: stableLiveSyncDuration,
+          liveMaxLatencyDuration: Number.POSITIVE_INFINITY,
+          maxLiveSyncPlaybackRate: 1,
+          liveSyncOnStallIncrease: 1
+        }),
     maxBufferHole: options.bridgeLiveGaps ? 2.5 : 0.1,
     detectStallWithCurrentTimeMs: options.bridgeLiveGaps ? 250 : 1_250,
     highBufferWatchdogPeriod: options.bridgeLiveGaps ? 0.25 : 2
@@ -243,7 +254,25 @@ function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
 
 function applyHlsPlaybackTuning(hls: Hls, options: HlsPlaybackTuningOptions): void {
   const config = hls.config as any;
+  for (const key of [
+    "liveSyncDuration",
+    "liveSyncDurationCount",
+    "liveMaxLatencyDuration",
+    "liveMaxLatencyDurationCount"
+  ]) {
+    delete hls.userConfig[key as keyof typeof hls.userConfig];
+  }
+  Object.assign(config, {
+    liveSyncDuration: Hls.DefaultConfig.liveSyncDuration,
+    liveSyncDurationCount: Hls.DefaultConfig.liveSyncDurationCount,
+    liveMaxLatencyDuration: Hls.DefaultConfig.liveMaxLatencyDuration,
+    liveMaxLatencyDurationCount: Hls.DefaultConfig.liveMaxLatencyDurationCount
+  });
   Object.assign(config, getHlsPlaybackTuning(options));
+  if (!options.lowLatencyEnabled) {
+    hls.userConfig.liveSyncDuration = config.liveSyncDuration;
+    hls.userConfig.liveMaxLatencyDuration = config.liveMaxLatencyDuration;
+  }
 
   const backgroundCappingState = hls as Hls & {
     dstreamCappingBeforeBackground?: { autoLevel: number; capToPlayerSize: boolean };
@@ -364,7 +393,6 @@ export function Player({
     setIsMobilePlayback(isLikelyMobilePlaybackDevice());
     setIsFirefoxPlayback(firefox);
     setPreferNativeHls(shouldPreferNativeHlsPlayback());
-    setLowLatencyEnabled(!firefox);
     setPlaybackEnvironmentReady(true);
   }, []);
 
@@ -376,8 +404,8 @@ export function Player({
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
   const rotatingHlsProviderMode = isRotatingHlsProviderUrl(normalizedSrc);
-  const stableHlsCompatibilityMode = isFirefoxPlayback || rotatingHlsProviderMode;
-  const effectiveLowLatencyEnabled = lowLatencyEnabled && !stableHlsCompatibilityMode;
+  const bridgeLiveGaps = isFirefoxPlayback || rotatingHlsProviderMode;
+  const effectiveLowLatencyEnabled = lowLatencyEnabled;
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
@@ -459,9 +487,9 @@ export function Player({
     applyHlsPlaybackTuning(hls, {
       lowLatencyEnabled: effectiveLowLatencyEnabled,
       backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-      bridgeLiveGaps: stableHlsCompatibilityMode
+      bridgeLiveGaps
     });
-  }, [effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled, stableHlsCompatibilityMode]);
+  }, [bridgeLiveGaps, effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled]);
 
   useEffect(() => {
     const hls = hlsRef.current;
@@ -1145,15 +1173,18 @@ export function Player({
         beginHlsPlayback();
         return;
       }
-      const targetBufferSeconds =
-        effectiveBackgroundPlayEnabled || rotatingHlsProviderMode ? 8 : effectiveLowLatencyEnabled ? 3 : 5;
-      const maxWaitMs = rotatingHlsProviderMode
-        ? 20_000
-        : effectiveBackgroundPlayEnabled
+      const targetBufferSeconds = effectiveLowLatencyEnabled
+        ? 0.5
+        : effectiveBackgroundPlayEnabled || rotatingHlsProviderMode
+          ? 8
+          : 5;
+      const maxWaitMs = effectiveLowLatencyEnabled
+        ? 2_000
+        : rotatingHlsProviderMode
+          ? 20_000
+          : effectiveBackgroundPlayEnabled
           ? 12_000
-          : effectiveLowLatencyEnabled
-            ? 5_000
-            : 8_000;
+          : 8_000;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1459,7 +1490,7 @@ export function Player({
       const hlsPlaybackTuning = getHlsPlaybackTuning({
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps: stableHlsCompatibilityMode
+        bridgeLiveGaps
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
       const rotatingMasterMode = isRotatingHlsProviderUrl(hlsSource);
@@ -1498,9 +1529,50 @@ export function Player({
       applyHlsPlaybackTuning(hls, {
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps: stableHlsCompatibilityMode
+        bridgeLiveGaps
       });
       hlsRef.current = hls;
+
+      let lowLatencyRecoveryLimit: number | null = null;
+      let lastBufferedLiveResyncAt = 0;
+      let bufferedLiveResyncCount = 0;
+      const updateLowLatencyRecoveryLimit = (targetDuration: number | undefined) => {
+        if (!effectiveLowLatencyEnabled) return;
+        const targetLatency = hls.targetLatency;
+        if (typeof targetLatency !== "number" || typeof targetDuration !== "number") return;
+        lowLatencyRecoveryLimit = getLiveLatencyRecoveryLimit(targetLatency, targetDuration);
+        video.dataset.dstreamHlsMaxLatency = lowLatencyRecoveryLimit?.toFixed(3) ?? "";
+      };
+      const resyncToBufferedLiveEdge = (reason: string) => {
+        if (!effectiveLowLatencyEnabled || lowLatencyRecoveryLimit === null) return false;
+        const latency = hls.latency;
+        const liveSyncPosition = hls.liveSyncPosition;
+        if (!Number.isFinite(latency) || latency <= lowLatencyRecoveryLimit) return false;
+        if (typeof liveSyncPosition !== "number" || !Number.isFinite(liveSyncPosition)) return false;
+
+        const now = Date.now();
+        if (now - lastBufferedLiveResyncAt < 10_000) return false;
+        const ranges = Array.from({ length: video.buffered.length }, (_, index) => ({
+          start: video.buffered.start(index),
+          end: video.buffered.end(index)
+        }));
+        const target = findBufferedLiveSyncTarget(ranges, liveSyncPosition);
+        if (target === null) return false;
+
+        const previousTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        try {
+          video.currentTime = target;
+        } catch {
+          return false;
+        }
+        lastBufferedLiveResyncAt = now;
+        bufferedLiveResyncCount += 1;
+        video.dataset.dstreamHlsResyncCount = String(bufferedLiveResyncCount);
+        video.dataset.dstreamHlsResyncFrom = previousTime.toFixed(3);
+        video.dataset.dstreamHlsResyncTo = target.toFixed(3);
+        video.dataset.dstreamHlsResyncReason = reason;
+        return true;
+      };
 
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
@@ -1560,7 +1632,7 @@ export function Player({
         applyHlsPlaybackTuning(hls, {
           lowLatencyEnabled: effectiveLowLatencyEnabled,
           backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-          bridgeLiveGaps: stableHlsCompatibilityMode
+          bridgeLiveGaps
         });
         applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
@@ -1592,9 +1664,22 @@ export function Player({
           networkRecoveryTimer = null;
         }
         markLiveHlsActivity("lastFragBufferedAt");
+        resyncToBufferedLiveEdge("fragment-buffered");
       });
       hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
         markLiveHlsActivity("lastFragChangedAt");
+        const hlsTargetLatency = hls.targetLatency;
+        const hlsLiveSyncPosition = hls.liveSyncPosition;
+        video.dataset.dstreamHlsLatency = Number.isFinite(hls.latency) ? hls.latency.toFixed(3) : "";
+        video.dataset.dstreamHlsTargetLatency =
+          typeof hlsTargetLatency === "number" && Number.isFinite(hlsTargetLatency)
+            ? hlsTargetLatency.toFixed(3)
+            : "";
+        video.dataset.dstreamHlsLiveSyncPosition =
+          typeof hlsLiveSyncPosition === "number" && Number.isFinite(hlsLiveSyncPosition)
+            ? hlsLiveSyncPosition.toFixed(3)
+            : "";
+        video.dataset.dstreamHlsLowLatency = String(hls.config.lowLatencyMode);
         const programDateTime = data.frag?.programDateTime;
         if (typeof programDateTime === "number" && Number.isFinite(programDateTime)) {
           video.dataset.dstreamProgramDateTime = String(programDateTime);
@@ -1603,8 +1688,15 @@ export function Player({
       });
       switchZapSourceToAudio = (reason: string) => {
         if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
-        if (reason === "playlist-timing-corrected" && preferSourceVideoRef.current) return false;
-        if (!correctedZapPlaylistTiming && !(hls.config as any).dstreamPlaylistTimingCorrected) return false;
+        if (
+          (reason === "playlist-timing-corrected" || reason === "repeated-video-buffer-gap") &&
+          preferSourceVideoRef.current
+        ) return false;
+        if (
+          reason === "playlist-timing-corrected" &&
+          !correctedZapPlaylistTiming &&
+          !(hls.config as any).dstreamPlaylistTimingCorrected
+        ) return false;
         const audioTrackUrl = hls.audioTracks.find(
           (track) => typeof track.url === "string" && track.url.length > 0
         )?.url;
@@ -1639,10 +1731,15 @@ export function Player({
         }, 0);
         return true;
       };
-      hls.on(Hls.Events.LEVEL_LOADED, () => {
+      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
         markLiveHlsActivity("lastLevelUpdatedAt");
+        updateLowLatencyRecoveryLimit(data.details?.targetduration);
       });
-      hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
+      hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+        markLiveHlsActivity("lastLevelUpdatedAt");
+        updateLowLatencyRecoveryLimit(data.details?.targetduration);
+        resyncToBufferedLiveEdge("playlist-updated");
+      });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         const idx = typeof data?.level === "number" ? data.level : -1;
@@ -1653,6 +1750,7 @@ export function Player({
         setQualityIndicator(selectedQualityRef.current < 0 ? `Auto · ${current}` : current);
       });
 
+      let zapVideoGapTimestamps: number[] = [];
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (
           rotatingMasterMode &&
@@ -1667,6 +1765,21 @@ export function Player({
           ].includes(data.details)
         ) {
           void refreshRotatingMaster();
+        }
+        if (
+          data.type === Hls.ErrorTypes.MEDIA_ERROR &&
+          (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
+            data.details === Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE)
+        ) {
+          const now = Date.now();
+          if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+            zapVideoGapTimestamps = [...zapVideoGapTimestamps, now].filter((timestamp) => now - timestamp <= 30_000);
+          }
+          if (
+            (data.details === Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE ||
+              hasRepeatedMediaGaps(zapVideoGapTimestamps, now)) &&
+            switchZapSourceToAudio("repeated-video-buffer-gap")
+          ) return;
         }
         if (!data.fatal) return;
         switch (data.type) {
@@ -2488,12 +2601,8 @@ export function Player({
                 <button
                   type="button"
                   onClick={() => setLowLatencyEnabled((cur) => !cur)}
-                  disabled={playbackMode !== "hls" || stableHlsCompatibilityMode}
-                  title={
-                    stableHlsCompatibilityMode
-                      ? "Stable playback is required for this source or browser"
-                      : "Toggle low-latency playback"
-                  }
+                  disabled={playbackMode !== "hls"}
+                  title="Toggle low-latency playback"
                   className={`flex shrink-0 items-center gap-1.5 px-1.5 sm:px-2 py-1 rounded-md text-[11px] font-bold transition ${
                     effectiveLowLatencyEnabled ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-neutral-500 hover:text-white cursor-pointer"
                   } disabled:opacity-50`}

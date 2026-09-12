@@ -24,7 +24,7 @@
     "test:whep": "node --test --import tsx apps/web/src/lib/whep-fallback.test.ts",
     "test:playback": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --test --import tsx apps/web/src/lib/playback-access.test.ts apps/web/src/lib/playback-access.routes.test.ts",
     "test:p2p-stake": "node --test --import tsx apps/web/src/lib/p2p/stakeGate.test.ts",
-    "test:streaming": "node --test --import tsx apps/web/src/lib/nostr.test.ts apps/web/src/lib/quickplay.test.ts apps/web/src/lib/miniPlayerLayout.test.ts apps/web/src/lib/streamHealth.test.ts apps/web/src/lib/hls/monotonicPlaylistLoader.test.ts apps/web/src/lib/hls/readiness.test.ts apps/web/src/lib/hls/rotatingMaster.test.ts",
+    "test:streaming": "node --test --import tsx apps/web/src/lib/nostr.test.ts apps/web/src/lib/quickplay.test.ts apps/web/src/lib/miniPlayerLayout.test.ts apps/web/src/lib/streamHealth.test.ts apps/web/src/lib/hls/liveLatency.test.ts apps/web/src/lib/hls/monotonicPlaylistLoader.test.ts apps/web/src/lib/hls/readiness.test.ts apps/web/src/lib/hls/rotatingMaster.test.ts",
     "test": "npm run test:protocol && npm run test:monero && npm run test:monero:refund && npm run test:social && npm run test:inbox && npm run test:chat && npm run test:profile && npm run test:payments && npm run test:vod && npm run test:mobile:permissions && npm run test:whep && npm run test:playback && npm run test:p2p-stake && npm run test:streaming",
     "check": "npm run typecheck && npm test && npm run lint && npm run build",
     "infra:up": "docker compose -f infra/stream/docker-compose.yml up -d",
