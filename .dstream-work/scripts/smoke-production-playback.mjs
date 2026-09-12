@@ -22,6 +22,11 @@ const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
 const EXPECTED_SOURCE_MODE = String(process.env.PLAYBACK_EXPECT_SOURCE_MODE || "").trim();
+const EXPECT_MUTED_AUTOPLAY = process.env.PLAYBACK_EXPECT_MUTED_AUTOPLAY !== "0";
+const EXPECT_PRIVATE_ALLOWLISTED = process.env.PLAYBACK_EXPECT_PRIVATE_ALLOWLISTED === "1";
+const IDENTITY_STORE_JSON = String(process.env.PLAYBACK_IDENTITY_STORE_JSON || "").trim();
+const INITIAL_VISIBILITY = String(process.env.PLAYBACK_INITIAL_VISIBILITY || "").trim().toLowerCase();
+const STARTUP_ONLY = process.env.PLAYBACK_STARTUP_ONLY === "1";
 const REQUESTED_SCENARIOS = new Set(
   String(process.env.PLAYBACK_SCENARIOS || "chromium-desktop,chromium-mobile,firefox-desktop")
     .split(",")
@@ -32,6 +37,20 @@ const REQUESTED_SCENARIOS = new Set(
 function fail(message) {
   throw new Error(message);
 }
+
+function readIdentityStoreFixture() {
+  if (!IDENTITY_STORE_JSON) return null;
+  try {
+    const parsed = JSON.parse(IDENTITY_STORE_JSON);
+    if (!parsed || typeof parsed !== "object") fail("PLAYBACK_IDENTITY_STORE_JSON must be a JSON object");
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("PLAYBACK_IDENTITY_STORE_JSON")) throw error;
+    fail("PLAYBACK_IDENTITY_STORE_JSON must be valid JSON");
+  }
+}
+
+const IDENTITY_STORE_FIXTURE = readIdentityStoreFixture();
 
 function runDetails(run, sample) {
   const recent = [...run.samples, sample]
@@ -193,37 +212,123 @@ async function startPlayback(page) {
   while (Date.now() < deadline) {
     const result = await page.locator("video").first().evaluate((video) => {
       const startupGate = video.dataset.dstreamStartupGate ?? "unknown";
+      const visibleButtonText = Array.from(video.ownerDocument.querySelectorAll("button"))
+        .filter((button) => {
+          const rect = button.getBoundingClientRect();
+          const style = getComputedStyle(button);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        })
+        .map((button) => button.textContent?.trim() ?? "");
+      const privateGate = video.ownerDocument.querySelector('[data-testid="private-live-access-gate"]');
       return {
         playing: !video.paused && !video.ended && video.readyState >= 2,
-        gateBypassed: startupGate === "pending" && !video.paused,
         startupGate,
         readyState: video.readyState,
-        paused: video.paused
+        paused: video.paused,
+        muted: video.muted,
+        volume: Number(video.volume),
+        privateGateVisible:
+          privateGate instanceof HTMLElement &&
+          privateGate.getBoundingClientRect().width > 0 &&
+          privateGate.getBoundingClientRect().height > 0,
+        clickToPlayVisible: visibleButtonText.some((text) => /^click to play$/i.test(text))
       };
     });
-    if (result.gateBypassed) {
-      fail(`playback began while the startup buffer gate was pending (ready=${result.readyState})`);
+    if (result.privateGateVisible) {
+      fail("private playback access gate remained visible; the viewer was not allowed before media startup");
+    }
+    if (EXPECT_MUTED_AUTOPLAY && result.clickToPlayVisible) {
+      fail("click-to-play prompt appeared before muted autoplay could start");
     }
     if (result.playing) return;
-    lastError = `gate=${result.startupGate}, ready=${result.readyState}, paused=${result.paused}`;
+    lastError = `gate=${result.startupGate}, ready=${result.readyState}, paused=${result.paused}, muted=${result.muted}, volume=${result.volume}`;
     await page.waitForTimeout(100);
   }
   fail(`playback did not start within ${Math.round(START_TIMEOUT_MS / 1000)}s (${lastError})`);
 }
 
+async function verifyMutedAutoplayAndCenterClick(page, label) {
+  const privateGateVisible = await page
+    .locator('[data-testid="private-live-access-gate"]')
+    .first()
+    .isVisible({ timeout: 250 })
+    .catch(() => false);
+  if (privateGateVisible) {
+    fail(`${label}: private access gate remained visible before the autoplay regression check`);
+  }
+
+  const clickToPlayVisible = await page
+    .getByRole("button", { name: "Click to play", exact: true })
+    .first()
+    .isVisible({ timeout: 250 })
+    .catch(() => false);
+  if (EXPECT_MUTED_AUTOPLAY && clickToPlayVisible) {
+    fail(`${label}: click-to-play prompt was visible before any viewer click`);
+  }
+
+  if (!EXPECT_MUTED_AUTOPLAY) return;
+
+  const before = await sampleVideo(page);
+  if (before.paused || before.ended || before.readyState < 2) {
+    fail(
+      `${label}: muted autoplay did not begin before a click ` +
+        `(paused=${before.paused}, ended=${before.ended}, ready=${before.readyState})`
+    );
+  }
+  if (!before.muted || before.volume !== 0) {
+    fail(`${label}: expected initial playback to be muted without a click (muted=${before.muted}, volume=${before.volume})`);
+  }
+
+  await page.waitForTimeout(1_500);
+  const afterWait = await sampleVideo(page);
+  const timeAdvanced = afterWait.currentTime > before.currentTime + 0.25;
+  const framesAdvanced = afterWait.frames !== null && before.frames !== null && afterWait.frames > before.frames;
+  if (!timeAdvanced && !framesAdvanced) {
+    fail(
+      `${label}: muted playback did not advance before a click ` +
+        `(time ${before.currentTime.toFixed(2)} -> ${afterWait.currentTime.toFixed(2)}, ` +
+        `frames ${before.frames ?? "n/a"} -> ${afterWait.frames ?? "n/a"})`
+    );
+  }
+
+  const video = page.locator("video").first();
+  const box = await video.boundingBox();
+  if (!box) fail(`${label}: video had no visible bounds for center-click regression`);
+  await video.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await page.waitForTimeout(500);
+
+  const afterClick = await sampleVideo(page);
+  if (afterClick.paused || afterClick.ended) {
+    fail(`${label}: center click paused playback instead of keeping the stream running`);
+  }
+  if (afterClick.muted || afterClick.volume <= 0.01) {
+    fail(`${label}: center click did not unmute playback (muted=${afterClick.muted}, volume=${afterClick.volume})`);
+  }
+
+  await page.waitForTimeout(1_000);
+  const afterClickWait = await sampleVideo(page);
+  const clickTimeAdvanced = afterClickWait.currentTime > afterClick.currentTime + 0.25;
+  const clickFramesAdvanced =
+    afterClickWait.frames !== null && afterClick.frames !== null && afterClickWait.frames > afterClick.frames;
+  if (!clickTimeAdvanced && !clickFramesAdvanced) {
+    fail(`${label}: playback did not keep advancing after center-click unmute`);
+  }
+}
+
 async function observeStartupStability(page, label) {
+  const baselineEventCount = await page.locator("video").first().evaluate(() => {
+    return Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents.length : 0;
+  });
   await page.waitForTimeout(STARTUP_STABILITY_MS);
-  const result = await page.locator("video").first().evaluate((video) => {
+  const result = await page.locator("video").first().evaluate((video, baseline) => {
     const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
-    const firstPlaying = events.findIndex((entry) => entry.event === "playing");
-    const interruptions = firstPlaying < 0
-      ? []
-      : events.slice(firstPlaying + 1).filter((entry) => entry.event === "waiting" || entry.event === "stalled" || entry.event === "error");
+    const windowEvents = events.slice(baseline);
+    const interruptions = windowEvents.filter((entry) => entry.event === "waiting" || entry.event === "stalled" || entry.event === "error");
     const fallbackVisual = document.querySelector('[data-testid="audio-fallback-visual"]');
     const fallbackArtwork = fallbackVisual?.querySelector("img");
     const fallbackRect = fallbackVisual?.getBoundingClientRect();
     return {
-      events,
+      events: windowEvents,
       interruptions,
       sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
       startupBuffer: Number(video.dataset.dstreamStartupBuffer),
@@ -231,7 +336,7 @@ async function observeStartupStability(page, label) {
       fallbackVisualVisible: !!fallbackVisual && !!fallbackRect && fallbackRect.width > 0 && fallbackRect.height > 0,
       fallbackArtworkLoaded: fallbackArtwork instanceof HTMLImageElement && fallbackArtwork.complete && fallbackArtwork.naturalWidth > 0
     };
-  });
+  }, baselineEventCount);
   if (result.interruptions.length > 0) {
     fail(`${label}: playback was interrupted during the startup stability window (${JSON.stringify(result.interruptions)})`);
   }
@@ -265,6 +370,25 @@ async function openRun(context, scenario, stream, index) {
       return originalSetItem.call(this, key, value);
     };
   });
+  if (INITIAL_VISIBILITY === "hidden") {
+    await page.addInitScript(() => {
+      const stateKey = "__dstreamPlaybackSoakVisibility";
+      Object.defineProperty(document, stateKey, { configurable: true, writable: true, value: "hidden" });
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => document[stateKey]
+      });
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => document[stateKey] === "hidden"
+      });
+    });
+  }
+  if (IDENTITY_STORE_FIXTURE) {
+    await page.addInitScript((identityStore) => {
+      localStorage.setItem("dstream_identity_store_v2", JSON.stringify(identityStore));
+    }, IDENTITY_STORE_FIXTURE);
+  }
   const diagnostics = { errors: [], relayErrors: 0, relayMessages: [] };
   const title = String(stream.title || stream.streamId);
   page.on("pageerror", (error) => diagnostics.errors.push(error.stack || error.message));
@@ -308,7 +432,12 @@ async function openRun(context, scenario, stream, index) {
     await page.locator("video").first().evaluate((video, identity) => {
       video.dataset.playbackSoakIdentity = identity;
     }, marker);
+    if (INITIAL_VISIBILITY === "hidden") {
+      await page.waitForTimeout(1_000);
+      await setSyntheticVisibility(page, "visible");
+    }
     await startPlayback(page);
+    await verifyMutedAutoplayAndCenterClick(page, `${scenario}/${title}`);
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
     console.log(
       `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
@@ -693,6 +822,9 @@ async function verifyNoColdMiniPlayerRestore(run) {
 }
 
 async function main() {
+  if (EXPECT_PRIVATE_ALLOWLISTED && !IDENTITY_STORE_FIXTURE) {
+    fail("PLAYBACK_EXPECT_PRIVATE_ALLOWLISTED=1 requires PLAYBACK_IDENTITY_STORE_JSON for the allowlisted viewer identity");
+  }
   const sources = await loadSources();
   const browserEntries = [];
   const runs = [];
@@ -728,6 +860,14 @@ async function main() {
     }
 
     if (runs.length === 0) fail("no valid playback scenarios selected");
+    if (STARTUP_ONLY) {
+      for (const run of runs) {
+        console.log(`  PASS ${run.scenario} / ${run.title}: muted startup and center-click unmute`);
+      }
+      console.log("PASS: production playback startup checks complete");
+      return;
+    }
+
     for (const run of runs) {
       run.last = await sampleVideo(run.page);
       run.lastSampledAt = Date.now();

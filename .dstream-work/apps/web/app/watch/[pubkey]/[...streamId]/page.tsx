@@ -2208,7 +2208,7 @@ export default function WatchPage() {
                                 ? "SHA-256 unavailable in this browser context"
                                 : integritySnapshot.verifiedOk > 0
                                   ? "Segments verified"
-                                  : "Waiting for manifests / first verified segment"
+                                  : "Integrity verification pending"
                           }
                         >
                           integrity:

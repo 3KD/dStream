@@ -1010,6 +1010,80 @@ export function Player({
     }
 
     const video = videoRef.current;
+    let cancelled = false;
+    let hiddenStartupRetryPending = false;
+    let startupPlayAttemptId = 0;
+    let removeHiddenStartupRetryListener: (() => void) | null = null;
+    const applyStartupMutedIntent = () => {
+      const startMuted = effectiveAutoplayMuted || desiredVolumeRef.current <= 0;
+      try {
+        video.defaultMuted = startMuted;
+        video.muted = startMuted;
+        if (startMuted && video.volume !== 0) video.volume = 0;
+      } catch {
+        // ignore unsupported media writes
+      }
+      if (startMuted) {
+        setVolume((current) => (current === 0 ? current : 0));
+      }
+    };
+    const clearHiddenStartupRetryListener = () => {
+      try {
+        removeHiddenStartupRetryListener?.();
+      } catch {
+        // ignore
+      }
+      removeHiddenStartupRetryListener = null;
+      hiddenStartupRetryPending = false;
+    };
+    const isHiddenDocument = () =>
+      typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden");
+    const scheduleHiddenStartupRetry = (): boolean => {
+      const startMuted = effectiveAutoplayMuted || video.muted || desiredVolumeRef.current <= 0;
+      if (!startMuted || typeof document === "undefined" || !isHiddenDocument()) return false;
+      hiddenStartupRetryPending = true;
+      setNeedsClick(false);
+      if (removeHiddenStartupRetryListener) return true;
+      const onVisibilityRetry = () => {
+        if (cancelled || !hiddenStartupRetryPending || isHiddenDocument()) return;
+        clearHiddenStartupRetryListener();
+        applyStartupMutedIntent();
+        attemptStartupPlayback();
+      };
+      document.addEventListener("visibilitychange", onVisibilityRetry);
+      window.addEventListener("pageshow", onVisibilityRetry);
+      window.addEventListener("focus", onVisibilityRetry);
+      removeHiddenStartupRetryListener = () => {
+        document.removeEventListener("visibilitychange", onVisibilityRetry);
+        window.removeEventListener("pageshow", onVisibilityRetry);
+        window.removeEventListener("focus", onVisibilityRetry);
+      };
+      return true;
+    };
+    const showClickToPlayFromRejectedStart = () => {
+      if (cancelled) return;
+      setStatus("Click to play");
+      setNeedsClick(true);
+    };
+    const attemptStartupPlayback = () => {
+      if (cancelled) return;
+      const attemptId = ++startupPlayAttemptId;
+      setNeedsClick(false);
+      if (scheduleHiddenStartupRetry()) {
+        applyStartupMutedIntent();
+      }
+      try {
+        void video.play().catch(() => {
+          if (attemptId !== startupPlayAttemptId && !isHiddenDocument()) return;
+          if (scheduleHiddenStartupRetry()) return;
+          showClickToPlayFromRejectedStart();
+        });
+      } catch {
+        if (attemptId !== startupPlayAttemptId && !isHiddenDocument()) return;
+        if (scheduleHiddenStartupRetry()) return;
+        showClickToPlayFromRejectedStart();
+      }
+    };
     liveHlsActivityRef.current = {
       lastFragBufferedAt: 0,
       lastFragChangedAt: 0,
@@ -1031,7 +1105,6 @@ export function Player({
     });
     startupGatePendingRef.current = false;
     video.dataset.dstreamStartupGate = "released";
-    let cancelled = false;
     const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
       !isLiveStream &&
@@ -1063,15 +1136,7 @@ export function Player({
     } catch {
       // ignore
     }
-    try {
-      // Default to muted so autoplay works across browsers; users can unmute via controls.
-      video.muted = effectiveAutoplayMuted;
-      if (effectiveAutoplayMuted) {
-        setVolume((current) => (current === 0 ? current : 0));
-      }
-    } catch {
-      // ignore
-    }
+    applyStartupMutedIntent();
     let readySent = false;
     const sendReady = () => {
       if (readySent) return;
@@ -1134,10 +1199,7 @@ export function Player({
       setStartupGatePending(false);
       setStatus("Ready");
       sendReady();
-      void video.play().catch(() => {
-        setStatus("Click to play");
-        setNeedsClick(true);
-      });
+      if (video.paused || video.ended) attemptStartupPlayback();
     };
     const waitForHlsStartupBuffer = (hls: Hls) => {
       clearHlsStartupListener();
@@ -1198,6 +1260,7 @@ export function Player({
         }
       }
       setStatus("Buffering…");
+      attemptStartupPlayback();
       hls.on(Hls.Events.FRAG_BUFFERED, maybeStart);
       video.addEventListener("canplay", maybeStart);
       video.addEventListener("progress", maybeStart);
@@ -1310,10 +1373,7 @@ export function Player({
       video.addEventListener("loadedmetadata", onLoaded);
       video.addEventListener("error", onDirectError);
       video.src = mediaSource;
-      void video.play().catch(() => {
-        setStatus("Click to play");
-        setNeedsClick(true);
-      });
+      attemptStartupPlayback();
       removeNativeListener = () => {
         video.removeEventListener("loadedmetadata", onLoaded);
         video.removeEventListener("error", onDirectError);
@@ -1431,15 +1491,24 @@ export function Player({
           setNeedsClick(true);
         }, 6500);
         video.src = hlsSource;
-        void video.play().catch(() => {
-          if (cancelled || nativeSettled) return;
-          if (Hls.isSupported()) {
-            setStatus("Loading…");
-            return;
+        try {
+          void video.play().catch(() => {
+            if (cancelled || nativeSettled) return;
+            if (Hls.isSupported()) {
+              setStatus("Loading…");
+              return;
+            }
+            showClickToPlayFromRejectedStart();
+          });
+        } catch {
+          if (!cancelled && !nativeSettled) {
+            if (Hls.isSupported()) {
+              setStatus("Loading…");
+            } else {
+              showClickToPlayFromRejectedStart();
+            }
           }
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        }
         removeNativeListener = () => {
           cleanupNativeListeners();
         };
@@ -1784,10 +1853,7 @@ export function Player({
         applyPersistedSeek();
 
         setStartupGatePending(false);
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        attemptStartupPlayback();
 
         return true;
       } catch {
@@ -1851,6 +1917,7 @@ export function Player({
       }
       clearWhepStallTimer();
       clearHlsStartupListener();
+      clearHiddenStartupRetryListener();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (whepRef.current) {
