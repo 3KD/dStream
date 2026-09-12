@@ -1,6 +1,6 @@
 import { M3U8Parser } from "hls.js";
 
-const ROTATING_PROVIDER_ROOTS = ["zap.stream", "letsfo.com"] as const;
+const ROTATING_PROVIDER_ROOTS = ["zap.stream", "letsfo.com", "streamroad.money", "streamstr.net"] as const;
 
 export type RotatingMasterLevel = {
   url: string;

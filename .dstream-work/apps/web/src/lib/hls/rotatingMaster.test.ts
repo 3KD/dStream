@@ -24,10 +24,13 @@ async function loadMasterParser() {
   return hls.M3U8Parser;
 }
 
-test("identifies Zap and letsfo rotating HLS providers without suffix confusion", () => {
+test("identifies rotating HLS providers without suffix confusion", () => {
   assert.equal(isZapStreamHlsUrl("https://zap.stream/live.m3u8"), true);
   assert.equal(isRotatingHlsProviderUrl("https://s1.letsfo.com/id/hls/live.m3u8"), true);
+  assert.equal(isRotatingHlsProviderUrl("https://api.streamroad.money/id/hls/live.m3u8"), true);
+  assert.equal(isRotatingHlsProviderUrl("https://streamstr.net/id/hls/live.m3u8"), true);
   assert.equal(isRotatingHlsProviderUrl("https://evilletsfo.com/live.m3u8"), false);
+  assert.equal(isRotatingHlsProviderUrl("https://notstreamstr.net.example/live.m3u8"), false);
   assert.equal(isRotatingHlsProviderUrl("/api/hls/local/index.m3u8"), false);
 });
 

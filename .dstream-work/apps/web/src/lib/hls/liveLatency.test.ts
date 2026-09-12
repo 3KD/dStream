@@ -3,16 +3,8 @@ import test from "node:test";
 import {
   findBufferedLiveStartupTarget,
   findBufferedLiveSyncTarget,
-  getLiveLatencyRecoveryLimit,
   hasRepeatedMediaGaps
 } from "./liveLatency";
-
-test("derives a recovery limit from the source latency and segment duration", () => {
-  assert.equal(getLiveLatencyRecoveryLimit(1.75, 2), 7.75);
-  assert.equal(getLiveLatencyRecoveryLimit(6, 2), 12);
-  assert.equal(getLiveLatencyRecoveryLimit(Number.NaN, 2), null);
-  assert.equal(getLiveLatencyRecoveryLimit(2, 0), null);
-});
 
 test("selects the live position only when media is already buffered there", () => {
   const ranges = [
@@ -37,6 +29,14 @@ test("starts live playback from the newest safe buffered position", () => {
   assert.equal(findBufferedLiveStartupTarget(ranges, Number.NaN, 0.5), 53.5);
   assert.equal(findBufferedLiveStartupTarget([{ start: 10, end: 10.4 }], null, 0.5), 10.2);
   assert.equal(findBufferedLiveStartupTarget([], 12, 0.5), null);
+});
+
+test("rejects a stale live sync point before low-latency playback starts", () => {
+  const ranges = [{ start: 34.837, end: 43.178 }];
+
+  assert.equal(findBufferedLiveStartupTarget(ranges, 35.067, 0.5, 2.5), 40.678);
+  assert.equal(findBufferedLiveStartupTarget(ranges, 41.428, 0.5, 2.5), 41.428);
+  assert.equal(findBufferedLiveStartupTarget(ranges, 42.95, 0.5, 2.5), 40.678);
 });
 
 test("requires recurring media gaps inside the recovery window", () => {

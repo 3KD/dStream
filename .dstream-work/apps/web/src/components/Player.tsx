@@ -7,7 +7,6 @@ import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
   findBufferedLiveStartupTarget,
   findBufferedLiveSyncTarget,
-  getLiveLatencyRecoveryLimit,
   hasRepeatedMediaGaps
 } from "@/lib/hls/liveLatency";
 import {
@@ -27,6 +26,7 @@ import { WhepClient } from "@/lib/whep";
 import { pickPlaybackMode } from "@/lib/whep-fallback";
 import { inferMediaUrlKind } from "@/lib/mediaUrl";
 import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
+import { resolveStartupAudioPreference } from "@/lib/playbackAudio";
 import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
 
 interface PlayerProps {
@@ -238,7 +238,7 @@ function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
     backBufferLength: 60,
     ...(lowLatencyMode
       ? {
-          maxLiveSyncPlaybackRate: 1.1,
+          maxLiveSyncPlaybackRate: options.bridgeLiveGaps ? 1 : 1.1,
           liveSyncOnStallIncrease: 0.25
         }
       : {
@@ -449,24 +449,18 @@ export function Player({
   }, [onReady]);
 
   useEffect(() => {
+    if (!playbackStartupPolicyReady) return;
     const persisted = readPersistedPlaybackState(playbackStateKeyRef.current);
-    if (persisted) {
-      const persistedMuted = persisted.muted === true;
-      const persistedVolume = clampUnit(typeof persisted.volume === "number" ? persisted.volume : 1);
-      if (!effectiveBackgroundPlayEnabled && effectiveAutoplayMuted) {
-        if (!persistedMuted && persistedVolume > 0) lastAudibleVolumeRef.current = persistedVolume;
-        setVolume(0);
-        return;
-      }
-      if (effectiveBackgroundPlayEnabled) {
-        setVolume(persistedMuted ? 0 : Math.max(0.05, persistedVolume || 1));
-        return;
-      }
-      setVolume(persistedMuted ? 0 : persistedVolume);
-      return;
+    const preference = resolveStartupAudioPreference({
+      persisted,
+      autoplayMuted: effectiveAutoplayMuted,
+      backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+    });
+    if (preference.rememberedAudibleVolume !== null) {
+      lastAudibleVolumeRef.current = preference.rememberedAudibleVolume;
     }
-    setVolume(effectiveAutoplayMuted ? 0 : 1);
-  }, [effectiveAutoplayMuted, effectiveBackgroundPlayEnabled, playbackStateKey]);
+    setVolume(preference.volume);
+  }, [effectiveAutoplayMuted, effectiveBackgroundPlayEnabled, playbackStartupPolicyReady, playbackStateKey]);
 
   useEffect(() => {
     setBackgroundPlayEnabled(readBackgroundPlayPreference());
@@ -583,6 +577,7 @@ export function Player({
       }
       mediaSession.setActionHandler("play", () => {
         setUserPausedPlayback(false, video);
+        if (startupGatePendingRef.current) return;
         void video.play().catch(() => {
           // ignore
         });
@@ -839,10 +834,12 @@ export function Player({
         } catch {
           // The next watchdog pass can escalate if the HLS instance cannot restart.
         }
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        if (!startupGatePendingRef.current) {
+          void video.play().catch(() => {
+            setStatus("Click to play");
+            setNeedsClick(true);
+          });
+        }
         return true;
       };
       const starvationRecoveryThresholdMs = 6_000;
@@ -948,7 +945,7 @@ export function Player({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !playbackStateKey) return;
+    if (!video || !playbackStateKey || !playbackStartupPolicyReady) return;
 
     let lastWriteAt = 0;
     const persist = () => {
@@ -971,13 +968,12 @@ export function Player({
 
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("volumechange", onVolumePersist);
-    persist();
     return () => {
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("volumechange", onVolumePersist);
       persist();
     };
-  }, [playbackStateKey, normalizedSrc, normalizedWhepSrc]);
+  }, [playbackStateKey, playbackStartupPolicyReady, normalizedSrc, normalizedWhepSrc]);
 
   useEffect(() => {
     const onFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
@@ -1039,6 +1035,116 @@ export function Player({
     }
 
     const video = videoRef.current;
+    const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
+    const startupAudioPreference = resolveStartupAudioPreference({
+      persisted: persistedPlayback,
+      autoplayMuted: effectiveAutoplayMuted,
+      backgroundPlayEnabled: effectiveBackgroundPlayEnabled
+    });
+    if (startupAudioPreference.rememberedAudibleVolume !== null) {
+      lastAudibleVolumeRef.current = startupAudioPreference.rememberedAudibleVolume;
+    }
+    let cancelled = false;
+    let hiddenStartupRetryPending = false;
+    let startupPlayAttemptId = 0;
+    let removeHiddenStartupRetryListener: (() => void) | null = null;
+    let runHiddenStartupRetry: (() => void) | null = null;
+    const applyPlaybackVolume = (nextVolume: number, muted: boolean) => {
+      try {
+        if (Math.abs(video.volume - nextVolume) > 0.001) video.volume = nextVolume;
+        video.muted = muted;
+      } catch {
+        // ignore unsupported media writes
+      }
+    };
+    const applyStartupAudioPreference = () => {
+      const { muted, volume: startupVolume } = startupAudioPreference;
+      desiredVolumeRef.current = startupVolume;
+      try {
+        video.defaultMuted = muted;
+      } catch {
+        // ignore unsupported media writes
+      }
+      applyPlaybackVolume(startupVolume, muted);
+      setVolume((current) => (Math.abs(current - startupVolume) < 0.001 ? current : startupVolume));
+    };
+    const restoreDesiredPlaybackVolume = () => {
+      const desiredVolume = clampUnit(desiredVolumeRef.current);
+      applyPlaybackVolume(desiredVolume, desiredVolume === 0);
+    };
+    const clearHiddenStartupRetryListener = () => {
+      try {
+        removeHiddenStartupRetryListener?.();
+      } catch {
+        // ignore
+      }
+      removeHiddenStartupRetryListener = null;
+      hiddenStartupRetryPending = false;
+      runHiddenStartupRetry = null;
+    };
+    const isHiddenDocument = () =>
+      typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden");
+    const scheduleHiddenStartupRetry = (retry: () => void): boolean => {
+      if (typeof document === "undefined" || typeof window === "undefined" || !isHiddenDocument()) return false;
+      hiddenStartupRetryPending = true;
+      runHiddenStartupRetry = retry;
+      setNeedsClick(false);
+      if (removeHiddenStartupRetryListener) return true;
+      const onVisibilityRetry = () => {
+        if (cancelled || !hiddenStartupRetryPending || isHiddenDocument()) return;
+        const retryStartupPlayback = runHiddenStartupRetry;
+        clearHiddenStartupRetryListener();
+        restoreDesiredPlaybackVolume();
+        retryStartupPlayback?.();
+      };
+      document.addEventListener("visibilitychange", onVisibilityRetry);
+      window.addEventListener("pageshow", onVisibilityRetry);
+      window.addEventListener("focus", onVisibilityRetry);
+      removeHiddenStartupRetryListener = () => {
+        document.removeEventListener("visibilitychange", onVisibilityRetry);
+        window.removeEventListener("pageshow", onVisibilityRetry);
+        window.removeEventListener("focus", onVisibilityRetry);
+      };
+      return true;
+    };
+    const showClickToPlayFromRejectedStart = () => {
+      if (cancelled) return;
+      setStatus("Click to play");
+      setNeedsClick(true);
+    };
+    const attemptStartupPlayback = (options: { onRejected?: () => void } = {}) => {
+      if (cancelled || startupGatePendingRef.current) return;
+      const attemptId = ++startupPlayAttemptId;
+      const retry = () => attemptStartupPlayback(options);
+      video.dataset.dstreamStartupPlayAttempts = String(attemptId);
+      video.dataset.dstreamStartupPlayGate = video.dataset.dstreamStartupGate ?? "unknown";
+      video.dataset.dstreamStartupPlayCurrentTime = Number.isFinite(video.currentTime)
+        ? video.currentTime.toFixed(3)
+        : "unknown";
+      setNeedsClick(false);
+      restoreDesiredPlaybackVolume();
+      scheduleHiddenStartupRetry(retry);
+      const handleRejectedStart = () => {
+        if (cancelled) return;
+        if (attemptId !== startupPlayAttemptId && !isHiddenDocument()) return;
+        if (scheduleHiddenStartupRetry(retry)) return;
+        if (options.onRejected) {
+          options.onRejected();
+          return;
+        }
+        showClickToPlayFromRejectedStart();
+      };
+      try {
+        void Promise.resolve(video.play()).then(
+          () => {
+            if (attemptId === startupPlayAttemptId) clearHiddenStartupRetryListener();
+          },
+          handleRejectedStart
+        );
+      } catch {
+        handleRejectedStart();
+      }
+    };
     liveHlsActivityRef.current = {
       lastFragBufferedAt: 0,
       lastFragChangedAt: 0,
@@ -1060,8 +1166,6 @@ export function Player({
     });
     startupGatePendingRef.current = false;
     video.dataset.dstreamStartupGate = "released";
-    let cancelled = false;
-    const persistedPlayback = readPersistedPlaybackState(playbackStateKeyRef.current);
     const persistedResumeTime =
       !isLiveStream &&
       persistedPlayback &&
@@ -1092,15 +1196,7 @@ export function Player({
     } catch {
       // ignore
     }
-    try {
-      // Default to muted so autoplay works across browsers; users can unmute via controls.
-      video.muted = effectiveAutoplayMuted;
-      if (effectiveAutoplayMuted) {
-        setVolume((current) => (current === 0 ? current : 0));
-      }
-    } catch {
-      // ignore
-    }
+    applyStartupAudioPreference();
     let readySent = false;
     const sendReady = () => {
       if (readySent) return;
@@ -1161,16 +1257,18 @@ export function Player({
     const setStartupGatePending = (pending: boolean) => {
       startupGatePendingRef.current = pending;
       video.dataset.dstreamStartupGate = pending ? "pending" : "released";
+      const changedAt =
+        typeof performance !== "undefined" && Number.isFinite(performance.now()) ? performance.now() : Date.now();
+      video.dataset.dstreamStartupGateChangedAt = changedAt.toFixed(3);
+      if (pending) video.dataset.dstreamStartupGatePendingAt = changedAt.toFixed(3);
+      else video.dataset.dstreamStartupGateReleasedAt = changedAt.toFixed(3);
       if (!pending) video.dataset.dstreamStartupBuffer = getBufferedAheadSeconds().toFixed(3);
     };
     const beginHlsPlayback = () => {
       setStartupGatePending(false);
       setStatus("Ready");
       sendReady();
-      void video.play().catch(() => {
-        setStatus("Click to play");
-        setNeedsClick(true);
-      });
+      if (video.paused || video.ended) attemptStartupPlayback();
     };
     const waitForHlsStartupBuffer = (hls: Hls, onUnbufferedLiveTimeout?: () => boolean) => {
       clearHlsStartupListener();
@@ -1226,6 +1324,23 @@ export function Player({
           effectiveLowLatencyEnabled && typeof liveSyncPosition === "number"
             ? findBufferedLiveSyncTarget(startupRanges, liveSyncPosition)
             : null;
+        const reportedTargetLatency = hls.targetLatency;
+        const startupBufferGoalSeconds =
+          effectiveLowLatencyEnabled && typeof reportedTargetLatency === "number" && reportedTargetLatency >= 4
+            ? Math.min(2, reportedTargetLatency / 3)
+            : targetBufferSeconds;
+        const preferredStartupLatency =
+          effectiveLowLatencyEnabled && typeof reportedTargetLatency === "number" && Number.isFinite(reportedTargetLatency)
+            ? Math.max(reportedTargetLatency, rotatingHlsProviderMode ? 2.5 : targetBufferSeconds)
+            : targetBufferSeconds;
+        const bufferedStartupTarget = effectiveLowLatencyEnabled
+          ? findBufferedLiveStartupTarget(
+              startupRanges,
+              liveSyncPosition,
+              startupBufferGoalSeconds,
+              preferredStartupLatency
+            )
+          : null;
         const waitingForBufferedLiveSync = effectiveLowLatencyEnabled && bufferedLiveSyncTarget === null;
         if (waitingForBufferedLiveSync && onUnbufferedLiveTimeout && waitedMs >= liveStartupWaitMs) {
           if (onUnbufferedLiveTimeout()) {
@@ -1235,26 +1350,23 @@ export function Player({
             return;
           }
         }
+        if (!hasStartupMedia) return;
         if (waitingForBufferedLiveSync && waitedMs < liveStartupWaitMs) return;
         if (
-          bufferedAhead >= targetBufferSeconds ||
-          (startupRange?.duration ?? 0) >= targetBufferSeconds ||
+          bufferedAhead >= startupBufferGoalSeconds ||
+          (startupRange?.duration ?? 0) >= startupBufferGoalSeconds ||
           waitedMs >= (hasStartupMedia ? maxWaitMs : liveStartupWaitMs)
         ) {
-          const shouldAlignToLiveSync =
-            bufferedLiveSyncTarget !== null && Math.abs(bufferedLiveSyncTarget - video.currentTime) > 0.25;
-          if ((bufferedAhead === 0 || shouldAlignToLiveSync) && startupRange && startupRange.duration > 0.25) {
+          const shouldAlignToStartupTarget =
+            bufferedStartupTarget !== null && Math.abs(bufferedStartupTarget - video.currentTime) > 0.25;
+          if ((bufferedAhead === 0 || shouldAlignToStartupTarget) && startupRange && startupRange.duration > 0.25) {
             try {
-              const liveStartupTarget = effectiveLowLatencyEnabled
-                ? bufferedLiveSyncTarget ??
-                  findBufferedLiveStartupTarget(startupRanges, liveSyncPosition, targetBufferSeconds)
-                : null;
-              const startupTarget =
-                liveStartupTarget ?? startupRange.start + Math.min(0.1, startupRange.duration / 4);
+              const startupTarget = bufferedStartupTarget ?? startupRange.start + Math.min(0.1, startupRange.duration / 4);
+              video.dataset.dstreamStartupLatencyTarget = preferredStartupLatency.toFixed(3);
               video.dataset.dstreamStartupSeekMode =
-                bufferedLiveSyncTarget !== null
+                bufferedLiveSyncTarget !== null && Math.abs(bufferedLiveSyncTarget - startupTarget) <= 0.05
                   ? "live-sync"
-                  : liveStartupTarget !== null
+                  : bufferedStartupTarget !== null
                     ? "buffered-edge"
                     : "range-start";
               video.dataset.dstreamStartupSeekFrom = video.currentTime.toFixed(3);
@@ -1264,6 +1376,10 @@ export function Player({
               // ignore
             }
           }
+          if (
+            effectiveLowLatencyEnabled &&
+            getBufferedAheadSeconds() + 0.05 < startupBufferGoalSeconds
+          ) return;
           startNow();
         }
       }
@@ -1380,10 +1496,7 @@ export function Player({
       video.addEventListener("loadedmetadata", onLoaded);
       video.addEventListener("error", onDirectError);
       video.src = mediaSource;
-      void video.play().catch(() => {
-        setStatus("Click to play");
-        setNeedsClick(true);
-      });
+      attemptStartupPlayback();
       removeNativeListener = () => {
         video.removeEventListener("loadedmetadata", onLoaded);
         video.removeEventListener("error", onDirectError);
@@ -1399,10 +1512,7 @@ export function Player({
       delete video.dataset.dstreamStartupSeekMode;
       delete video.dataset.dstreamStartupSeekFrom;
       delete video.dataset.dstreamStartupSeekTo;
-      delete video.dataset.dstreamHlsResyncCount;
-      delete video.dataset.dstreamHlsResyncFrom;
-      delete video.dataset.dstreamHlsResyncTo;
-      delete video.dataset.dstreamHlsResyncReason;
+      delete video.dataset.dstreamStartupLatencyTarget;
       setStartupGatePending(true);
       setPlaybackMode("hls");
       liveHlsActivityRef.current = {
@@ -1508,14 +1618,15 @@ export function Player({
           setNeedsClick(true);
         }, 6500);
         video.src = hlsSource;
-        void video.play().catch(() => {
-          if (cancelled || nativeSettled) return;
-          if (Hls.isSupported()) {
-            setStatus("Loading…");
-            return;
+        attemptStartupPlayback({
+          onRejected: () => {
+            if (cancelled || nativeSettled) return;
+            if (Hls.isSupported()) {
+              setStatus("Loading…");
+              return;
+            }
+            showClickToPlayFromRejectedStart();
           }
-          setStatus("Click to play");
-          setNeedsClick(true);
         });
         removeNativeListener = () => {
           cleanupNativeListeners();
@@ -1578,44 +1689,6 @@ export function Player({
         bridgeLiveGaps
       });
       hlsRef.current = hls;
-
-      let lowLatencyRecoveryLimit: number | null = null;
-      let lastBufferedLiveResyncAt = 0;
-      let bufferedLiveResyncCount = 0;
-      const updateLowLatencyRecoveryLimit = (targetDuration: number | undefined) => {
-        if (!effectiveLowLatencyEnabled) return;
-        const targetLatency = hls.targetLatency;
-        if (typeof targetLatency !== "number" || typeof targetDuration !== "number") return;
-        lowLatencyRecoveryLimit = getLiveLatencyRecoveryLimit(targetLatency, targetDuration);
-        video.dataset.dstreamHlsMaxLatency = lowLatencyRecoveryLimit?.toFixed(3) ?? "";
-      };
-      const resyncToBufferedLiveEdge = (reason: string) => {
-        if (!effectiveLowLatencyEnabled || lowLatencyRecoveryLimit === null) return false;
-        const latency = hls.latency;
-        const liveSyncPosition = hls.liveSyncPosition;
-        if (!Number.isFinite(latency) || latency <= lowLatencyRecoveryLimit) return false;
-        if (typeof liveSyncPosition !== "number" || !Number.isFinite(liveSyncPosition)) return false;
-
-        const now = Date.now();
-        if (now - lastBufferedLiveResyncAt < 10_000) return false;
-        const ranges = readBufferedRanges();
-        const target = findBufferedLiveSyncTarget(ranges, liveSyncPosition);
-        if (target === null) return false;
-
-        const previousTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-        try {
-          video.currentTime = target;
-        } catch {
-          return false;
-        }
-        lastBufferedLiveResyncAt = now;
-        bufferedLiveResyncCount += 1;
-        video.dataset.dstreamHlsResyncCount = String(bufferedLiveResyncCount);
-        video.dataset.dstreamHlsResyncFrom = previousTime.toFixed(3);
-        video.dataset.dstreamHlsResyncTo = target.toFixed(3);
-        video.dataset.dstreamHlsResyncReason = reason;
-        return true;
-      };
 
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
@@ -1710,7 +1783,6 @@ export function Player({
           networkRecoveryTimer = null;
         }
         markLiveHlsActivity("lastFragBufferedAt");
-        resyncToBufferedLiveEdge("fragment-buffered");
       });
       hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
         markLiveHlsActivity("lastFragChangedAt");
@@ -1779,15 +1851,8 @@ export function Player({
         }, 0);
         return true;
       };
-      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-        markLiveHlsActivity("lastLevelUpdatedAt");
-        updateLowLatencyRecoveryLimit(data.details?.targetduration);
-      });
-      hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
-        markLiveHlsActivity("lastLevelUpdatedAt");
-        updateLowLatencyRecoveryLimit(data.details?.targetduration);
-        resyncToBufferedLiveEdge("playlist-updated");
-      });
+      hls.on(Hls.Events.LEVEL_LOADED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
+      hls.on(Hls.Events.LEVEL_UPDATED, () => markLiveHlsActivity("lastLevelUpdatedAt"));
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         const idx = typeof data?.level === "number" ? data.level : -1;
@@ -1861,10 +1926,12 @@ export function Player({
                   } catch {
                     return;
                   }
-                  void video.play().catch(() => {
-                    setStatus("Click to play");
-                    setNeedsClick(true);
-                  });
+                  if (!startupGatePendingRef.current) {
+                    void video.play().catch(() => {
+                      setStatus("Click to play");
+                      setNeedsClick(true);
+                    });
+                  }
                 }, retryDelayMs);
               }
               break;
@@ -1889,10 +1956,12 @@ export function Player({
                 setError("Unable to decode this media source.");
                 setStatus("Error");
               }
-              void video.play().catch(() => {
-                setStatus("Click to play");
-                setNeedsClick(true);
-              });
+              if (!startupGatePendingRef.current) {
+                void video.play().catch(() => {
+                  setStatus("Click to play");
+                  setNeedsClick(true);
+                });
+              }
             } catch {
               if (isLiveStream && !switchZapSourceToAudio("video-decoder-recovery-failed")) {
                 requestLivePlaybackReload("Media recovery failed. Reconnected with a fresh player session.");
@@ -1945,10 +2014,7 @@ export function Player({
         applyPersistedSeek();
 
         setStartupGatePending(false);
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        attemptStartupPlayback();
 
         return true;
       } catch {
@@ -2012,6 +2078,7 @@ export function Player({
       }
       clearWhepStallTimer();
       clearHlsStartupListener();
+      clearHiddenStartupRetryListener();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (whepRef.current) {
@@ -2208,6 +2275,7 @@ export function Player({
       video.currentTime = target;
       setTimelinePosition(target);
       setLiveEdgePinned(true);
+      if (startupGatePendingRef.current) return;
       void video.play().catch(() => {
         // ignore autoplay restrictions
       });
@@ -2220,6 +2288,7 @@ export function Player({
     const video = videoRef.current;
     if (!video) return;
     const next = Math.max(0.05, Math.min(1, lastAudibleVolumeRef.current || 1));
+    desiredVolumeRef.current = next;
     setVolume(next);
     setUnmuteHintPhase("hidden");
     try {
@@ -2230,16 +2299,17 @@ export function Player({
     }
   };
 
-    const enableBackgroundPlayFromGesture = () => {
-      const video = videoRef.current;
-      setBackgroundPlayEnabled(true);
-      if (backgroundPlayEnabledOverride === undefined) writeBackgroundPlayPreference(true);
-      setUserPausedPlayback(false, video);
-      configureAudioSessionForPlayback();
-      if (!video) return;
+  const enableBackgroundPlayFromGesture = () => {
+    const video = videoRef.current;
+    setBackgroundPlayEnabled(true);
+    if (backgroundPlayEnabledOverride === undefined) writeBackgroundPlayPreference(true);
+    setUserPausedPlayback(false, video);
+    configureAudioSessionForPlayback();
+    if (!video) return;
 
     setNeedsClick(false);
     unmuteFromGesture();
+    if (startupGatePendingRef.current) return;
     void video.play().catch(() => {
       setStatus("Click to play");
       setNeedsClick(true);
@@ -2258,19 +2328,20 @@ export function Player({
     enableBackgroundPlayFromGesture();
   };
 
-    const togglePlayPause = () => {
-      const video = videoRef.current;
-      if (!video) return;
-      if (video.paused || video.ended) {
-        setUserPausedPlayback(false, video);
-        void video.play().catch(() => {
-          // ignore autoplay restrictions
-        });
-        return;
-      }
-      setUserPausedPlayback(true, video);
-      video.pause();
-    };
+  const togglePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      setUserPausedPlayback(false, video);
+      if (startupGatePendingRef.current) return;
+      void video.play().catch(() => {
+        // ignore autoplay restrictions
+      });
+      return;
+    }
+    setUserPausedPlayback(true, video);
+    video.pause();
+  };
 
   const toggleMute = () => {
     const video = videoRef.current;
@@ -2279,6 +2350,7 @@ export function Player({
       unmuteFromGesture();
       return;
     }
+    desiredVolumeRef.current = 0;
     setVolume(0);
     try {
       video.muted = true;
@@ -2332,6 +2404,10 @@ export function Player({
   const handleVideoSurfaceInteraction = () => {
     const video = videoRef.current;
     if (!video) return;
+    if (startupGatePendingRef.current) {
+      revealMobileControls();
+      return;
+    }
 
     const currentlyMuted = video.muted || volume === 0;
     const currentlyPaused = video.paused || video.ended;
@@ -2405,7 +2481,7 @@ export function Player({
             <button
               onClick={() => {
                 setNsfwConsented(true);
-                if (videoRef.current) {
+                if (videoRef.current && !startupGatePendingRef.current) {
                   videoRef.current.play().catch(() => {});
                 }
               }}

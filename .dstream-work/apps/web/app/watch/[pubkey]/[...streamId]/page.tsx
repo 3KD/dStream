@@ -1813,6 +1813,9 @@ export default function WatchPage() {
 
         <div
           data-testid="watch-layout-grid"
+          data-private-live-access-state={
+            livePrivateAccessRequired ? (liveAccessToken ? "issued" : liveAccessBusy ? "verifying" : "required") : "not-required"
+          }
           className={`grid gap-6 ${
             desktopWatchLayout
               ? "grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] items-start"
@@ -2208,7 +2211,7 @@ export default function WatchPage() {
                                 ? "SHA-256 unavailable in this browser context"
                                 : integritySnapshot.verifiedOk > 0
                                   ? "Segments verified"
-                                  : "Waiting for manifests / first verified segment"
+                                  : "Integrity verification pending"
                           }
                         >
                           integrity:

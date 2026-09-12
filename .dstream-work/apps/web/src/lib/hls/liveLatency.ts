@@ -3,12 +3,6 @@ export type BufferedTimeRange = {
   end: number;
 };
 
-export function getLiveLatencyRecoveryLimit(targetLatency: number, targetDuration: number): number | null {
-  if (!Number.isFinite(targetLatency) || targetLatency < 0) return null;
-  if (!Number.isFinite(targetDuration) || targetDuration <= 0) return null;
-  return targetLatency + Math.max(6, targetDuration * 3);
-}
-
 export function findBufferedLiveSyncTarget(
   ranges: readonly BufferedTimeRange[],
   liveSyncPosition: number,
@@ -27,9 +21,14 @@ export function findBufferedLiveSyncTarget(
 export function findBufferedLiveStartupTarget(
   ranges: readonly BufferedTimeRange[],
   liveSyncPosition: number | null | undefined,
-  minimumBufferAhead = 0.5
+  minimumBufferAhead = 0.5,
+  preferredLatency?: number
 ): number | null {
-  if (!Number.isFinite(minimumBufferAhead) || minimumBufferAhead < 0) return null;
+  if (
+    !Number.isFinite(minimumBufferAhead) ||
+    minimumBufferAhead < 0 ||
+    (preferredLatency !== undefined && (!Number.isFinite(preferredLatency) || preferredLatency < 0))
+  ) return null;
 
   let latestRange: BufferedTimeRange | null = null;
   for (const range of ranges) {
@@ -40,16 +39,32 @@ export function findBufferedLiveStartupTarget(
 
   const duration = latestRange.end - latestRange.start;
   const safeEnd = latestRange.end - Math.min(minimumBufferAhead, duration / 2);
+  if (preferredLatency === undefined) {
+    if (
+      typeof liveSyncPosition === "number" &&
+      Number.isFinite(liveSyncPosition) &&
+      liveSyncPosition >= latestRange.start &&
+      liveSyncPosition <= latestRange.end
+    ) {
+      return Math.min(liveSyncPosition, safeEnd);
+    }
+    return safeEnd;
+  }
+
+  const boundedLatency = Math.max(minimumBufferAhead, preferredLatency);
+  const fallbackTarget = latestRange.end - Math.min(boundedLatency, duration / 2);
+  const maximumAcceptedLag = boundedLatency + Math.max(1, minimumBufferAhead);
   if (
     typeof liveSyncPosition === "number" &&
     Number.isFinite(liveSyncPosition) &&
     liveSyncPosition >= latestRange.start &&
-    liveSyncPosition <= latestRange.end
+    liveSyncPosition <= safeEnd &&
+    latestRange.end - liveSyncPosition <= maximumAcceptedLag
   ) {
-    return Math.min(liveSyncPosition, safeEnd);
+    return liveSyncPosition;
   }
 
-  return safeEnd;
+  return fallbackTarget;
 }
 
 export function hasRepeatedMediaGaps(

@@ -1,7 +1,28 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
+import path from "node:path";
 import process from "node:process";
-import { chromium, devices, firefox } from "playwright";
+
+const require = createRequire(import.meta.url);
+
+function loadPlaywright() {
+  try {
+    return require("playwright");
+  } catch (directError) {
+    for (const entry of String(process.env.PATH || "").split(path.delimiter)) {
+      if (path.basename(entry) !== ".bin" || path.basename(path.dirname(entry)) !== "node_modules") continue;
+      try {
+        return require(path.join(path.dirname(entry), "playwright"));
+      } catch {
+        // Keep searching npx-provided package roots.
+      }
+    }
+    throw directError;
+  }
+}
+
+const { chromium, devices, firefox } = loadPlaywright();
 
 const BASE_URL = String(process.env.EXTERNAL_BASE_URL || "https://dstream.stream").trim().replace(/\/+$/, "");
 function positiveNumber(value, fallback) {
@@ -14,6 +35,7 @@ const SOURCE_LIMIT = Math.floor(positiveNumber(process.env.PLAYBACK_SOURCE_LIMIT
 const START_TIMEOUT_MS = positiveNumber(process.env.PLAYBACK_START_TIMEOUT_MS, 45_000);
 const STALL_LIMIT_MS = positiveNumber(process.env.PLAYBACK_STALL_LIMIT_MS, 30_000);
 const STARTUP_STABILITY_MS = positiveNumber(process.env.PLAYBACK_STARTUP_STABILITY_MS, 15_000);
+const MAX_STARTUP_INTERRUPTION_MS = positiveNumber(process.env.PLAYBACK_MAX_STARTUP_INTERRUPTION_MS, 250);
 const ROUTE_HANDOFF_AFTER_MS = positiveNumber(
   process.env.PLAYBACK_ROUTE_HANDOFF_AFTER_MS,
   Math.min(45_000, Math.max(5_000, Math.floor(SOAK_MS / 2)))
@@ -22,6 +44,20 @@ const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
 const EXPECTED_SOURCE_MODE = String(process.env.PLAYBACK_EXPECT_SOURCE_MODE || "").trim();
+const PRESET_BACKGROUND_PLAY = process.env.PLAYBACK_PRESET_BACKGROUND_PLAY === "1";
+const EXPECT_MUTED_AUTOPLAY =
+  process.env.PLAYBACK_EXPECT_MUTED_AUTOPLAY === undefined
+    ? !PRESET_BACKGROUND_PLAY
+    : process.env.PLAYBACK_EXPECT_MUTED_AUTOPLAY !== "0";
+const EXPECT_PRIVATE_ALLOWLISTED = process.env.PLAYBACK_EXPECT_PRIVATE_ALLOWLISTED === "1";
+const IDENTITY_STORE_JSON = String(process.env.PLAYBACK_IDENTITY_STORE_JSON || "").trim();
+const INITIAL_VISIBILITY = String(process.env.PLAYBACK_INITIAL_VISIBILITY || "").trim().toLowerCase();
+const STARTUP_ONLY = process.env.PLAYBACK_STARTUP_ONLY === "1";
+const PLAY_AFTER_GATE_MAX_MS = positiveNumber(process.env.PLAYBACK_PLAY_AFTER_GATE_MAX_MS, 1_000);
+const STUB_HIDDEN_PLAY_REJECTION =
+  process.env.PLAYBACK_STUB_HIDDEN_PLAY_REJECTION === "1" ||
+  (INITIAL_VISIBILITY === "hidden" && process.env.PLAYBACK_STUB_HIDDEN_PLAY_REJECTION !== "0");
+const DISABLE_STARTUP_PROBE = process.env.PLAYBACK_DISABLE_STARTUP_PROBE === "1";
 const REQUESTED_SCENARIOS = new Set(
   String(process.env.PLAYBACK_SCENARIOS || "chromium-desktop,chromium-mobile,firefox-desktop")
     .split(",")
@@ -32,6 +68,20 @@ const REQUESTED_SCENARIOS = new Set(
 function fail(message) {
   throw new Error(message);
 }
+
+function readIdentityStoreFixture() {
+  if (!IDENTITY_STORE_JSON) return null;
+  try {
+    const parsed = JSON.parse(IDENTITY_STORE_JSON);
+    if (!parsed || typeof parsed !== "object") fail("PLAYBACK_IDENTITY_STORE_JSON must be a JSON object");
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("PLAYBACK_IDENTITY_STORE_JSON")) throw error;
+    fail("PLAYBACK_IDENTITY_STORE_JSON must be valid JSON");
+  }
+}
+
+const IDENTITY_STORE_FIXTURE = readIdentityStoreFixture();
 
 function runDetails(run, sample) {
   const recent = [...run.samples, sample]
@@ -163,8 +213,135 @@ async function setSyntheticVisibility(page, state) {
         get: () => target[stateKey] === "hidden"
       });
     }
+    const probe = window.__dstreamPlaybackProbe;
+    if (probe && Array.isArray(probe.visibilityTransitions)) {
+      const at = Math.round(performance.now());
+      probe.visibilityTransitions.push({ state: nextState, at });
+      if (nextState === "visible" && probe.visibleAt === null) probe.visibleAt = at;
+    }
     target.dispatchEvent(new Event("visibilitychange"));
   }, state);
+}
+
+async function getPlaybackProbe(page) {
+  return page.evaluate(() => {
+    const probe = window.__dstreamPlaybackProbe;
+    return {
+      hiddenPlayRejected: probe?.hiddenPlayRejected === true,
+      visibleAt: typeof probe?.visibleAt === "number" ? probe.visibleAt : null,
+      playAttempts: Array.isArray(probe?.playAttempts) ? probe.playAttempts : [],
+      gateTransitions: Array.isArray(probe?.gateTransitions) ? probe.gateTransitions : [],
+      visibilityTransitions: Array.isArray(probe?.visibilityTransitions) ? probe.visibilityTransitions : []
+    };
+  });
+}
+
+async function waitForSyntheticHiddenPlayRejection(page, label) {
+  if (!STUB_HIDDEN_PLAY_REJECTION) return;
+  const deadline = Date.now() + Math.min(START_TIMEOUT_MS, 30_000);
+  while (Date.now() < deadline) {
+    const probe = await getPlaybackProbe(page);
+    if (probe.hiddenPlayRejected) return;
+    await page.waitForTimeout(100);
+  }
+  const probe = await getPlaybackProbe(page);
+  fail(
+    `${label}: synthetic hidden startup never reached a rejected play attempt ` +
+      `(attempts=${JSON.stringify(probe.playAttempts)}, gate=${JSON.stringify(probe.gateTransitions)})`
+  );
+}
+
+async function verifySyntheticHiddenRetry(page, label) {
+  if (!STUB_HIDDEN_PLAY_REJECTION) return;
+  const probe = await getPlaybackProbe(page);
+  const rejected = probe.playAttempts.find((attempt) => attempt.syntheticRejected);
+  if (!rejected) fail(`${label}: hidden-page play rejection was not exercised`);
+  if (probe.visibleAt === null) fail(`${label}: synthetic visibility was never restored`);
+  const visibleAttempts = probe.playAttempts.filter(
+    (attempt) => attempt.at >= probe.visibleAt && !attempt.syntheticRejected
+  );
+  if (visibleAttempts.length === 0) {
+    fail(
+      `${label}: visibility restore did not trigger another play attempt ` +
+        `(visibleAt=${probe.visibleAt}, attempts=${JSON.stringify(probe.playAttempts)})`
+    );
+  }
+  if (!visibleAttempts.some((attempt) => typeof attempt.resolvedAt === "number")) {
+    fail(`${label}: no post-visibility play attempt resolved (${JSON.stringify(visibleAttempts)})`);
+  }
+}
+
+async function verifyStartupPlayOrdering(page, label) {
+  if (DISABLE_STARTUP_PROBE) return;
+  const probe = await getPlaybackProbe(page);
+  const firstAttempt = probe.playAttempts[0];
+  if (!firstAttempt) fail(`${label}: no media play() attempt was recorded`);
+
+  const pendingAttempts = probe.playAttempts.filter((attempt) => attempt.startupGate === "pending");
+  if (pendingAttempts.length > 0) {
+    fail(`${label}: play() was called while the live startup gate was pending (${JSON.stringify(pendingAttempts)})`);
+  }
+  if (firstAttempt.startupGate !== "released") {
+    fail(`${label}: first play() observed startup gate ${firstAttempt.startupGate}`);
+  }
+  if (firstAttempt.currentSrc.startsWith("blob:")) {
+    const activeRange = firstAttempt.buffered.find(
+      ([start, end]) => firstAttempt.currentTime >= start - 0.05 && firstAttempt.currentTime <= end + 0.05
+    );
+    if (!activeRange || activeRange[1] - firstAttempt.currentTime < 0.2) {
+      fail(
+        `${label}: HLS play() was called without a stable buffered target ` +
+          `(current=${firstAttempt.currentTime}, buffered=${JSON.stringify(firstAttempt.buffered)})`
+      );
+    }
+  }
+
+  const pendingAt = firstAttempt.startupGatePendingAt;
+  const releasedAt = firstAttempt.startupGateReleasedAt;
+  if (pendingAt !== null && releasedAt === null) {
+    fail(`${label}: startup gate entered pending state without a recorded release`);
+  }
+  if (releasedAt !== null && firstAttempt.at + 1 < releasedAt) {
+    fail(
+      `${label}: first play() preceded live startup gate release ` +
+        `(play=${firstAttempt.at}, release=${releasedAt})`
+    );
+  }
+  if (releasedAt !== null && firstAttempt.at - releasedAt > PLAY_AFTER_GATE_MAX_MS) {
+    fail(
+      `${label}: first play() was delayed ${firstAttempt.at - releasedAt}ms after live startup gate release ` +
+        `(limit=${PLAY_AFTER_GATE_MAX_MS}ms)`
+    );
+  }
+
+  if (typeof firstAttempt.startupSeekTo === "number") {
+    if (Math.abs(firstAttempt.currentTime - firstAttempt.startupSeekTo) > 0.4) {
+      fail(
+        `${label}: first play() was not aligned to the selected live startup target ` +
+          `(current=${firstAttempt.currentTime}, target=${firstAttempt.startupSeekTo})`
+      );
+    }
+    const targetBuffered = firstAttempt.buffered.some(
+      ([start, end]) => firstAttempt.startupSeekTo >= start - 0.1 && firstAttempt.startupSeekTo <= end + 0.1
+    );
+    if (!targetBuffered) {
+      fail(
+        `${label}: selected live startup target was outside buffered media ` +
+          `(target=${firstAttempt.startupSeekTo}, buffered=${JSON.stringify(firstAttempt.buffered)})`
+      );
+    }
+  }
+}
+
+async function verifyPrivateAllowlistedAccess(page, label) {
+  if (!EXPECT_PRIVATE_ALLOWLISTED) return;
+  const state = await page
+    .locator('[data-testid="watch-layout-grid"]')
+    .first()
+    .getAttribute("data-private-live-access-state");
+  if (state !== "issued") {
+    fail(`${label}: expected issued private live access marker, received ${state ?? "missing"}`);
+  }
 }
 
 async function verifyBackgroundResume(page, label) {
@@ -193,32 +370,130 @@ async function startPlayback(page) {
   while (Date.now() < deadline) {
     const result = await page.locator("video").first().evaluate((video) => {
       const startupGate = video.dataset.dstreamStartupGate ?? "unknown";
+      const clickToPlayVisible = Array.from(video.ownerDocument.querySelectorAll("button")).some((button) => {
+        if (!/^click to play$/i.test(button.textContent?.trim() ?? "")) return false;
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      });
+      const privateGate = video.ownerDocument.querySelector('[data-testid="private-live-access-gate"]');
       return {
         playing: !video.paused && !video.ended && video.readyState >= 2,
         gateBypassed: startupGate === "pending" && !video.paused,
         startupGate,
         readyState: video.readyState,
-        paused: video.paused
+        paused: video.paused,
+        muted: video.muted,
+        volume: Number(video.volume),
+        clickToPlayVisible,
+        privateGateVisible:
+          privateGate instanceof HTMLElement &&
+          privateGate.getBoundingClientRect().width > 0 &&
+          privateGate.getBoundingClientRect().height > 0
       };
     });
     if (result.gateBypassed) {
       fail(`playback began while the startup buffer gate was pending (ready=${result.readyState})`);
     }
+    if (result.privateGateVisible) {
+      fail("private playback access gate remained visible before media startup");
+    }
+    if (EXPECT_MUTED_AUTOPLAY && result.clickToPlayVisible) {
+      fail("click-to-play appeared before muted autoplay could start");
+    }
     if (result.playing) return;
-    lastError = `gate=${result.startupGate}, ready=${result.readyState}, paused=${result.paused}`;
+    lastError =
+      `gate=${result.startupGate}, ready=${result.readyState}, paused=${result.paused}, ` +
+      `muted=${result.muted}, volume=${result.volume}`;
     await page.waitForTimeout(100);
   }
   fail(`playback did not start within ${Math.round(START_TIMEOUT_MS / 1000)}s (${lastError})`);
 }
 
+async function verifyStartupAudioAndCenterClick(page, label) {
+  const before = await sampleVideo(page);
+  if (before.paused || before.ended || before.readyState < 2) {
+    fail(
+      `${label}: autoplay did not begin before a click ` +
+        `(paused=${before.paused}, ended=${before.ended}, ready=${before.readyState})`
+    );
+  }
+
+  if (!EXPECT_MUTED_AUTOPLAY) {
+    if (before.muted || before.volume <= 0.01) {
+      fail(`${label}: background startup lost audible intent (muted=${before.muted}, volume=${before.volume})`);
+    }
+    return;
+  }
+
+  if (!before.muted || before.volume !== 0) {
+    fail(`${label}: expected muted autoplay (muted=${before.muted}, volume=${before.volume})`);
+  }
+
+  await page.waitForTimeout(1_500);
+  const afterWait = await sampleVideo(page);
+  const timeAdvanced = afterWait.currentTime > before.currentTime + 0.25;
+  const framesAdvanced = afterWait.frames !== null && before.frames !== null && afterWait.frames > before.frames;
+  if (!timeAdvanced && !framesAdvanced) {
+    fail(
+      `${label}: muted playback did not advance before a click ` +
+        `(time ${before.currentTime.toFixed(2)} -> ${afterWait.currentTime.toFixed(2)}, ` +
+        `frames ${before.frames ?? "n/a"} -> ${afterWait.frames ?? "n/a"})`
+    );
+  }
+
+  const video = page.locator("video").first();
+  const box = await video.boundingBox();
+  if (!box) fail(`${label}: video had no visible bounds for center-click regression`);
+  const eventBaseline = await video.evaluate(() =>
+    Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents.length : 0
+  );
+  await video.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await page.waitForTimeout(500);
+
+  const afterClick = await sampleVideo(page);
+  if (afterClick.paused || afterClick.ended) {
+    fail(`${label}: center click paused playback instead of unmuting it`);
+  }
+  if (afterClick.muted || afterClick.volume <= 0.01) {
+    fail(`${label}: center click did not unmute playback (muted=${afterClick.muted}, volume=${afterClick.volume})`);
+  }
+
+  await page.waitForTimeout(1_000);
+  const afterClickWait = await sampleVideo(page);
+  const postClickPauseEvents = await video.evaluate((media, baseline) => {
+    const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
+    return events.slice(baseline).filter((entry) => entry.event === "pause");
+  }, eventBaseline);
+  if (postClickPauseEvents.length > 0) {
+    fail(`${label}: center click emitted a pause event (${JSON.stringify(postClickPauseEvents)})`);
+  }
+  const clickTimeAdvanced = afterClickWait.currentTime > afterClick.currentTime + 0.25;
+  const clickFramesAdvanced =
+    afterClickWait.frames !== null && afterClick.frames !== null && afterClickWait.frames > afterClick.frames;
+  if (!clickTimeAdvanced && !clickFramesAdvanced) {
+    fail(`${label}: playback did not keep advancing after center-click unmute`);
+  }
+}
+
 async function observeStartupStability(page, label) {
   await page.waitForTimeout(STARTUP_STABILITY_MS);
-  const result = await page.locator("video").first().evaluate((video) => {
+  const result = await page.locator("video").first().evaluate((video, maxInterruptionMs) => {
     const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
     const firstPlaying = events.findIndex((entry) => entry.event === "playing");
-    const interruptions = firstPlaying < 0
-      ? []
-      : events.slice(firstPlaying + 1).filter((entry) => entry.event === "waiting" || entry.event === "stalled" || entry.event === "error");
+    const playbackEvents = firstPlaying < 0 ? [] : events.slice(firstPlaying + 1);
+    const interruptions = [];
+    for (let index = 0; index < playbackEvents.length; index += 1) {
+      const entry = playbackEvents[index];
+      if (entry.event === "error") {
+        interruptions.push({ ...entry, durationMs: null });
+        continue;
+      }
+      if (entry.event !== "waiting" && entry.event !== "stalled") continue;
+      const resumed = playbackEvents.slice(index + 1).find((candidate) => candidate.event === "playing");
+      const durationMs = resumed ? resumed.at - entry.at : Number.POSITIVE_INFINITY;
+      if (durationMs > maxInterruptionMs) interruptions.push({ ...entry, durationMs });
+    }
     const fallbackVisual = document.querySelector('[data-testid="audio-fallback-visual"]');
     const fallbackArtwork = fallbackVisual?.querySelector("img");
     const fallbackRect = fallbackVisual?.getBoundingClientRect();
@@ -231,9 +506,12 @@ async function observeStartupStability(page, label) {
       fallbackVisualVisible: !!fallbackVisual && !!fallbackRect && fallbackRect.width > 0 && fallbackRect.height > 0,
       fallbackArtworkLoaded: fallbackArtwork instanceof HTMLImageElement && fallbackArtwork.complete && fallbackArtwork.naturalWidth > 0
     };
-  });
+  }, MAX_STARTUP_INTERRUPTION_MS);
   if (result.interruptions.length > 0) {
-    fail(`${label}: playback was interrupted during the startup stability window (${JSON.stringify(result.interruptions)})`);
+    fail(
+      `${label}: playback was interrupted during the startup stability window ` +
+        `(interruptions=${JSON.stringify(result.interruptions)}, events=${JSON.stringify(result.events)})`
+    );
   }
   if (result.startupGate !== "released") fail(`${label}: startup gate remained ${result.startupGate}`);
   if (EXPECTED_SOURCE_MODE && result.sourceMode !== EXPECTED_SOURCE_MODE) {
@@ -265,6 +543,123 @@ async function openRun(context, scenario, stream, index) {
       return originalSetItem.call(this, key, value);
     };
   });
+  if (!DISABLE_STARTUP_PROBE) await page.addInitScript(
+    ({ initialVisibility, stubHiddenPlayRejection, presetBackgroundPlay, identityStore }) => {
+      if (presetBackgroundPlay) localStorage.setItem("dstream_player_background_play_v1", "1");
+      if (identityStore) localStorage.setItem("dstream_identity_store_v2", JSON.stringify(identityStore));
+
+      if (initialVisibility === "hidden") {
+        const stateKey = "__dstreamPlaybackSoakVisibility";
+        Object.defineProperty(document, stateKey, { configurable: true, writable: true, value: "hidden" });
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => document[stateKey]
+        });
+        Object.defineProperty(document, "hidden", {
+          configurable: true,
+          get: () => document[stateKey] === "hidden"
+        });
+      }
+
+      const probe = {
+        hiddenPlayRejected: false,
+        visibleAt: null,
+        playAttempts: [],
+        gateTransitions: [],
+        visibilityTransitions: [],
+        mediaEvents: []
+      };
+      Object.defineProperty(window, "__dstreamPlaybackProbe", { configurable: true, value: probe });
+
+      const recordMediaEvent = (video, event) => {
+        probe.mediaEvents.push({
+          event,
+          at: Math.round(performance.now()),
+          currentTime: Number(video.currentTime.toFixed(3)),
+          readyState: video.readyState,
+          paused: video.paused,
+          startupGate: video.dataset.dstreamStartupGate ?? "unknown",
+          sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
+          hlsLevel: video.dataset.dstreamHlsLevel ?? null,
+          hlsFragment: video.dataset.dstreamHlsFragment ?? null,
+          hlsLatency: video.dataset.dstreamHlsLatency ?? null,
+          hlsTargetLatency: video.dataset.dstreamHlsTargetLatency ?? null,
+          fallbackReason: video.dataset.dstreamAudioFallbackReason ?? null,
+          buffered: Array.from({ length: video.buffered.length }, (_, rangeIndex) => [
+            Number(video.buffered.start(rangeIndex).toFixed(3)),
+            Number(video.buffered.end(rangeIndex).toFixed(3))
+          ])
+        });
+      };
+
+      const attached = new WeakSet();
+      const attachVideoProbe = (video) => {
+        if (attached.has(video)) return;
+        attached.add(video);
+        for (const event of ["play", "playing", "pause", "waiting", "stalled", "error"]) {
+          video.addEventListener(event, () => recordMediaEvent(video, event));
+        }
+        recordMediaEvent(video, "observed");
+      };
+
+      const originalPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function dstreamInstrumentedPlay(...args) {
+        attachVideoProbe(this);
+        const startupSeekToValue = Number(this.dataset?.dstreamStartupSeekTo);
+        const startupGatePendingAtValue = Number(this.dataset?.dstreamStartupGatePendingAt);
+        const startupGateReleasedAtValue = Number(this.dataset?.dstreamStartupGateReleasedAt);
+        const attempt = {
+          at: Math.round(performance.now()),
+          hidden: document.hidden || document.visibilityState === "hidden",
+          muted: this.muted,
+          volume: Number(this.volume),
+          startupGate: this.dataset?.dstreamStartupGate ?? "unknown",
+          startupGatePendingAt: Number.isFinite(startupGatePendingAtValue) ? startupGatePendingAtValue : null,
+          startupGateReleasedAt: Number.isFinite(startupGateReleasedAtValue) ? startupGateReleasedAtValue : null,
+          startupSeekMode: this.dataset?.dstreamStartupSeekMode ?? null,
+          startupSeekTo: Number.isFinite(startupSeekToValue) ? startupSeekToValue : null,
+          currentTime: Number(this.currentTime.toFixed(3)),
+          currentSrc: this.currentSrc || this.src || "",
+          buffered: Array.from({ length: this.buffered.length }, (_, rangeIndex) => [
+            Number(this.buffered.start(rangeIndex).toFixed(3)),
+            Number(this.buffered.end(rangeIndex).toFixed(3))
+          ]),
+          syntheticRejected: false
+        };
+        probe.playAttempts.push(attempt);
+        if (stubHiddenPlayRejection && !probe.hiddenPlayRejected && attempt.hidden) {
+          probe.hiddenPlayRejected = true;
+          attempt.syntheticRejected = true;
+          attempt.rejectedAt = Math.round(performance.now());
+          attempt.rejectName = "NotAllowedError";
+          return Promise.reject(new DOMException("Synthetic hidden play rejection", "NotAllowedError"));
+        }
+        try {
+          const result = originalPlay.apply(this, args);
+          Promise.resolve(result).then(
+            () => {
+              attempt.resolvedAt = Math.round(performance.now());
+            },
+            (error) => {
+              attempt.rejectedAt = Math.round(performance.now());
+              attempt.rejectName = error instanceof Error ? error.name : "Error";
+            }
+          );
+          return result;
+        } catch (error) {
+          attempt.rejectedAt = Math.round(performance.now());
+          attempt.rejectName = error instanceof Error ? error.name : "Error";
+          throw error;
+        }
+      };
+    },
+    {
+      initialVisibility: INITIAL_VISIBILITY,
+      stubHiddenPlayRejection: STUB_HIDDEN_PLAY_REJECTION,
+      presetBackgroundPlay: PRESET_BACKGROUND_PLAY,
+      identityStore: IDENTITY_STORE_FIXTURE
+    }
+  );
   const diagnostics = { errors: [], relayErrors: 0, relayMessages: [] };
   const title = String(stream.title || stream.streamId);
   page.on("pageerror", (error) => diagnostics.errors.push(error.stack || error.message));
@@ -278,11 +673,19 @@ async function openRun(context, scenario, stream, index) {
     }
   });
   let marker = "";
-  const background = scenario === "chromium-mobile";
+  const background = PRESET_BACKGROUND_PLAY || scenario === "chromium-mobile";
+  let startupStage = "navigate";
   try {
     await page.goto(watchUrl(stream), { waitUntil: "domcontentloaded", timeout: START_TIMEOUT_MS });
+    startupStage = "wait for video";
     await page.locator("video").first().waitFor({ state: "attached", timeout: START_TIMEOUT_MS });
+    startupStage = "bind startup events";
     await page.locator("video").first().evaluate((video) => {
+      const probedEvents = window.__dstreamPlaybackProbe?.mediaEvents;
+      if (Array.isArray(probedEvents)) {
+        window.__dstreamPlaybackStartupEvents = probedEvents;
+        return;
+      }
       const events = [];
       window.__dstreamPlaybackStartupEvents = events;
       const record = (event) => {
@@ -293,22 +696,36 @@ async function openRun(context, scenario, stream, index) {
           readyState: video.readyState,
           paused: video.paused,
           startupGate: video.dataset.dstreamStartupGate ?? "unknown",
-          buffered: Array.from({ length: video.buffered.length }, (_, index) => [
-            Number(video.buffered.start(index).toFixed(3)),
-            Number(video.buffered.end(index).toFixed(3))
-          ])
+          buffered: []
         });
       };
-      for (const event of ["play", "playing", "waiting", "stalled", "error"]) {
+      for (const event of ["play", "playing", "pause", "waiting", "stalled", "error"]) {
         video.addEventListener(event, () => record(event));
       }
       record("observed");
     });
     marker = `${scenario}-${index}-${Date.now()}`;
+    startupStage = "mark player identity";
     await page.locator("video").first().evaluate((video, identity) => {
       video.dataset.playbackSoakIdentity = identity;
     }, marker);
+    if (INITIAL_VISIBILITY === "hidden") {
+      startupStage = "wait for hidden startup rejection";
+      await waitForSyntheticHiddenPlayRejection(page, `${scenario}/${title}`);
+      startupStage = "restore visibility";
+      await setSyntheticVisibility(page, "visible");
+    }
+    startupStage = "wait for playback";
     await startPlayback(page);
+    startupStage = "verify startup play ordering";
+    await verifyStartupPlayOrdering(page, `${scenario}/${title}`);
+    startupStage = "verify hidden startup retry";
+    await verifySyntheticHiddenRetry(page, `${scenario}/${title}`);
+    startupStage = "verify private access";
+    await verifyPrivateAllowlistedAccess(page, `${scenario}/${title}`);
+    startupStage = "verify startup audio";
+    await verifyStartupAudioAndCenterClick(page, `${scenario}/${title}`);
+    startupStage = "observe startup stability";
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
     console.log(
       `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
@@ -390,6 +807,7 @@ async function openRun(context, scenario, stream, index) {
     const reason = error instanceof Error ? error.message : String(error);
     fail(
       `${scenario}/${title}: startup failed at ${page.url()} (${reason}); ` +
+        `stage: ${startupStage}; ` +
         `page errors: ${diagnostics.errors.join(" | ") || "none"}; ` +
         `preference writes: ${JSON.stringify(preferenceWrites).slice(0, 2_000)}; ` +
         `body: ${pageText.replace(/\s+/g, " ").slice(0, 500)}`
@@ -693,6 +1111,12 @@ async function verifyNoColdMiniPlayerRestore(run) {
 }
 
 async function main() {
+  if (EXPECT_PRIVATE_ALLOWLISTED && !IDENTITY_STORE_FIXTURE) {
+    fail("PLAYBACK_EXPECT_PRIVATE_ALLOWLISTED=1 requires PLAYBACK_IDENTITY_STORE_JSON");
+  }
+  if (STUB_HIDDEN_PLAY_REJECTION && INITIAL_VISIBILITY !== "hidden") {
+    fail("PLAYBACK_STUB_HIDDEN_PLAY_REJECTION=1 requires PLAYBACK_INITIAL_VISIBILITY=hidden");
+  }
   const sources = await loadSources();
   const browserEntries = [];
   const runs = [];
@@ -728,6 +1152,13 @@ async function main() {
     }
 
     if (runs.length === 0) fail("no valid playback scenarios selected");
+    if (STARTUP_ONLY) {
+      for (const run of runs) {
+        console.log(`  PASS ${run.scenario} / ${run.title}: startup policy and playback retry`);
+      }
+      console.log("PASS: production playback startup checks complete");
+      return;
+    }
     for (const run of runs) {
       run.last = await sampleVideo(run.page);
       run.lastSampledAt = Date.now();
