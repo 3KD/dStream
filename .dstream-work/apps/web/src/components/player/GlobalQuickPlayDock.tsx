@@ -153,11 +153,13 @@ export function GlobalQuickPlayDock() {
 
   const { viewerCount } = useStreamPresence({
     streamPubkey: quickPlayStream?.streamPubkey ?? "",
-    streamId: quickPlayStream?.streamId ?? ""
+    streamId: quickPlayStream?.streamId ?? "",
+    enabled: !isWatchRoute
   });
   const { announce } = useStreamAnnounce(
     quickPlayStream?.streamPubkey ?? "",
-    quickPlayStream?.streamId ?? ""
+    quickPlayStream?.streamId ?? "",
+    !isWatchRoute
   );
   const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
 

@@ -604,14 +604,18 @@ export default function SettingsPage() {
                       setIdentityError(null);
                       setIdentityNotice(null);
                       setIdentityBusy("import");
-                      const res = importLocalSecret(importSecret, importLabel);
-                      if (!res.ok) setIdentityError(res.error);
-                      else {
-                        setImportSecret("");
-                        setImportLabel("");
-                        setIdentityNotice(`Imported ${formatPubkeyLabel(res.pubkey)}.`);
-                      }
-                      setIdentityBusy(null);
+                      void importLocalSecret(importSecret, importLabel)
+                        .then((res) => {
+                          if (!res.ok) {
+                            setIdentityError(res.error);
+                            return;
+                          }
+                          setImportSecret("");
+                          setImportLabel("");
+                          setIdentityNotice(`Imported ${formatPubkeyLabel(res.pubkey)}.`);
+                        })
+                        .catch((err: any) => setIdentityError(err?.message ?? "Failed to import local identity."))
+                        .finally(() => setIdentityBusy(null));
                     }}
                     className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
                   >

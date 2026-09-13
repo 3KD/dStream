@@ -14,6 +14,7 @@ import { shortenText } from "@/lib/encoding";
 import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
+import { useQuickPlay } from "@/context/QuickPlayContext";
 
 function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
   return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
@@ -21,6 +22,7 @@ function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: st
 
 export default function HomePage() {
   const router = useRouter();
+  const { quickPlayStream } = useQuickPlay();
   const { streams: liveStreams, isLoading } = useStreamAnnounces({ liveOnly: true, limit: 60 });
   const { streams: announcedStreams, isLoading: videoLoading } = useStreamAnnounces({ liveOnly: false, limit: 180 });
   const [searchQuery, setSearchQuery] = useState("");
@@ -170,7 +172,7 @@ export default function HomePage() {
                         title={stream.title || "Live stream preview"}
                         streamingUrl={stream.streaming}
                         fallbackImage={stream.image}
-                        enabled={index < 12}
+                        enabled={!quickPlayStream && index < 12}
                       />
                           </div>
                           {stream.contentWarningReason && (

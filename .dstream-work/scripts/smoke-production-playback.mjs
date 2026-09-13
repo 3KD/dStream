@@ -36,6 +36,7 @@ const START_TIMEOUT_MS = positiveNumber(process.env.PLAYBACK_START_TIMEOUT_MS, 4
 const STALL_LIMIT_MS = positiveNumber(process.env.PLAYBACK_STALL_LIMIT_MS, 30_000);
 const STARTUP_STABILITY_MS = positiveNumber(process.env.PLAYBACK_STARTUP_STABILITY_MS, 15_000);
 const MAX_STARTUP_INTERRUPTION_MS = positiveNumber(process.env.PLAYBACK_MAX_STARTUP_INTERRUPTION_MS, 250);
+const MAX_SOAK_INTERRUPTION_MS = positiveNumber(process.env.PLAYBACK_MAX_SOAK_INTERRUPTION_MS, 1_000);
 const ROUTE_HANDOFF_AFTER_MS = positiveNumber(
   process.env.PLAYBACK_ROUTE_HANDOFF_AFTER_MS,
   Math.min(45_000, Math.max(5_000, Math.floor(SOAK_MS / 2)))
@@ -54,6 +55,8 @@ const IDENTITY_STORE_JSON = String(process.env.PLAYBACK_IDENTITY_STORE_JSON || "
 const INITIAL_VISIBILITY = String(process.env.PLAYBACK_INITIAL_VISIBILITY || "").trim().toLowerCase();
 const STARTUP_ONLY = process.env.PLAYBACK_STARTUP_ONLY === "1";
 const EMIT_BROWSER_AUDIO = process.env.PLAYBACK_EMIT_BROWSER_AUDIO === "1";
+const TRACE_HLS_RESPONSES = process.env.PLAYBACK_TRACE_HLS_RESPONSES === "1";
+const TRACE_CPU_PROFILE = process.env.PLAYBACK_TRACE_CPU_PROFILE === "1";
 const PLAY_AFTER_GATE_MAX_MS = positiveNumber(process.env.PLAYBACK_PLAY_AFTER_GATE_MAX_MS, 1_000);
 const STUB_HIDDEN_PLAY_REJECTION =
   process.env.PLAYBACK_STUB_HIDDEN_PLAY_REJECTION === "1" ||
@@ -68,6 +71,41 @@ const REQUESTED_SCENARIOS = new Set(
 
 function fail(message) {
   throw new Error(message);
+}
+
+function compactHlsResponses(responses) {
+  return responses.map(({ url, variants, ...response }) => {
+    let resourcePath = url;
+    try {
+      const parsed = new URL(url);
+      resourcePath = parsed.pathname.split("/").slice(-3).join("/");
+    } catch {
+      // Keep the original value when a diagnostic URL cannot be parsed.
+    }
+    return { ...response, url: resourcePath, variantCount: variants.length };
+  });
+}
+
+function summarizeCpuProfile(profile) {
+  if (!profile?.nodes || !profile?.samples || !profile?.timeDeltas) return [];
+  const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
+  const selfMicros = new Map();
+  profile.samples.forEach((nodeId, index) => {
+    selfMicros.set(nodeId, (selfMicros.get(nodeId) ?? 0) + (profile.timeDeltas[index] ?? 0));
+  });
+  return Array.from(selfMicros.entries())
+    .map(([nodeId, micros]) => {
+      const frame = nodes.get(nodeId)?.callFrame;
+      return {
+        functionName: frame?.functionName || "(anonymous)",
+        url: frame?.url || "",
+        line: typeof frame?.lineNumber === "number" ? frame.lineNumber + 1 : null,
+        selfMs: Math.round(micros / 1_000)
+      };
+    })
+    .filter((entry) => entry.selfMs >= 10 && entry.functionName !== "(idle)")
+    .sort((left, right) => right.selfMs - left.selfMs)
+    .slice(0, 30);
 }
 
 function readIdentityStoreFixture() {
@@ -511,15 +549,55 @@ async function observeStartupStability(page, label) {
     const fallbackVisual = document.querySelector('[data-testid="audio-fallback-visual"]');
     const fallbackArtwork = fallbackVisual?.querySelector("img");
     const fallbackRect = fallbackVisual?.getBoundingClientRect();
+    const navigation = performance.getEntriesByType("navigation")[0];
     return {
       events,
       interruptions,
+      timeOrigin: performance.timeOrigin,
+      navigation:
+        navigation instanceof PerformanceNavigationTiming
+          ? {
+              responseEnd: navigation.responseEnd,
+              domContentLoaded: navigation.domContentLoadedEventEnd,
+              loadEventEnd: navigation.loadEventEnd
+            }
+          : null,
+      scriptResources: performance
+        .getEntriesByType("resource")
+        .filter((entry) => entry instanceof PerformanceResourceTiming && entry.name.includes("/_next/static/"))
+        .map((entry) => ({
+          name: entry.name.split("/").pop(),
+          startTime: Math.round(entry.startTime),
+          responseEnd: Math.round(entry.responseEnd),
+          duration: Math.round(entry.duration),
+          transferSize: entry.transferSize,
+          decodedBodySize: entry.decodedBodySize
+        }))
+        .sort((left, right) => left.responseEnd - right.responseEnd),
+      longTasks: Array.isArray(window.__dstreamPlaybackLongTasks) ? window.__dstreamPlaybackLongTasks : [],
       sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
       startupBuffer: Number(video.dataset.dstreamStartupBuffer),
       startupMs: firstPlaying < 0 ? null : events[firstPlaying].at,
       hlsLatency: readMetric(video.dataset.dstreamHlsLatency),
       hlsTargetLatency: readMetric(video.dataset.dstreamHlsTargetLatency),
+      hlsLiveSyncPosition: readMetric(video.dataset.dstreamHlsLiveSyncPosition),
       startupGate: video.dataset.dstreamStartupGate ?? "unknown",
+      startupRealignmentCount: Number(video.dataset.dstreamStartupRealignmentCount || 0),
+      startupSeekMode: video.dataset.dstreamStartupSeekMode ?? null,
+      startupSeekFrom: readMetric(video.dataset.dstreamStartupSeekFrom),
+      startupSeekTo: readMetric(video.dataset.dstreamStartupSeekTo),
+      currentTime: Number(video.currentTime.toFixed(3)),
+      buffered: Array.from({ length: video.buffered.length }, (_, index) => [
+        Number(video.buffered.start(index).toFixed(3)),
+        Number(video.buffered.end(index).toFixed(3))
+      ]),
+      lastHlsError: video.dataset.dstreamLastHlsErrorDetail
+        ? {
+            type: video.dataset.dstreamLastHlsErrorType ?? null,
+            detail: video.dataset.dstreamLastHlsErrorDetail,
+            fatal: video.dataset.dstreamLastHlsErrorFatal ?? null
+          }
+        : null,
       fallbackVisualVisible: !!fallbackVisual && !!fallbackRect && fallbackRect.width > 0 && fallbackRect.height > 0,
       fallbackArtworkLoaded: fallbackArtwork instanceof HTMLImageElement && fallbackArtwork.complete && fallbackArtwork.naturalWidth > 0
     };
@@ -546,12 +624,68 @@ async function observeStartupStability(page, label) {
   return result;
 }
 
+async function findSoakPlaybackInterruption(page, eventBaseline, expectedMarker) {
+  return page.evaluate(
+    ({ baseline, maxDurationMs, marker }) => {
+      const events = Array.isArray(window.__dstreamPlaybackStartupEvents) ? window.__dstreamPlaybackStartupEvents : [];
+      const now = performance.now();
+      for (let index = baseline; index < events.length; index += 1) {
+        const event = events[index];
+        if (event.marker !== marker) continue;
+        if (event.event !== "waiting" && event.event !== "error") continue;
+        const resumed = event.event === "waiting"
+          ? events.slice(index + 1).find((candidate) => candidate.marker === marker && candidate.event === "playing")
+          : null;
+        const durationMs = event.event === "error" ? null : (resumed?.at ?? now) - event.at;
+        if (event.event === "error" || durationMs > maxDurationMs) {
+          return { event, durationMs, recent: events.slice(Math.max(baseline, index - 3), index + 4) };
+        }
+      }
+      return null;
+    },
+    { baseline: eventBaseline, maxDurationMs: MAX_SOAK_INTERRUPTION_MS, marker: expectedMarker }
+  );
+}
+
 async function openRun(context, scenario, stream, index) {
   const page = await context.newPage();
+  let cpuSession = null;
+  let cpuProfile = null;
+  const stopCpuProfile = async () => {
+    if (!cpuSession || cpuProfile) return cpuProfile;
+    try {
+      cpuProfile = (await cpuSession.send("Profiler.stop")).profile;
+    } catch {
+      cpuProfile = null;
+    }
+    return cpuProfile;
+  };
+  if (TRACE_CPU_PROFILE && scenario.startsWith("chromium")) {
+    try {
+      cpuSession = await context.newCDPSession(page);
+      await cpuSession.send("Profiler.enable");
+      await cpuSession.send("Profiler.setSamplingInterval", { interval: 500 });
+      await cpuSession.send("Profiler.start");
+    } catch {
+      cpuSession = null;
+    }
+  }
   await page.addInitScript(() => {
     const preferenceKey = "dstream_player_background_play_v1";
     const writes = [];
     Object.defineProperty(window, "__dstreamPlaybackSoakPreferenceWrites", { value: writes, configurable: true });
+    const longTasks = [];
+    Object.defineProperty(window, "__dstreamPlaybackLongTasks", { value: longTasks, configurable: true });
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({ startTime: Math.round(entry.startTime), duration: Math.round(entry.duration) });
+        }
+      });
+      observer.observe({ type: "longtask", buffered: true });
+    } catch {
+      // Long-task timing is not available in every browser.
+    }
     const originalSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function setItem(key, value) {
       if (key === preferenceKey) {
@@ -597,6 +731,7 @@ async function openRun(context, scenario, stream, index) {
           paused: video.paused,
           startupGate: video.dataset.dstreamStartupGate ?? "unknown",
           sourceMode: video.dataset.dstreamSourceMode ?? "unknown",
+          marker: video.dataset.playbackSoakIdentity ?? null,
           hlsLevel: video.dataset.dstreamHlsLevel ?? null,
           hlsFragment: video.dataset.dstreamHlsFragment ?? null,
           hlsLatency: video.dataset.dstreamHlsLatency ?? null,
@@ -677,9 +812,64 @@ async function openRun(context, scenario, stream, index) {
       identityStore: IDENTITY_STORE_FIXTURE
     }
   );
-  const diagnostics = { errors: [], relayErrors: 0, relayMessages: [] };
+  const diagnostics = { errors: [], relayErrors: 0, relayMessages: [], hlsResponses: [] };
+  const hlsRequestStartedAt = new WeakMap();
+  const hlsResourceKind = (rawUrl) => {
+    try {
+      const pathname = new URL(rawUrl).pathname;
+      if (/\.m3u8$/i.test(pathname)) return "playlist";
+      if (/\.(?:m4s|mp4|ts|aac)$/i.test(pathname)) return "fragment";
+    } catch {
+      // Ignore malformed diagnostic URLs.
+    }
+    return null;
+  };
   const title = String(stream.title || stream.streamId);
   page.on("pageerror", (error) => diagnostics.errors.push(error.stack || error.message));
+  page.on("request", (request) => {
+    if (!TRACE_HLS_RESPONSES) return;
+    if (hlsResourceKind(request.url())) hlsRequestStartedAt.set(request, Date.now());
+  });
+  page.on("response", (response) => {
+    if (!TRACE_HLS_RESPONSES) return;
+    const resourceKind = hlsResourceKind(response.url());
+    if (!resourceKind) return;
+    void (async () => {
+      const headersAt = Date.now();
+      const requestStartedAt = hlsRequestStartedAt.get(response.request()) ?? null;
+      const isPlaylist = resourceKind === "playlist";
+      const body = isPlaylist
+        ? await response.text().catch(() => "")
+        : await response.finished().then(() => "", () => "");
+      const completedAt = Date.now();
+      const headers = response.headers();
+      const sequence = Number(body.match(/^#EXT-X-MEDIA-SEQUENCE\s*:\s*(\d+)/m)?.[1]);
+      const programDates = Array.from(body.matchAll(/^#EXT-X-PROGRAM-DATE-TIME\s*:\s*(.+)\s*$/gm))
+        .map((match) => Date.parse(match[1] ?? ""))
+        .filter(Number.isFinite);
+      const variants = body
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+      diagnostics.hlsResponses.push({
+        requestStartedAt,
+        headersAt,
+        completedAt,
+        headersMs: requestStartedAt === null ? null : headersAt - requestStartedAt,
+        durationMs: requestStartedAt === null ? null : completedAt - requestStartedAt,
+        resource: resourceKind,
+        status: response.status(),
+        url: response.url(),
+        contentLength: Number(headers["content-length"]) || null,
+        contentType: headers["content-type"] ?? null,
+        mediaSequence: Number.isSafeInteger(sequence) ? sequence : null,
+        segmentCount: body.match(/^#EXTINF\s*:/gm)?.length ?? 0,
+        lastProgramDateTime: programDates.length > 0 ? Math.max(...programDates) : null,
+        variants: body.includes("#EXT-X-STREAM-INF") ? variants : []
+      });
+      if (diagnostics.hlsResponses.length > 120) diagnostics.hlsResponses.shift();
+    })();
+  });
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
@@ -690,6 +880,7 @@ async function openRun(context, scenario, stream, index) {
     }
   });
   let marker = "";
+  let playbackEventBaseline = 0;
   const background = PRESET_BACKGROUND_PLAY || scenario === "chromium-mobile";
   let startupStage = "navigate";
   try {
@@ -744,6 +935,8 @@ async function openRun(context, scenario, stream, index) {
     await verifyStartupAudioAndCenterClick(page, `${scenario}/${title}`);
     startupStage = "observe startup stability";
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
+    playbackEventBaseline = startup.events.length;
+    const cpuHotspots = summarizeCpuProfile(await stopCpuProfile());
     console.log(
       `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, ` +
         `startup=${startup.startupMs === null ? "n/a" : (startup.startupMs / 1_000).toFixed(2)}s, ` +
@@ -752,6 +945,31 @@ async function openRun(context, scenario, stream, index) {
         `buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, ` +
         `events=${startup.events.map((entry) => entry.event).join(",")}`
     );
+    if (TRACE_HLS_RESPONSES) {
+      console.log(
+        `  HLS trace ${scenario} / ${title}: ` +
+          JSON.stringify({
+            timeOrigin: startup.timeOrigin,
+            navigation: startup.navigation,
+            scriptResources: startup.scriptResources,
+            longTasks: startup.longTasks,
+            cpuHotspots,
+            playback: {
+              currentTime: startup.currentTime,
+              buffered: startup.buffered,
+              liveSyncPosition: startup.hlsLiveSyncPosition,
+              latency: startup.hlsLatency,
+              targetLatency: startup.hlsTargetLatency,
+              startupRealignmentCount: startup.startupRealignmentCount,
+              startupSeekMode: startup.startupSeekMode,
+              startupSeekFrom: startup.startupSeekFrom,
+              startupSeekTo: startup.startupSeekTo,
+              lastHlsError: startup.lastHlsError
+            },
+            responses: compactHlsResponses(diagnostics.hlsResponses)
+          })
+      );
+    }
     if (background) {
       const toggle = page.getByTitle("Keep audio playing when the app is backgrounded");
       await toggle.waitFor({ state: "attached", timeout: START_TIMEOUT_MS });
@@ -822,15 +1040,34 @@ async function openRun(context, scenario, stream, index) {
       if (!preferenceAfterRecovery) fail(`${scenario}/${title}: background preference was lost during hidden-page recovery`);
     }
   } catch (error) {
+    const cpuHotspots = summarizeCpuProfile(await stopCpuProfile());
     const pageText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
     const preferenceWrites = await page
       .evaluate(() => window.__dstreamPlaybackSoakPreferenceWrites ?? [])
       .catch(() => []);
+    const performanceDiagnostics = await page
+      .evaluate(() => {
+        const navigation = performance.getEntriesByType("navigation")[0];
+        return {
+          navigation:
+            navigation instanceof PerformanceNavigationTiming
+              ? {
+                  responseEnd: Math.round(navigation.responseEnd),
+                  domContentLoaded: Math.round(navigation.domContentLoadedEventEnd),
+                  loadEventEnd: Math.round(navigation.loadEventEnd)
+                }
+              : null,
+          longTasks: Array.isArray(window.__dstreamPlaybackLongTasks) ? window.__dstreamPlaybackLongTasks : []
+        };
+      })
+      .catch(() => null);
     const reason = error instanceof Error ? error.message : String(error);
     fail(
       `${scenario}/${title}: startup failed at ${page.url()} (${reason}); ` +
         `stage: ${startupStage}; ` +
         `page errors: ${diagnostics.errors.join(" | ") || "none"}; ` +
+        `performance: ${JSON.stringify(performanceDiagnostics)}; CPU: ${JSON.stringify(cpuHotspots)}; ` +
+        `HLS trace: ${JSON.stringify(diagnostics.hlsResponses).slice(0, 12_000)}; ` +
         `preference writes: ${JSON.stringify(preferenceWrites).slice(0, 2_000)}; ` +
         `body: ${pageText.replace(/\s+/g, " ").slice(0, 500)}`
     );
@@ -844,11 +1081,13 @@ async function openRun(context, scenario, stream, index) {
     diagnostics,
     last,
     lastSampledAt: Date.now(),
+    playbackEventBaseline,
     samples: [],
     lastProgressAt: Date.now(),
     startedAt: Date.now(),
     background,
     routed: false,
+    routeHandoffAt: null,
     sourceTimelineEpochChanges: 0
   };
 }
@@ -856,6 +1095,7 @@ async function openRun(context, scenario, stream, index) {
 async function verifyRouteHandoff(run) {
   if (run.background) await setSyntheticVisibility(run.page, "visible");
   const routeStartedAt = Date.now();
+  run.routeHandoffAt = await run.page.evaluate(() => Math.round(performance.now()));
   const preferenceBeforeRoute = run.background
     ? await run.page.evaluate(() => localStorage.getItem("dstream_player_background_play_v1"))
     : null;
@@ -877,6 +1117,12 @@ async function verifyRouteHandoff(run) {
   const miniPlayer = run.page.getByLabel("Floating mini player");
   await miniPlayer.waitFor({ state: "visible", timeout: 20_000 });
   await run.page.waitForTimeout(3_000);
+  const activeThumbnailCaptures = await run.page.locator('[data-live-preview-state="loading-frame"]').count();
+  if (activeThumbnailCaptures > 0) {
+    fail(
+      `${run.scenario}/${run.title}: ${activeThumbnailCaptures} live thumbnail capture(s) competed with mini-player playback`
+    );
+  }
   let after = await sampleVideo(run.page);
   if (after.marker !== run.marker) fail(`${run.scenario}/${run.title}: player DOM was remounted during route handoff`);
   if (after.currentTime + 10 < before.currentTime) {
@@ -1199,6 +1445,27 @@ async function main() {
         next.at = Math.round((Date.now() - run.startedAt) / 1000);
         run.samples.push(next);
         if (run.samples.length > 12) run.samples.shift();
+        const interruption = await findSoakPlaybackInterruption(run.page, run.playbackEventBaseline, run.marker);
+        if (interruption) {
+          const recentLongTasks = await run.page
+            .evaluate(() =>
+              Array.isArray(window.__dstreamPlaybackLongTasks)
+                ? window.__dstreamPlaybackLongTasks.slice(-30)
+                : []
+            )
+            .catch(() => []);
+          const runtimeTrace = JSON.stringify({
+            routeHandoffAt: run.routeHandoffAt,
+            recentLongTasks,
+            responses: TRACE_HLS_RESPONSES
+              ? compactHlsResponses(run.diagnostics.hlsResponses.slice(-30))
+              : []
+          });
+          fail(
+            `${run.scenario}/${run.title}: playback interruption exceeded ${MAX_SOAK_INTERRUPTION_MS}ms ` +
+              `(${JSON.stringify(interruption)}; ${runDetails(run, next)}; runtime=${runtimeTrace})`
+          );
+        }
         const timeAdvanced = next.currentTime > run.last.currentTime + 0.25;
         const framesAdvanced = next.frames !== null && run.last.frames !== null && next.frames > run.last.frames;
         const elapsedSeconds = Math.max(0, (sampledAt - run.lastSampledAt) / 1000);

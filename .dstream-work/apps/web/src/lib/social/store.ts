@@ -178,7 +178,7 @@ export function createDefaultSocialState(): SocialStateV1 {
     },
     settings: {
       presenceEnabled: true,
-      p2pAssistEnabled: true,
+      p2pAssistEnabled: false,
       p2pPeerMode: "any",
       playbackAutoplayMuted: true,
       showMatureContent: false,

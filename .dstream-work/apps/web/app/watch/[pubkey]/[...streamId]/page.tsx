@@ -1,16 +1,12 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, LoaderCircle, Upload } from "lucide-react";
-import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
-import { ChatBox } from "@/components/chat/ChatBox";
-import { UnifiedTipDialog } from "@/components/chat/UnifiedTipDialog";
-import { VideoPackageCheckout } from "@/components/payments/VideoPackageCheckout";
 import { MoneroLogo } from "@/components/icons/MoneroLogo";
-import { ReportDialog } from "@/components/moderation/ReportDialog";
 import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
 import { useStreamIntegrity } from "@/hooks/useStreamIntegrity";
 import { useStreamPresence } from "@/hooks/useStreamPresence";
@@ -37,10 +33,55 @@ import {
 } from "@/lib/access/client";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
-import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
-import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
+import type { P2PSwarm, P2PSwarmStats } from "@/lib/p2p/swarm";
+import type { SignalIdentity } from "@/lib/p2p/localIdentity";
 import { canEnableP2pAssist, isP2pStakeSatisfied, normalizeStakeRequiredAtomic } from "@/lib/p2p/stakeGate";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
+
+const ChatBox = dynamic(() => import("@/components/chat/ChatBox").then((module) => module.ChatBox), {
+  ssr: false,
+  loading: () => <ChatStartupShell />
+});
+const UnifiedTipDialog = dynamic(
+  () => import("@/components/chat/UnifiedTipDialog").then((module) => module.UnifiedTipDialog),
+  { ssr: false }
+);
+const VideoPackageCheckout = dynamic(
+  () => import("@/components/payments/VideoPackageCheckout").then((module) => module.VideoPackageCheckout),
+  { ssr: false }
+);
+const ReportDialog = dynamic(
+  () => import("@/components/moderation/ReportDialog").then((module) => module.ReportDialog),
+  { ssr: false }
+);
+
+function ChatStartupShell({ onActivate }: { onActivate?: () => void } = {}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
+      <div className="flex h-11 shrink-0 items-center border-b border-neutral-800 px-4 text-sm font-medium text-neutral-200">
+        Chat
+      </div>
+      <div className="min-h-0 flex-1" />
+      <div className="shrink-0 border-t border-neutral-800 p-3">
+        <input
+          data-testid="chat-startup-input"
+          aria-label="Send a message"
+          className="h-10 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 text-sm text-neutral-500"
+          aria-busy="true"
+          readOnly
+          onFocus={onActivate}
+          onPointerDown={onActivate}
+          placeholder="Send a message..."
+        />
+      </div>
+    </div>
+  );
+}
+
+async function createMoneroQrCode(address: string): Promise<string> {
+  const { default: QRCode } = await import("qrcode");
+  return QRCode.toDataURL(`monero:${address}`, { margin: 1, width: 176 });
+}
 
 function base64EncodeUtf8(input: string): string {
   try {
@@ -105,11 +146,10 @@ function detectWatchLayoutMode(): WatchLayoutMode {
   const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile|Windows Phone|Silk/i.test(userAgent);
   const touchCapable = mobileUserAgent || coarsePointer || anyCoarsePointer || hoverNone || touchPoints > 0;
 
-  if (finePointer && !mobileUserAgent) return "desktop";
-  if (!touchCapable) return "desktop";
-
   const orientationLandscape = window.matchMedia("(orientation: landscape)").matches;
   const isLandscape = orientationLandscape || (ratio > 1.05 && width >= 560);
+  if (finePointer && !mobileUserAgent && width >= 900) return "desktop";
+  if (!touchCapable && width >= 900) return "desktop";
   return isLandscape ? "landscape" : "portrait";
 }
 
@@ -222,24 +262,159 @@ export default function WatchPage() {
   const { identity, signEvent, nip04 } = useIdentity();
   const { setQuickPlayStream } = useQuickPlay();
   const social = useSocial();
+  const p2pEnabled = social.settings.p2pAssistEnabled;
   const relays = useMemo(() => getNostrRelays(), []);
   const pubkey = useMemo(() => pubkeyParamToHex(pubkeyParam), [pubkeyParam]);
   const npub = useMemo(() => (pubkey ? pubkeyHexToNpub(pubkey) : null), [pubkey]);
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
+  const playbackSessionKey = useMemo(
+    () => [pubkey ?? "", streamId, directPlaybackHint ?? "", e2eHlsOverride ?? ""].join(":"),
+    [directPlaybackHint, e2eHlsOverride, pubkey, streamId]
+  );
+  const [startedPlaybackSessionKey, setStartedPlaybackSessionKey] = useState<string | null>(null);
+  const playbackStarted = startedPlaybackSessionKey === playbackSessionKey;
+  const handlePlaybackStarted = useCallback(() => {
+    startTransition(() => setStartedPlaybackSessionKey(playbackSessionKey));
+  }, [playbackSessionKey]);
+  const [chatRuntimeSessionKey, setChatRuntimeSessionKey] = useState<string | null>(null);
+  const [socialRuntimeSessionKey, setSocialRuntimeSessionKey] = useState<string | null>(null);
+  const chatRuntimeReady = chatRuntimeSessionKey === playbackSessionKey;
+  const socialRuntimeReady = socialRuntimeSessionKey === playbackSessionKey;
+  const activateChatRuntime = useCallback(() => {
+    startTransition(() => setChatRuntimeSessionKey(playbackSessionKey));
+  }, [playbackSessionKey]);
 
-  const { announce, announceEvent, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
+  useEffect(() => {
+    if (!playbackStarted) {
+      setChatRuntimeSessionKey(null);
+      setSocialRuntimeSessionKey(null);
+      return;
+    }
+
+    let cancelled = false;
+    let chatDue = false;
+    let socialDue = false;
+    let chatIdleCallback: number | null = null;
+    let socialIdleCallback: number | null = null;
+    const supportsIdleCallback = typeof window.requestIdleCallback === "function";
+    const requestIdle = (activate: () => void) => {
+      if (supportsIdleCallback) {
+        return window.requestIdleCallback(activate, { timeout: 4_000 });
+      }
+      return window.setTimeout(activate, 0);
+    };
+    const flushDueWork = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      if (chatDue && chatIdleCallback === null) {
+        chatIdleCallback = requestIdle(() => {
+          chatIdleCallback = null;
+          if (!cancelled && document.visibilityState === "visible") {
+            chatDue = false;
+            activateChatRuntime();
+          }
+        });
+      }
+      if (socialDue && socialIdleCallback === null) {
+        socialIdleCallback = requestIdle(() => {
+          socialIdleCallback = null;
+          if (!cancelled && document.visibilityState === "visible") {
+            socialDue = false;
+            startTransition(() => setSocialRuntimeSessionKey(playbackSessionKey));
+          }
+        });
+      }
+    };
+    const chatTimer = window.setTimeout(() => {
+      chatDue = true;
+      flushDueWork();
+    }, 15_000);
+    const socialTimer = window.setTimeout(() => {
+      socialDue = true;
+      flushDueWork();
+    }, 30_000);
+    const onVisibilityChange = () => flushDueWork();
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearTimeout(chatTimer);
+      window.clearTimeout(socialTimer);
+      if (chatIdleCallback !== null) {
+        if (supportsIdleCallback) window.cancelIdleCallback(chatIdleCallback);
+        else window.clearTimeout(chatIdleCallback);
+      }
+      if (socialIdleCallback !== null) {
+        if (supportsIdleCallback) window.cancelIdleCallback(socialIdleCallback);
+        else window.clearTimeout(socialIdleCallback);
+      }
+    };
+  }, [activateChatRuntime, playbackSessionKey, playbackStarted]);
+  const [p2pRuntimeSessionKey, setP2pRuntimeSessionKey] = useState<string | null>(null);
+  const p2pRuntimeReady = p2pRuntimeSessionKey === playbackSessionKey;
+
+  useEffect(() => {
+    if (!playbackStarted || !p2pEnabled) {
+      setP2pRuntimeSessionKey(null);
+      return;
+    }
+
+    let delayTimer: number | null = null;
+    let idleCallback: number | null = null;
+    const activate = () => {
+      if (document.visibilityState !== "visible") return;
+      startTransition(() => setP2pRuntimeSessionKey(playbackSessionKey));
+    };
+    const schedule = () => {
+      if (document.visibilityState !== "visible" || delayTimer !== null || idleCallback !== null) return;
+      delayTimer = window.setTimeout(() => {
+        delayTimer = null;
+        if (document.visibilityState !== "visible") return;
+        if (typeof window.requestIdleCallback === "function") {
+          idleCallback = window.requestIdleCallback(() => {
+            idleCallback = null;
+            activate();
+          }, { timeout: 5_000 });
+        } else {
+          activate();
+        }
+      }, 45_000);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") schedule();
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (delayTimer !== null) window.clearTimeout(delayTimer);
+      if (idleCallback !== null) window.cancelIdleCallback(idleCallback);
+    };
+  }, [p2pEnabled, playbackSessionKey, playbackStarted]);
+
+  const { announce, announceEvent, isLoading: announceLoading } = useStreamAnnounce(
+    pubkey ?? "",
+    streamId,
+    !directPlaybackHint || playbackStarted
+  );
   const latestAnnounceEventRef = useRef(announceEvent);
   useEffect(() => {
     latestAnnounceEventRef.current = announceEvent;
   }, [announceEvent]);
   const hasAnnounceEvent = !!announceEvent;
-  const hostProfile = useNostrProfile(pubkey);
+  const hostProfile = useNostrProfile(pubkey, socialRuntimeReady);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
-  const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
+  const { viewerCount, viewerPubkeys } = useStreamPresence({
+    streamPubkey: pubkey ?? "",
+    streamId,
+    enabled: socialRuntimeReady
+  });
   const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
   const { count: zapCount, totalSats: zapTotalSats, isConnected: zapsConnected } = useStreamZaps({
     streamPubkey: pubkey ?? "",
-    streamId
+    streamId,
+    enabled: socialRuntimeReady
   });
   const { session: integritySession, snapshot: integritySnapshot } = useStreamIntegrity({
     streamPubkey: pubkey ?? "",
@@ -257,10 +432,8 @@ export default function WatchPage() {
   const { status: presenceStatus, lastSentAt } = usePublishPresence({
     streamPubkey: pubkey ?? "",
     streamId,
-    enabled: presenceEnabled
+    enabled: presenceEnabled && socialRuntimeReady
   });
-
-  const p2pEnabled = social.settings.p2pAssistEnabled;
 
   const [stakeCopyStatus, setStakeCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [stake, setStake] = useState<{ session: string; address: string } | null>(null);
@@ -366,6 +539,32 @@ export default function WatchPage() {
   );
 
   const ephemeralSignalIdentityRef = useRef<SignalIdentity | null>(null);
+  const [ephemeralSignalIdentity, setEphemeralSignalIdentity] = useState<SignalIdentity | null>(null);
+
+  useEffect(() => {
+    if (!p2pRuntimeReady || !p2pEnabled || (identity && nip04) || stakeRequiredAtomic) return;
+    if (ephemeralSignalIdentityRef.current) {
+      setEphemeralSignalIdentity(ephemeralSignalIdentityRef.current);
+      return;
+    }
+
+    let cancelled = false;
+    void import("@/lib/p2p/localIdentity")
+      .then(({ createLocalSignalIdentity }) => {
+        if (cancelled) return;
+        const nextIdentity = createLocalSignalIdentity();
+        ephemeralSignalIdentityRef.current = nextIdentity;
+        setEphemeralSignalIdentity(nextIdentity);
+      })
+      .catch(() => {
+        if (!cancelled) setEphemeralSignalIdentity(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identity, nip04, p2pEnabled, p2pRuntimeReady, stakeRequiredAtomic]);
+
   const signalIdentity = useMemo<SignalIdentity | null>(() => {
     if (identity && nip04) {
       return {
@@ -375,15 +574,8 @@ export default function WatchPage() {
       };
     }
     if (stakeRequiredAtomic) return null;
-    if (!ephemeralSignalIdentityRef.current) {
-      try {
-        ephemeralSignalIdentityRef.current = createLocalSignalIdentity();
-      } catch {
-        ephemeralSignalIdentityRef.current = null;
-      }
-    }
-    return ephemeralSignalIdentityRef.current;
-  }, [identity, nip04, signEvent, stakeRequiredAtomic]);
+    return ephemeralSignalIdentity;
+  }, [ephemeralSignalIdentity, identity, nip04, signEvent, stakeRequiredAtomic]);
 
   const p2pAllowed = useMemo(
     () =>
@@ -402,10 +594,10 @@ export default function WatchPage() {
   // Keep the server and first client render identical; responsive mode is applied after hydration.
   const [mobileLayoutMode, setMobileLayoutMode] = useState<WatchLayoutMode>("portrait");
   const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(true);
-  const mobilePortraitChatAnchorRef = useRef<HTMLDivElement | null>(null);
-  const mobilePortraitChatShellRef = useRef<HTMLDivElement | null>(null);
-  const dockedChatAnchorRef = useRef<HTMLDivElement | null>(null);
-  const dockedChatShellRef = useRef<HTMLDivElement | null>(null);
+  const [mobilePortraitChatAnchor, setMobilePortraitChatAnchor] = useState<HTMLDivElement | null>(null);
+  const [mobilePortraitChatShell, setMobilePortraitChatShell] = useState<HTMLDivElement | null>(null);
+  const [dockedChatAnchor, setDockedChatAnchor] = useState<HTMLDivElement | null>(null);
+  const [dockedChatShell, setDockedChatShell] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -432,8 +624,8 @@ export default function WatchPage() {
   const desktopWatchLayout = mobileLayoutMode === "desktop";
 
   useEffect(() => {
-    const anchor = mobilePortraitLayout ? mobilePortraitChatAnchorRef.current : dockedChatAnchorRef.current;
-    const shell = mobilePortraitLayout ? mobilePortraitChatShellRef.current : dockedChatShellRef.current;
+    const anchor = mobilePortraitLayout ? mobilePortraitChatAnchor : dockedChatAnchor;
+    const shell = mobilePortraitLayout ? mobilePortraitChatShell : dockedChatShell;
     if (!anchor || !shell) return;
 
     let frame = 0;
@@ -501,7 +693,15 @@ export default function WatchPage() {
       shell.style.removeProperty("width");
       shell.style.removeProperty("height");
     };
-  }, [desktopWatchLayout, mobileLandscapeLayout, mobilePortraitLayout]);
+  }, [
+    desktopWatchLayout,
+    dockedChatAnchor,
+    dockedChatShell,
+    mobileLandscapeLayout,
+    mobilePortraitChatAnchor,
+    mobilePortraitChatShell,
+    mobilePortraitLayout
+  ]);
 
   useEffect(() => {
     if (desktopWatchLayout || mobileLandscapeLayout) {
@@ -511,31 +711,38 @@ export default function WatchPage() {
 
 
   useEffect(() => {
-    if (!p2pEnabled || !p2pAllowed || !signalIdentity || !pubkey) {
+    if (!p2pRuntimeReady || !p2pEnabled || !p2pAllowed || !signalIdentity || !pubkey) {
       setP2pSwarm(null);
       setP2pStats(null);
       return;
     }
 
-    const swarm = new P2PSwarm({
-      identity: signalIdentity,
-      relays,
-      streamPubkey: pubkey,
-      streamId
-    });
-
     let alive = true;
-    setP2pSwarm(swarm);
-    void swarm.start().catch(() => {
-      if (!alive) return;
-      social.updateSettings({ p2pAssistEnabled: false });
-    });
+    let swarm: P2PSwarm | null = null;
+    setP2pSwarm(null);
+    setP2pStats(null);
+    void import("@/lib/p2p/swarm")
+      .then(async ({ P2PSwarm }) => {
+        if (!alive) return;
+        swarm = new P2PSwarm({
+          identity: signalIdentity,
+          relays,
+          streamPubkey: pubkey,
+          streamId
+        });
+        setP2pSwarm(swarm);
+        await swarm.start();
+      })
+      .catch(() => {
+        if (!alive) return;
+        social.updateSettings({ p2pAssistEnabled: false });
+      });
 
     return () => {
       alive = false;
-      swarm.stop();
+      swarm?.stop();
     };
-  }, [p2pAllowed, p2pEnabled, pubkey, relays, signalIdentity, social.updateSettings, streamId]);
+  }, [p2pAllowed, p2pEnabled, p2pRuntimeReady, pubkey, relays, signalIdentity, social.updateSettings, streamId]);
 
   useEffect(() => {
     if (!p2pEnabled || !p2pAllowed || !p2pSwarm) return;
@@ -717,6 +924,7 @@ export default function WatchPage() {
   }, [liveAccessToken, originStreamId, shouldTryWhep]);
 
   useEffect(() => {
+    if (!playbackStarted) return;
     if (!pubkey || !streamId) return;
     const nextUrl = playbackStreamUrl.trim();
     if (!nextUrl || !isLikelyPlayableMediaUrl(nextUrl)) return;
@@ -732,7 +940,7 @@ export default function WatchPage() {
       hlsUrl: nextUrl,
       whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
     });
-  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackStarted, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -1308,8 +1516,7 @@ export default function WatchPage() {
 
     void (async () => {
       try {
-        const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createMoneroQrCode(address);
         if (cancelled) return;
         setVideoUnlockQr(dataUrl);
       } catch {
@@ -1409,8 +1616,7 @@ export default function WatchPage() {
 
     void (async () => {
       try {
-        const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createMoneroQrCode(address);
         if (cancelled) return;
         setVerifiedTipQr(dataUrl);
       } catch {
@@ -1623,8 +1829,7 @@ export default function WatchPage() {
 
     void (async () => {
       try {
-        const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createMoneroQrCode(address);
         if (cancelled) return;
         setStakeQr(dataUrl);
       } catch {
@@ -1639,6 +1844,7 @@ export default function WatchPage() {
   }, [stake?.address]);
 
   const p2pBlockedReason = useMemo(() => {
+    if (!p2pRuntimeReady) return null;
     if (!signalIdentity) return "P2P assist unavailable in this browser context.";
     if (!stakeRequiredAtomic || stakeSatisfied) return null;
     if (!identity || !nip04) return "Connect identity to enable stake-gated P2P assist.";
@@ -1658,7 +1864,7 @@ export default function WatchPage() {
       // ignore
     }
     return `Stake required: ${stakeRequiredXmr ?? "unknown amount"} (confirmed).`;
-  }, [identity, nip04, signalIdentity, stake, stakeRequiredAtomic, stakeRequiredXmr, stakeSatisfied, stakeStatus, xmrRpcAvailable]);
+  }, [identity, nip04, p2pRuntimeReady, signalIdentity, stake, stakeRequiredAtomic, stakeRequiredXmr, stakeSatisfied, stakeStatus, xmrRpcAvailable]);
 
   useEffect(() => {
     if (!stakeRequiredAtomic) return;
@@ -1730,7 +1936,8 @@ export default function WatchPage() {
       if (!e2e || e2eSentRef.current.player) return;
       e2eSentRef.current.player = true;
       postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
-    }
+    },
+    onPlaybackStable: handlePlaybackStarted
   }), [
     playbackStreamUrl,
     announce?.status,
@@ -1749,6 +1956,7 @@ export default function WatchPage() {
     mobilePortraitLayout,
     announce?.image,
     announce?.title,
+    handlePlaybackStarted,
     pubkey,
     streamId
   ]);
@@ -1779,21 +1987,111 @@ export default function WatchPage() {
     }
   }, [videoPriceAtomic, videoUnlockStatus]);
 
-  const chatBox = (
-    <ChatBox
-      streamPubkey={pubkey ?? ""}
-      streamId={streamId}
-      paymentMethods={paymentMethods}
-      draftStorageKey={`dstream_watch_chat_draft_v1:${pubkey ?? ""}:${streamId}`}
-      viewerCount={effectiveViewerCount}
-      onMessageCountChange={(count) => {
-        if (!e2e || e2eSentRef.current.chat) return;
-        if (count <= 0) return;
-        e2eSentRef.current.chat = true;
-        postE2E({ type: "dstream:e2e", t: "watch_chat_ready", streamPubkey: pubkey ?? "", streamId });
-      }}
-    />
-  );
+  const shouldLoadChat =
+    chatRuntimeReady ||
+    (!playbackStreamUrl && !announceLoading) ||
+    showVideoPackageGate ||
+    showVideoUnlockGate ||
+    (livePrivateAccessRequired && !liveAccessToken);
+  const chatBox = shouldLoadChat ? (
+      <ChatBox
+        streamPubkey={pubkey ?? ""}
+        streamId={streamId}
+        paymentMethods={paymentMethods}
+        draftStorageKey={`dstream_watch_chat_draft_v1:${pubkey ?? ""}:${streamId}`}
+        viewerCount={effectiveViewerCount}
+        onMessageCountChange={(count) => {
+          if (!e2e || e2eSentRef.current.chat) return;
+          if (count <= 0) return;
+          e2eSentRef.current.chat = true;
+          postE2E({ type: "dstream:e2e", t: "watch_chat_ready", streamPubkey: pubkey ?? "", streamId });
+        }}
+      />
+    ) : (
+      <ChatStartupShell onActivate={activateChatRuntime} />
+    );
+
+  const prioritizePlayback =
+    !playbackStarted &&
+    !chatRuntimeReady &&
+    !!playbackStreamUrl &&
+    !showVideoPackageGate &&
+    !showVideoUnlockGate &&
+    !(livePrivateAccessRequired && !liveAccessToken);
+
+  if (prioritizePlayback) {
+    return (
+      <div className="flex w-full flex-1 flex-col bg-neutral-950 text-white">
+        <SimpleHeader />
+        <main className="min-h-0 w-full px-4 pb-6 pt-6 md:px-5 lg:px-6 lg:pb-6">
+          <div
+            data-testid="watch-layout-grid"
+            data-private-live-access-state="not-required"
+            className={`grid gap-6 ${
+              desktopWatchLayout
+                ? "grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] items-start"
+                : mobileLandscapeLayout
+                  ? "grid-cols-[minmax(0,1fr)_minmax(14rem,38vw)] items-start"
+                  : "grid-cols-1"
+            }`}
+          >
+            <div className={desktopWatchLayout || mobileLandscapeLayout ? "flex min-w-0 flex-col gap-6" : "flex flex-col gap-4"}>
+              <div
+                data-testid="watch-player-panel"
+                className={
+                  mobilePortraitLayout
+                    ? "order-0 aspect-video w-full"
+                    : "h-[clamp(18rem,56vh,43rem)] sm:h-[clamp(20rem,60vh,47rem)] md:h-[min(calc(100dvh-15.5rem),52rem)] md:min-h-[24rem]"
+                }
+              >
+                <GlobalPlayerSlot id="watch-page" playerProps={globalPlayerProps} />
+              </div>
+
+              {mobilePortraitLayout ? (
+                <div
+                  ref={setMobilePortraitChatAnchor}
+                  data-testid="watch-chat-anchor-mobile-portrait"
+                  className="order-2 h-[calc(100svh-20rem)] min-h-[15rem] max-h-[32rem] w-full"
+                >
+                  <div
+                    ref={setMobilePortraitChatShell}
+                    data-testid="watch-chat-panel-mobile-portrait"
+                    className="fixed inset-x-4 bottom-0 z-[60] isolate flex h-[clamp(15rem,calc(100svh-20rem),32rem)] flex-col bg-neutral-950"
+                  >
+                    <ChatStartupShell onActivate={activateChatRuntime} />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {desktopWatchLayout || mobileLandscapeLayout ? (
+              <div
+                ref={setDockedChatAnchor}
+                data-testid="watch-chat-anchor"
+                className={
+                  desktopWatchLayout
+                    ? "h-[calc(100dvh-6.5rem)] min-w-0 self-start"
+                    : "h-[calc(100dvh-5.5rem)] min-w-0 self-start"
+                }
+              >
+                <div
+                  ref={setDockedChatShell}
+                  data-testid="watch-chat-panel"
+                  className={
+                    desktopWatchLayout
+                      ? "sticky top-[5.5rem] z-[60] isolate flex h-[calc(100dvh-7rem)] min-h-0 w-full flex-col bg-neutral-950"
+                      : "sticky top-[5.25rem] z-[60] isolate flex h-[calc(100dvh-6.25rem)] min-h-0 w-full flex-col bg-neutral-950"
+                  }
+                >
+                  <ChatStartupShell onActivate={activateChatRuntime} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1990,12 +2288,12 @@ export default function WatchPage() {
 
             {mobilePortraitLayout && (
               <div
-                ref={mobilePortraitChatAnchorRef}
+                ref={setMobilePortraitChatAnchor}
                 data-testid="watch-chat-anchor-mobile-portrait"
                 className="order-2 h-[calc(100svh-20rem)] min-h-[15rem] max-h-[32rem] w-full"
               >
                 <div
-                  ref={mobilePortraitChatShellRef}
+                  ref={setMobilePortraitChatShell}
                   data-testid="watch-chat-panel-mobile-portrait"
                   className="fixed inset-x-4 bottom-0 z-[60] isolate flex h-[clamp(15rem,calc(100svh-20rem),32rem)] flex-col bg-neutral-950"
                 >
@@ -2485,7 +2783,7 @@ export default function WatchPage() {
 
           {(desktopWatchLayout || mobileLandscapeLayout) && (
             <div
-              ref={dockedChatAnchorRef}
+              ref={setDockedChatAnchor}
               data-testid="watch-chat-anchor"
               className={
                 desktopWatchLayout
@@ -2494,7 +2792,7 @@ export default function WatchPage() {
               }
             >
               <div
-                ref={dockedChatShellRef}
+                ref={setDockedChatShell}
                 data-testid="watch-chat-panel"
                 className={
                   desktopWatchLayout
@@ -2508,24 +2806,28 @@ export default function WatchPage() {
           )}
         </div>
 
-        <UnifiedTipDialog
-          open={tipModalOpen}
-          streamPubkey={pubkey ?? ""}
-          streamId={streamId}
-          broadcasterName={social.getAlias(pubkey ?? "") || announce?.title}
-          paymentMethods={paymentMethods}
-          onClose={closeTipModal}
-        />
+        {tipModalOpen ? (
+          <UnifiedTipDialog
+            open
+            streamPubkey={pubkey ?? ""}
+            streamId={streamId}
+            broadcasterName={social.getAlias(pubkey ?? "") || announce?.title}
+            paymentMethods={paymentMethods}
+            onClose={closeTipModal}
+          />
+        ) : null}
 
-        <ReportDialog
-          open={watchReportOpen}
-          busy={watchReportBusy}
-          title={watchReportDialogTitle}
-          targetSummary={watchReportTargetSummary}
-          error={watchReportError}
-          onClose={closeWatchReport}
-          onSubmit={submitWatchReport}
-        />
+        {watchReportOpen ? (
+          <ReportDialog
+            open
+            busy={watchReportBusy}
+            title={watchReportDialogTitle}
+            targetSummary={watchReportTargetSummary}
+            error={watchReportError}
+            onClose={closeWatchReport}
+            onSubmit={submitWatchReport}
+          />
+        ) : null}
       </main>
     </div>
     </>

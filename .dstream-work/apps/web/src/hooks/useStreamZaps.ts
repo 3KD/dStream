@@ -6,17 +6,18 @@ import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 import { NIP57_ZAP_RECEIPT_KIND, isZapReceiptForStream, parseZapReceiptEvent, type ParsedZapReceipt } from "@/lib/zaps";
 
-export function useStreamZaps(scope: { streamPubkey: string; streamId: string; windowDays?: number }) {
+export function useStreamZaps(scope: { streamPubkey: string; streamId: string; windowDays?: number; enabled?: boolean }) {
   const relays = useMemo(() => getNostrRelays(), []);
   const streamPubkey = (scope.streamPubkey ?? "").trim().toLowerCase();
   const streamId = (scope.streamId ?? "").trim();
   const windowDays = Math.max(1, Math.min(120, Math.floor(scope.windowDays ?? 30)));
+  const enabled = scope.enabled ?? true;
   const [isConnected, setIsConnected] = useState(false);
   const [receipts, setReceipts] = useState<ParsedZapReceipt[]>([]);
   const byIdRef = useRef<Map<string, ParsedZapReceipt>>(new Map());
 
   useEffect(() => {
-    if (!streamPubkey || !streamId) {
+    if (!enabled || !streamPubkey || !streamId) {
       byIdRef.current.clear();
       setReceipts([]);
       setIsConnected(false);
@@ -62,7 +63,7 @@ export function useStreamZaps(scope: { streamPubkey: string; streamId: string; w
       }
       setIsConnected(false);
     };
-  }, [relays, streamId, streamPubkey, windowDays]);
+  }, [enabled, relays, streamId, streamPubkey, windowDays]);
 
   const totalSats = useMemo(() => receipts.reduce((sum, receipt) => sum + receipt.sats, 0), [receipts]);
   const latestReceipt = receipts[0] ?? null;

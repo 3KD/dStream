@@ -13,6 +13,8 @@ test("selects the live position only when media is already buffered there", () =
   ];
 
   assert.equal(findBufferedLiveSyncTarget(ranges, 22), 22);
+  assert.equal(findBufferedLiveSyncTarget(ranges, 22, 2), 22);
+  assert.equal(findBufferedLiveSyncTarget(ranges, 22.5, 2), null);
   assert.equal(findBufferedLiveSyncTarget(ranges, 23.95), null);
   assert.equal(findBufferedLiveSyncTarget(ranges, 18), null);
 });

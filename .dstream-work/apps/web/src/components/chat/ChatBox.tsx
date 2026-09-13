@@ -1,6 +1,7 @@
 "use client";
 
 import { Users, ArrowDownToLine, Bitcoin } from "lucide-react";
+import dynamic from "next/dynamic";
 
 import { useEffect, useRef } from "react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -18,9 +19,16 @@ import { useEmotes } from "@/hooks/useEmotes";
 import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { ReportDialog } from "@/components/moderation/ReportDialog";
-import { UnifiedTipDialog as TipDialog } from "./UnifiedTipDialog";
 import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
+
+const ReportDialog = dynamic(
+  () => import("@/components/moderation/ReportDialog").then((module) => module.ReportDialog),
+  { ssr: false }
+);
+const TipDialog = dynamic(
+  () => import("./UnifiedTipDialog").then((module) => module.UnifiedTipDialog),
+  { ssr: false }
+);
 
 interface ChatReportTarget {
   type: ReportTargetType;
@@ -243,7 +251,7 @@ export function ChatBox({
   }, []);
 
   const ensureChatIdentity = useCallback(() => {
-    if (!identity) ensureIdentity();
+    if (!identity) void ensureIdentity();
   }, [ensureIdentity, identity]);
 
   const seedComposerDraft = useCallback(
@@ -613,22 +621,26 @@ export function ChatBox({
         emotesDict={globalEmotesMap}
       />
 
-      <ReportDialog
-        open={!!reportTarget}
-        busy={reportBusy}
-        title="Report Chat Content"
-        targetSummary={reportTarget?.summary ?? ""}
-        error={reportError}
-        onClose={closeReportDialog}
-        onSubmit={handleSubmitReport}
-      />
-      <TipDialog 
-        open={tipDialogOpen} 
-        streamPubkey={streamPubkey} 
-        streamId={streamId} 
-        paymentMethods={paymentMethods}
-        onClose={() => setTipDialogOpen(false)} 
-      />
+      {reportTarget ? (
+        <ReportDialog
+          open
+          busy={reportBusy}
+          title="Report Chat Content"
+          targetSummary={reportTarget.summary}
+          error={reportError}
+          onClose={closeReportDialog}
+          onSubmit={handleSubmitReport}
+        />
+      ) : null}
+      {tipDialogOpen ? (
+        <TipDialog
+          open
+          streamPubkey={streamPubkey}
+          streamId={streamId}
+          paymentMethods={paymentMethods}
+          onClose={() => setTipDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

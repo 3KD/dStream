@@ -6,7 +6,7 @@ import { parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 
-export function useStreamAnnounce(pubkey: string, streamId: string) {
+export function useStreamAnnounce(pubkey: string, streamId: string, enabled = true) {
   const [announce, setAnnounce] = useState<StreamAnnounce | null>(null);
   const [announceEvent, setAnnounceEvent] = useState<NostrEvent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,7 +15,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
   const relays = useMemo(() => getNostrRelays(), []);
 
   useEffect(() => {
-    if (!pubkey || !streamId) {
+    if (!enabled || !pubkey || !streamId) {
       setAnnounce(null);
       setAnnounceEvent(null);
       setIsLoading(false);
@@ -58,7 +58,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
         // ignore
       }
     };
-  }, [relays, pubkey, streamId]);
+  }, [enabled, relays, pubkey, streamId]);
 
   return { announce, announceEvent, isLoading };
 }

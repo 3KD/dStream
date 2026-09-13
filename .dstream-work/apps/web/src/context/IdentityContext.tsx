@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { finalizeEvent, generateSecretKey, getPublicKey, nip04, nip19, type Event as NostrToolsEvent } from "nostr-tools";
+import type { Event as NostrToolsEvent } from "nostr-tools";
+import * as nip19 from "nostr-tools/nip19";
 import { bytesToHex, hexToBytes } from "@/lib/encoding";
 
 export type Identity =
@@ -32,10 +33,13 @@ interface IdentityContextValue {
   identity: Identity | null;
   isLoading: boolean;
   localIdentities: Array<{ pubkey: string; label: string | null; createdAt: number; isActive: boolean }>;
-  ensureIdentity: () => void;
+  ensureIdentity: () => Promise<void>;
   connectExtension: () => Promise<void>;
   generateLocal: () => Promise<void>;
-  importLocalSecret: (input: string, label?: string) => { ok: true; pubkey: string } | { ok: false; error: string };
+  importLocalSecret: (
+    input: string,
+    label?: string
+  ) => Promise<{ ok: true; pubkey: string } | { ok: false; error: string }>;
   exportLocalSecret: () => string | null;
   switchLocalIdentity: (pubkey: string) => boolean;
   removeLocalIdentity: (pubkey: string) => boolean;
@@ -73,8 +77,6 @@ function toStoreV2(input: unknown): IdentityStoreV2 | null {
     if (!value || typeof value !== "object") continue;
     const secretKeyHex = typeof (value as any).secretKeyHex === "string" ? (value as any).secretKeyHex.trim().toLowerCase() : "";
     if (!isHex64(secretKeyHex)) continue;
-    const derivedPubkey = getPublicKey(hexToBytes(secretKeyHex));
-    if (derivedPubkey !== pubkey) continue;
     const createdAt =
       typeof (value as any).createdAt === "number" && Number.isFinite((value as any).createdAt) ? Math.floor((value as any).createdAt) : Date.now();
     locals[pubkey] = {
@@ -105,7 +107,7 @@ function toStoreV2(input: unknown): IdentityStoreV2 | null {
   };
 }
 
-function migrateFromV1(raw: string | null): IdentityStoreV2 | null {
+async function migrateFromV1(raw: string | null): Promise<IdentityStoreV2 | null> {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -124,6 +126,7 @@ function migrateFromV1(raw: string | null): IdentityStoreV2 | null {
     if ((parsed as any).kind === "local") {
       const secretKeyHex = typeof (parsed as any).secretKeyHex === "string" ? (parsed as any).secretKeyHex.trim().toLowerCase() : "";
       if (!isHex64(secretKeyHex)) return null;
+      const { getPublicKey } = await import("nostr-tools/pure");
       const pubkey = getPublicKey(hexToBytes(secretKeyHex));
       return {
         version: 2,
@@ -164,7 +167,8 @@ function parseSecretInput(inputRaw: string): string | null {
   return null;
 }
 
-function addGeneratedLocalIdentity(store: IdentityStoreV2): IdentityStoreV2 {
+async function addGeneratedLocalIdentity(store: IdentityStoreV2): Promise<IdentityStoreV2> {
+  const { generateSecretKey, getPublicKey } = await import("nostr-tools/pure");
   const secretKey = generateSecretKey();
   const pubkey = getPublicKey(secretKey);
   const secretKeyHex = bytesToHex(secretKey).toLowerCase();
@@ -183,12 +187,12 @@ function addGeneratedLocalIdentity(store: IdentityStoreV2): IdentityStoreV2 {
   };
 }
 
-function readStoredIdentity(): IdentityStoreV2 | null {
+async function readStoredIdentity(): Promise<IdentityStoreV2 | null> {
   try {
     const v2 = localStorage.getItem(STORAGE_KEY_V2);
     const parsedV2 = v2 ? toStoreV2(JSON.parse(v2)) : null;
     if (parsedV2) return parsedV2;
-    return migrateFromV1(localStorage.getItem(STORAGE_KEY_V1));
+    return await migrateFromV1(localStorage.getItem(STORAGE_KEY_V1));
   } catch {
     return null;
   }
@@ -214,25 +218,28 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let nextStore = readStoredIdentity() ?? { version: 2 as const, active: null, locals: {} };
-    if (!nextStore.active && Object.keys(nextStore.locals).length === 0) {
-      nextStore = addGeneratedLocalIdentity(nextStore);
-    }
-
-    storeRef.current = nextStore;
-    isLoadingRef.current = false;
-    setStore(nextStore);
-    persistStore(nextStore);
-    setIsLoading(false);
+    let cancelled = false;
+    void readStoredIdentity().then((stored) => {
+      if (cancelled) return;
+      const nextStore = stored ?? { version: 2 as const, active: null, locals: {} };
+      storeRef.current = nextStore;
+      isLoadingRef.current = false;
+      setStore(nextStore);
+      persistStore(nextStore);
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [persistStore]);
 
-  const ensureIdentity = useCallback(() => {
-    let nextStore = isLoadingRef.current ? readStoredIdentity() ?? storeRef.current : storeRef.current;
+  const ensureIdentity = useCallback(async () => {
+    let nextStore = isLoadingRef.current ? (await readStoredIdentity()) ?? storeRef.current : storeRef.current;
     if (!nextStore.active) {
       const existingLocalPubkey = Object.keys(nextStore.locals)[0];
       nextStore = existingLocalPubkey
         ? { ...nextStore, active: { kind: "local", pubkey: existingLocalPubkey } }
-        : addGeneratedLocalIdentity(nextStore);
+        : await addGeneratedLocalIdentity(nextStore);
     }
 
     storeRef.current = nextStore;
@@ -303,12 +310,16 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const generateLocal = useCallback(async () => {
-    setStore((prev) => addGeneratedLocalIdentity(prev));
-  }, []);
+    const nextStore = await addGeneratedLocalIdentity(storeRef.current);
+    storeRef.current = nextStore;
+    setStore(nextStore);
+    persistStore(nextStore);
+  }, [persistStore]);
 
-  const importLocalSecret = useCallback((input: string, label?: string) => {
+  const importLocalSecret = useCallback(async (input: string, label?: string) => {
     const secretKeyHex = parseSecretInput(input);
     if (!secretKeyHex) return { ok: false as const, error: "Invalid secret key. Expected nsec… or 64-hex." };
+    const { getPublicKey } = await import("nostr-tools/pure");
     const pubkey = getPublicKey(hexToBytes(secretKeyHex));
     const normalizedLabel = normalizeLabel(label);
     setStore((prev) => ({
@@ -400,6 +411,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       }
 
       const sk = hexToBytes(identity.secretKeyHex);
+      const { finalizeEvent, getPublicKey } = await import("nostr-tools/pure");
+      if (getPublicKey(sk) !== identity.pubkey) throw new Error("Stored local identity does not match its secret key.");
       const eventWithoutPubkey: any = {
         kind: unsigned.kind,
         created_at: unsigned.created_at,
@@ -426,8 +439,14 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
 
     const sk = hexToBytes(identity.secretKeyHex);
     return {
-      encrypt: async (recipientPubkey, plaintext) => await nip04.encrypt(sk, recipientPubkey, plaintext),
-      decrypt: async (senderPubkey, ciphertext) => await nip04.decrypt(sk, senderPubkey, ciphertext)
+      encrypt: async (recipientPubkey, plaintext) => {
+        const nip04 = await import("nostr-tools/nip04");
+        return await nip04.encrypt(sk, recipientPubkey, plaintext);
+      },
+      decrypt: async (senderPubkey, ciphertext) => {
+        const nip04 = await import("nostr-tools/nip04");
+        return await nip04.decrypt(sk, senderPubkey, ciphertext);
+      }
     };
   }, [identity]);
 

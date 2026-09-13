@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, ReactNode, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Player } from "@/components/Player";
 
@@ -169,7 +169,7 @@ export function GlobalPlayerSlot({ id, playerProps }: { id: string; playerProps:
     return () => unregisterPortal(id);
   }, [id, registerPortal, unregisterPortal]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     requestPortal(id, playerProps);
   }, [id, playerProps, requestPortal]);
 

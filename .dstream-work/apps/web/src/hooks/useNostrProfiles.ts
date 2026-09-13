@@ -56,9 +56,9 @@ async function verifyNip05(pubkey: string, nip05: string): Promise<boolean> {
   }
 }
 
-export function useNostrProfiles(pubkeysInput: string[]) {
+export function useNostrProfiles(pubkeysInput: string[], enabled = true) {
   const relays = useMemo(() => getNostrRelays(), []);
-  const pubkeysKey = normalizePubkeys(pubkeysInput ?? []).join(",");
+  const pubkeysKey = normalizePubkeys(enabled ? pubkeysInput ?? [] : []).join(",");
   const pubkeys = useMemo(() => (pubkeysKey ? pubkeysKey.split(",") : []), [pubkeysKey]);
 
   const [profilesByPubkey, setProfilesByPubkey] = useState<Record<string, NostrProfileWithVerification>>({});
@@ -151,8 +151,8 @@ export function useNostrProfiles(pubkeysInput: string[]) {
   return profilesByPubkey;
 }
 
-export function useNostrProfile(pubkey: string | null | undefined): NostrProfileWithVerification | null {
-  const map = useNostrProfiles(pubkey ? [pubkey] : []);
+export function useNostrProfile(pubkey: string | null | undefined, enabled = true): NostrProfileWithVerification | null {
+  const map = useNostrProfiles(pubkey ? [pubkey] : [], enabled);
   const key = (pubkey ?? "").trim().toLowerCase();
   if (!isHex64(key)) return null;
   return map[key] ?? null;

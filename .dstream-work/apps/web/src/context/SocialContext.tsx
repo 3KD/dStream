@@ -51,6 +51,7 @@ interface SocialContextValue {
 
 const SocialContext = createContext<SocialContextValue | null>(null);
 const STORAGE_KEY = "dstream_social_v1";
+const P2P_OPT_IN_MIGRATION_KEY = "dstream_p2p_requires_opt_in_v1";
 
 function readLegacyToggle(key: string): boolean | null {
   try {
@@ -61,6 +62,23 @@ function readLegacyToggle(key: string): boolean | null {
   } catch {
     return null;
   }
+}
+
+function requireExplicitP2POptIn(state: SocialStateV1): SocialStateV1 {
+  try {
+    if (localStorage.getItem(P2P_OPT_IN_MIGRATION_KEY) === "1") return state;
+    localStorage.setItem(P2P_OPT_IN_MIGRATION_KEY, "1");
+  } catch {
+    // Continue with the reliability-first default even when storage is unavailable.
+  }
+  if (!state.settings.p2pAssistEnabled) return state;
+  return {
+    ...state,
+    settings: {
+      ...state.settings,
+      p2pAssistEnabled: false
+    }
+  };
 }
 
 function tryMigrateLegacyState(parsed: any): SocialStateV1 | null {
@@ -157,7 +175,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const existing = parseSocialState(raw);
         if (existing) {
-          setState(existing);
+          const migrated = requireExplicitP2POptIn(existing);
+          setState(migrated);
+          if (migrated !== existing) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
           return;
         }
 
@@ -165,8 +185,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(raw);
           const migrated = tryMigrateLegacyState(parsed);
           if (migrated) {
-            setState(migrated);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            const optInState = requireExplicitP2POptIn(migrated);
+            setState(optInState);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(optInState));
             return;
           }
         } catch {
@@ -177,8 +198,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const fresh = createDefaultSocialState();
       const legacyPresence = readLegacyToggle("dstream_presence_enabled_v1");
       if (legacyPresence !== null) fresh.settings.presenceEnabled = legacyPresence;
-      const legacyP2P = readLegacyToggle("dstream_p2p_enabled_v1");
-      if (legacyP2P !== null) fresh.settings.p2pAssistEnabled = legacyP2P;
+      localStorage.setItem(P2P_OPT_IN_MIGRATION_KEY, "1");
 
       setState(fresh);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));

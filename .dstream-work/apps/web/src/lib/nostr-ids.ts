@@ -1,4 +1,4 @@
-import { nip19 } from "nostr-tools";
+import * as nip19 from "nostr-tools/nip19";
 
 function isHexPubkey(input: string): boolean {
   return /^[a-f0-9]{64}$/i.test(input);
@@ -33,4 +33,3 @@ export function pubkeyHexToNpub(hex: string): string | null {
     return null;
   }
 }
-

@@ -6,11 +6,12 @@ import { makeATag, parseStreamPresenceEvent } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 
-export function useStreamPresence(scope: { streamPubkey: string; streamId: string; windowSec?: number }) {
+export function useStreamPresence(scope: { streamPubkey: string; streamId: string; windowSec?: number; enabled?: boolean }) {
   const relays = useMemo(() => getNostrRelays(), []);
   const streamPubkey = scope.streamPubkey;
   const streamId = scope.streamId;
   const windowSec = scope.windowSec ?? 90;
+  const enabled = scope.enabled ?? true;
 
   const [viewerCount, setViewerCount] = useState(0);
   const [viewerPubkeys, setViewerPubkeys] = useState<string[]>([]);
@@ -54,7 +55,15 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
   }, [recompute, windowSec]);
 
   useEffect(() => {
-    if (!streamPubkey || !streamId) return;
+    if (!enabled || !streamPubkey || !streamId) {
+      setIsConnected(false);
+      setViewerCount(0);
+      setViewerPubkeys([]);
+      lastSeenRef.current.clear();
+      lastEventCreatedAtRef.current.clear();
+      firstSeenRef.current.clear();
+      return;
+    }
 
     setIsConnected(false);
     setViewerCount(0);
@@ -113,7 +122,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
       }
       setIsConnected(false);
     };
-  }, [prune, recompute, relays, streamId, streamPubkey, windowSec]);
+  }, [enabled, prune, recompute, relays, streamId, streamPubkey, windowSec]);
 
   return { viewerCount, viewerPubkeys, isConnected };
 }

@@ -167,6 +167,14 @@ async function waitForComposerReady(page) {
   );
 }
 
+async function activateComposer(page) {
+  const startupInput = page.locator('[data-testid="chat-startup-input"]');
+  if ((await startupInput.count()) > 0) {
+    await startupInput.first().click();
+  }
+  await waitForComposerReady(page);
+}
+
 async function typeComposerDraft(composer) {
   await composer.click();
   await composer.selectText();
@@ -227,9 +235,18 @@ function validateBoundedChatGeometry(name, stage, layout, { portrait, expect = n
   const expectedHeight = Math.max(160, Math.floor(viewportBottomBoundary - normalTop));
   const expectedTop = expectedBottom - expectedHeight;
 
-  check(Math.abs(panel.top - expectedTop) <= 3, `${name}: ${stage} chat top does not follow its upper boundary`);
-  check(Math.abs(panel.bottom - expectedBottom) <= 3, `${name}: ${stage} chat bottom does not follow its lower boundary`);
-  check(Math.abs(panel.height - expectedHeight) <= 3, `${name}: ${stage} footer changed the chat height`);
+  check(
+    Math.abs(panel.top - expectedTop) <= 3,
+    `${name}: ${stage} chat top does not follow its upper boundary (${panel.top}px vs ${expectedTop}px)`
+  );
+  check(
+    Math.abs(panel.bottom - expectedBottom) <= 3,
+    `${name}: ${stage} chat bottom does not follow its lower boundary (${panel.bottom}px vs ${expectedBottom}px)`
+  );
+  check(
+    Math.abs(panel.height - expectedHeight) <= 3,
+    `${name}: ${stage} footer changed the chat height (${panel.height}px vs ${expectedHeight}px)`
+  );
   check(!!layout.chatHeader, `${name}: ${stage} chat header missing`);
   check(!!layout.composerForm, `${name}: ${stage} chat composer missing`);
   check(layout.chatHeader.top >= panel.top - 2, `${name}: ${stage} chat header escaped above the panel`);
@@ -382,10 +399,15 @@ async function validateDockedChatScroll(page, name, expect) {
   }
 
   check(!!pinnedLayout, `${name}: pinned chat geometry unavailable`);
-  check(
-    Math.abs(pinnedLayout.chatDesktopOrLandscape.top - (pinnedLayout.viewport.top + inset)) <= 3,
-    `${name}: chat did not stop at its top buffer`
-  );
+  const pinnedViewportBottom = pinnedLayout.viewport.bottom - inset;
+  const footerAlreadyBoundsPinnedChat =
+    pinnedLayout.chatDesktopOrLandscape.bottom < pinnedViewportBottom - 3;
+  if (!footerAlreadyBoundsPinnedChat) {
+    check(
+      Math.abs(pinnedLayout.chatDesktopOrLandscape.top - (pinnedLayout.viewport.top + inset)) <= 3,
+      `${name}: chat did not stop at its top buffer`
+    );
+  }
   check(sawFooterBoundary, `${name}: footer boundary was not exercised`);
   await scrollToAndCollect(page, 0);
 }
@@ -490,7 +512,7 @@ async function main() {
       if (scenario.rotateTo) {
         const portraitChat = page.locator('[data-testid="watch-chat-panel-mobile-portrait"]');
         await portraitChat.waitFor({ state: "visible", timeout: MAX_WAIT_MS });
-        await waitForComposerReady(page);
+        await activateComposer(page);
         const portraitComposer = page.locator('[data-testid="chat-message-input"]');
         await typeComposerDraft(portraitComposer);
         await page.setViewportSize(scenario.rotateTo);
@@ -503,7 +525,7 @@ async function main() {
           : '[data-testid="watch-chat-panel"]';
       try {
         await page.locator(expectedChatSelector).waitFor({ state: "visible", timeout: MAX_WAIT_MS });
-        await waitForComposerReady(page);
+        await activateComposer(page);
       } catch {
         // The validation loop below will report the concrete layout failure.
       }
