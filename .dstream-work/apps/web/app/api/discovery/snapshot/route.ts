@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import { shouldRefreshDiscoverySnapshot } from "@/lib/discoverySnapshot";
 import { probeStreamSource } from "@/lib/streamHealth";
 
 export const runtime = "nodejs";
@@ -16,8 +17,8 @@ const DISCOVERY_POLICY_LOOKBACK_SEC = 14 * 86400;
 const DISCOVERY_POLICY_LIMIT = 2000;
 
 // ---------------------------------------------------------------------------
-// Background cache: relay queries run in the background on a 60s interval.
-// The GET handler returns whatever is cached — never blocks on relay I/O.
+// The timer is a best-effort optimization. GET also refreshes stale data because
+// in-process timers are not reliable lifecycle guarantees in serverless runtimes.
 // ---------------------------------------------------------------------------
 const REFRESH_INTERVAL_MS = 60_000;
 const HEALTH_PROBE_CONCURRENCY = 12;
@@ -37,7 +38,7 @@ interface CachedSnapshot {
 }
 
 let cached: CachedSnapshot | null = null;
-let refreshInFlight = false;
+let refreshInFlight: Promise<void> | null = null;
 
 /** Read cache without TS narrowing (module-level var changes between awaits). */
 function getCached(): CachedSnapshot | null { return cached; }
@@ -77,14 +78,10 @@ async function applySourceHealth(streams: StreamAnnounce[]): Promise<StreamAnnou
 }
 
 /** Query all relays and rebuild the cached snapshot. */
-async function refreshCache(): Promise<void> {
-  if (refreshInFlight) return;
-  refreshInFlight = true;
-
+async function rebuildCache(): Promise<void> {
   const relays = getNostrRelays();
   if (relays.length === 0) {
     cached = { streams: [], queriedAt: Math.floor(Date.now() / 1000), relays: [] };
-    refreshInFlight = false;
     return;
   }
 
@@ -180,16 +177,27 @@ async function refreshCache(): Promise<void> {
     console.error("[snapshot] refresh failed:", error);
   } finally {
     try { pool.close(relays); } catch { /* no-op */ }
-    refreshInFlight = false;
   }
 }
 
+/** Coalesce timer and request-driven refreshes into one relay query. */
+function refreshCache(): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  const refresh = rebuildCache();
+  const trackedRefresh = refresh.finally(() => {
+    if (refreshInFlight === trackedRefresh) refreshInFlight = null;
+  });
+  refreshInFlight = trackedRefresh;
+  return trackedRefresh;
+}
+
 // Kick off the first refresh immediately on module load, then repeat.
-refreshCache();
-setInterval(() => { refreshCache(); }, REFRESH_INTERVAL_MS);
+void refreshCache();
+setInterval(() => { void refreshCache(); }, REFRESH_INTERVAL_MS);
 
 // ---------------------------------------------------------------------------
-// GET handler — always returns instantly from cache.
+// GET handler — stale snapshots are refreshed before they can be returned as
+// authoritative evidence about current relay state.
 // ---------------------------------------------------------------------------
 function parseBoundedInt(
   raw: string | null,
@@ -209,23 +217,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
   const limit = parseBoundedInt(url.searchParams.get("limit"), DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT);
 
-  // If cache is populated, return immediately.
   let snap = getCached();
-  if (snap) {
-    return NextResponse.json({
-      streams: snap.streams.slice(0, limit),
-      queriedAt: snap.queriedAt,
-      relays: snap.relays
-    });
-  }
-
-  // Cache not ready yet (first request came before initial refresh finished).
-  // Wait up to 25s for it, polling every 500ms.
-  const deadline = Date.now() + 25_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!snap || shouldRefreshDiscoverySnapshot(snap.queriedAt, nowSec)) {
+    await refreshCache();
     snap = getCached();
-    if (snap) break;
   }
 
   if (snap) {
@@ -233,13 +229,19 @@ export async function GET(req: NextRequest): Promise<Response> {
       streams: snap.streams.slice(0, limit),
       queriedAt: snap.queriedAt,
       relays: snap.relays
+    }, {
+      headers: { "Cache-Control": "no-store, max-age=0" }
     });
   }
 
-  // Still nothing — return empty.
+  // Do not attach a current timestamp to a failed query: an unverified empty
+  // result must never become fresh negative evidence in the browser.
   return NextResponse.json({
     streams: [] as StreamAnnounce[],
-    queriedAt: Math.floor(Date.now() / 1000),
+    queriedAt: 0,
     relays: getNostrRelays()
+  }, {
+    status: 503,
+    headers: { "Cache-Control": "no-store, max-age=0" }
   });
 }
