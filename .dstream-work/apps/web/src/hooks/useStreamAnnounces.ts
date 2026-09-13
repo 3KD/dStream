@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
+import {
+  buildDiscoverySnapshotLiveKeys,
+  normalizeDiscoverySnapshotQueriedAt,
+  reconcileStreamWithDiscoverySnapshot
+} from "@/lib/discoverySnapshot";
 import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
 import { subscribeMany } from "@/lib/nostr";
 
@@ -74,7 +79,8 @@ interface StreamDirectoryStore {
   fallbackLastAtMs: number;
   /** Stream keys the server snapshot most recently reported as live. */
   serverLiveKeys: Set<string>;
-  serverLiveKeysUpdatedAt: number;
+  /** Unix timestamp from the server snapshot's actual relay query. */
+  serverLiveKeysQueriedAtSec: number;
 }
 
 function safeDecode(value: string): string {
@@ -262,7 +268,7 @@ const streamDirectoryStore: StreamDirectoryStore = {
   fallbackInFlight: null,
   fallbackLastAtMs: 0,
   serverLiveKeys: new Set(),
-  serverLiveKeysUpdatedAt: 0
+  serverLiveKeysQueriedAtSec: 0
 };
 
 let applySnapshotTimer: ReturnType<typeof setTimeout> | null = null;
@@ -288,20 +294,14 @@ function applyStreamSnapshot() {
   const hintGraceCutoff = now - LIVE_HINT_GRACE_SEC;
   const oldestCutoff = now - STREAM_ANNOUNCE_LOOKBACK_ALL_SEC;
 
-  // Server-live confirmation is authoritative for up to 2 minutes after the
-  // last snapshot fetch.  After that we fall back to heuristic normalization.
-  const serverLiveStale = (Date.now() - streamDirectoryStore.serverLiveKeysUpdatedAt) > 120_000;
-
   for (const [streamKey, stream] of streamDirectoryStore.streamsByKey) {
     let normalized = normalizeStaleLiveStatus(stream, staleCutoff, hintGraceCutoff);
-
-    // A recent server snapshot includes an actual manifest/segment probe and is
-    // authoritative in both directions.
-    if (!serverLiveStale) {
-      const serverSaysLive = streamDirectoryStore.serverLiveKeys.has(streamKey);
-      if (serverSaysLive && normalized.status !== "live") normalized = { ...normalized, status: "live" };
-      if (!serverSaysLive && normalized.status === "live") normalized = { ...normalized, status: "ended" };
-    }
+    normalized = reconcileStreamWithDiscoverySnapshot(
+      normalized,
+      streamDirectoryStore.serverLiveKeys,
+      streamDirectoryStore.serverLiveKeysQueriedAtSec,
+      now
+    );
 
     if (normalized !== stream) {
       streamDirectoryStore.streamsByKey.set(streamKey, normalized);
@@ -411,25 +411,16 @@ function updateStreamAnnounce(event: any) {
   applyStreamSnapshotDebounced();
 }
 
-function mergeFallbackStreams(streams: StreamAnnounce[]) {
-  if (!Array.isArray(streams) || streams.length === 0) return;
-
+function mergeFallbackStreams(streams: StreamAnnounce[], queriedAtValue: unknown) {
   const now = Math.floor(Date.now() / 1000);
   const staleCutoff = now - LIVE_STALE_SEC;
   const hintGraceCutoff = now - LIVE_HINT_GRACE_SEC;
+  const queriedAt = normalizeDiscoverySnapshotQueriedAt(queriedAtValue);
 
-  // Record which streams the server reports as live.  The server-side API
-  // creates a fresh SimplePool with generous per-relay timeouts and sees the
-  // authoritative state.  We trust it over the browser's relay snapshot which
-  // may lag behind.
-  const newServerLiveKeys = new Set<string>();
-  for (const s of streams) {
-    if (s && s.status === "live" && typeof s.pubkey === "string" && typeof s.streamId === "string") {
-      newServerLiveKeys.add(makeStreamKey(s.pubkey, s.streamId));
-    }
-  }
-  streamDirectoryStore.serverLiveKeys = newServerLiveKeys;
-  streamDirectoryStore.serverLiveKeysUpdatedAt = Date.now();
+  // Preserve the server's relay-query time. Fetch time is not evidence that an
+  // older cached snapshot can disprove a newer direct-relay announcement.
+  streamDirectoryStore.serverLiveKeys = buildDiscoverySnapshotLiveKeys(streams);
+  streamDirectoryStore.serverLiveKeysQueriedAtSec = queriedAt;
 
   for (const parsed of streams) {
     if (!parsed || typeof parsed !== "object") continue;
@@ -437,9 +428,7 @@ function mergeFallbackStreams(streams: StreamAnnounce[]) {
     if (!Number.isFinite(parsed.createdAt)) continue;
     const streamKey = makeStreamKey(parsed.pubkey, parsed.streamId);
     const prevCreatedAt = streamDirectoryStore.seen.get(streamKey);
-    const existingStream = streamDirectoryStore.streamsByKey.get(streamKey);
-    const serverStatusChange = existingStream && parsed.status !== existingStream.status;
-    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt && !serverStatusChange) continue;
+    if (prevCreatedAt && prevCreatedAt >= parsed.createdAt) continue;
     streamDirectoryStore.seen.set(streamKey, Math.max(prevCreatedAt ?? 0, parsed.createdAt));
     if (!streamDirectoryStore.orderMeta.has(streamKey)) {
       streamDirectoryStore.orderMeta.set(streamKey, {
@@ -471,7 +460,7 @@ async function hydrateFromServerSnapshotFallback() {
       });
       if (!response.ok) return;
       const payload = await response.json();
-      mergeFallbackStreams(Array.isArray(payload?.streams) ? payload.streams : []);
+      mergeFallbackStreams(Array.isArray(payload?.streams) ? payload.streams : [], payload?.queriedAt);
     } catch {
       // ignore fallback errors
     } finally {
