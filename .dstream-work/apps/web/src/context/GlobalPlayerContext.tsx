@@ -1,8 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { LoaderCircle } from "lucide-react";
 import { createContext, useContext, useState, ReactNode, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Player } from "@/components/Player";
+
+const Player = dynamic(() => import("@/components/Player").then((module) => module.Player), {
+  ssr: false,
+  loading: () => (
+    <div
+      data-testid="player-module-loading"
+      className="flex h-full w-full items-center justify-center bg-black px-4 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center">
+        <LoaderCircle className="mb-3 h-6 w-6 animate-spin text-white" aria-hidden="true" />
+        <p className="text-sm font-semibold text-white">Opening player</p>
+        <p className="mt-1 text-xs text-neutral-400">Loading the playback engine.</p>
+      </div>
+    </div>
+  )
+});
 
 interface GlobalPlayerContextValue {
   playerHost: HTMLDivElement | null;

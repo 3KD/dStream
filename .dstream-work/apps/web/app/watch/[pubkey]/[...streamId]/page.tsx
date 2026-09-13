@@ -78,6 +78,39 @@ function ChatStartupShell({ onActivate }: { onActivate?: () => void } = {}) {
   );
 }
 
+function WatchSourceLoading() {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const update = () => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+    const timer = window.setInterval(update, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div
+      data-testid="watch-source-loading"
+      className="flex h-full items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900/40 px-6 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex max-w-sm flex-col items-center">
+        <LoaderCircle className="mb-3 h-6 w-6 animate-spin text-neutral-100" aria-hidden="true" />
+        <p className="text-sm font-semibold text-neutral-100">Finding live source</p>
+        <p className="mt-1 text-xs leading-5 text-neutral-400">
+          {elapsedSeconds >= 8
+            ? "The broadcaster is taking longer than usual to respond."
+            : "Checking the broadcaster's current stream."}
+        </p>
+        <p className="mt-2 text-[11px] tabular-nums text-neutral-500" aria-hidden="true">
+          {elapsedSeconds}s elapsed
+        </p>
+      </div>
+    </div>
+  );
+}
+
 async function createMoneroQrCode(address: string): Promise<string> {
   const { default: QRCode } = await import("qrcode");
   return QRCode.toDataURL(`monero:${address}`, { margin: 1, width: 176 });
@@ -2275,9 +2308,11 @@ export default function WatchPage() {
                     playerProps={globalPlayerProps}
                   />
                   </>
+                ) : announceLoading ? (
+                  <WatchSourceLoading />
                 ) : (
                   <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 flex items-center justify-center px-6 text-center text-sm text-neutral-400">
-                    {announceLoading ? "Resolving stream source…" : "Unable to resolve a playable stream source."}
+                    Unable to resolve a playable stream source.
                   </div>
                 )}
               </div>

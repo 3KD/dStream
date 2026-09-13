@@ -7,7 +7,9 @@ import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
   findBufferedLiveStartupTarget,
   findBufferedLiveSyncTarget,
-  hasRepeatedMediaGaps
+  hasRepeatedMediaGaps,
+  isBufferedLiveStartupRangeCurrent,
+  resolveAdaptiveLiveStartupBufferSeconds
 } from "@/lib/hls/liveLatency";
 import {
   applyRotatingMasterSnapshot,
@@ -15,6 +17,11 @@ import {
   isZapStreamHlsUrl,
   parseRotatingMasterPlaylist
 } from "@/lib/hls/rotatingMaster";
+import {
+  forgetStableAudioForSource,
+  prefersStableAudioForSource,
+  rememberStableAudioForSource
+} from "@/lib/hls/sourceCompatibility";
 import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
@@ -27,7 +34,11 @@ import { pickPlaybackMode } from "@/lib/whep-fallback";
 import { inferMediaUrlKind } from "@/lib/mediaUrl";
 import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import { resolveStartupAudioPreference } from "@/lib/playbackAudio";
-import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
+import {
+  playbackRecoveryOverlayDelayMs,
+  resolvePlaybackStartupPresentation
+} from "@/lib/playbackStartup";
+import { Gauge, Headphones, LoaderCircle, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
 
 interface PlayerProps {
   src: string;
@@ -203,6 +214,15 @@ function configureAudioSessionForPlayback(): void {
 
 function isExternalPlaybackUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
+}
+
+function getBrowserStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
@@ -381,6 +401,12 @@ export function Player({
   }, [playbackStateKey]);
   const [status, setStatus] = useState<string>("Loading…");
   const [error, setError] = useState<string | null>(null);
+  const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
+  const [startupStartedAtMs, setStartupStartedAtMs] = useState(0);
+  const [startupElapsedMs, setStartupElapsedMs] = useState(0);
+  const [startupBufferMetrics, setStartupBufferMetrics] = useState({ bufferedSeconds: 0, targetSeconds: 0 });
+  const [recoveryOverlayVisible, setRecoveryOverlayVisible] = useState(false);
+  const [recoveryStartedAtMs, setRecoveryStartedAtMs] = useState(0);
   const [nsfwConsented, setNsfwConsented] = useState<boolean>(!contentWarningReason);
   const [needsClick, setNeedsClick] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
@@ -456,6 +482,20 @@ export function Player({
   const [timelineEnd, setTimelineEnd] = useState(0);
   const [timelinePosition, setTimelinePosition] = useState(0);
   const [liveEdgePinned, setLiveEdgePinned] = useState(Boolean(isLiveStream));
+  const startupPresentation = useMemo(
+    () =>
+      resolvePlaybackStartupPresentation({
+        status,
+        isLiveStream,
+        hasPlaybackStarted,
+        bufferedSeconds: startupBufferMetrics.bufferedSeconds,
+        targetSeconds: startupBufferMetrics.targetSeconds,
+        elapsedMs: startupElapsedMs
+      }),
+    [hasPlaybackStarted, isLiveStream, startupBufferMetrics, startupElapsedMs, status]
+  );
+  const startupOverlayVisible =
+    !!startupPresentation && (!hasPlaybackStarted || recoveryOverlayVisible);
   const captionTrackList = useMemo(() => {
     return (captionTracks ?? [])
       .map((track) => ({
@@ -466,6 +506,39 @@ export function Player({
       }))
       .filter((track) => track.src && track.lang && track.label);
   }, [captionTracks]);
+
+  useEffect(() => {
+    if (!hasPlaybackStarted) {
+      setRecoveryOverlayVisible(false);
+      setRecoveryStartedAtMs(0);
+      return;
+    }
+    const delayMs = playbackRecoveryOverlayDelayMs(status);
+    if (delayMs === null) {
+      setRecoveryOverlayVisible(false);
+      setRecoveryStartedAtMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setRecoveryStartedAtMs(startedAt);
+    if (delayMs === 0) {
+      setRecoveryOverlayVisible(true);
+      return;
+    }
+    setRecoveryOverlayVisible(false);
+    const timer = setTimeout(() => setRecoveryOverlayVisible(true), delayMs);
+    return () => clearTimeout(timer);
+  }, [hasPlaybackStarted, status]);
+
+  useEffect(() => {
+    if (!startupOverlayVisible) return;
+    const startedAt = hasPlaybackStarted ? recoveryStartedAtMs : startupStartedAtMs;
+    if (startedAt <= 0) return;
+    const updateElapsed = () => setStartupElapsedMs(Math.max(0, Date.now() - startedAt));
+    updateElapsed();
+    const timer = setInterval(updateElapsed, 250);
+    return () => clearInterval(timer);
+  }, [hasPlaybackStarted, recoveryStartedAtMs, startupOverlayVisible, startupStartedAtMs]);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -1041,6 +1114,11 @@ export function Player({
   useEffect(() => {
     if (!playbackStartupPolicyReady) return;
 
+    const startupBeganAtMs = Date.now();
+    setHasPlaybackStarted(false);
+    setStartupStartedAtMs(startupBeganAtMs);
+    setStartupElapsedMs(0);
+    setStartupBufferMetrics({ bufferedSeconds: 0, targetSeconds: 0 });
     setError(null);
     setStatus("Loading…");
     setNeedsClick(false);
@@ -1340,11 +1418,11 @@ export function Player({
         : Number.isFinite(configuredLiveSyncDuration) && configuredLiveSyncDuration >= 12
           ? 12
           : 8;
-      const adaptiveStartupBufferSeconds = effectiveBackgroundPlayEnabled
-        ? 8
-        : Number.isFinite(configuredLiveSyncDuration) && configuredLiveSyncDuration >= 12
-          ? 4
-          : 0.5;
+      const adaptiveStartupBufferSeconds = resolveAdaptiveLiveStartupBufferSeconds({
+        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+        variantCount: hls.levels.length,
+        configuredLiveSyncDuration
+      });
       const targetBufferSeconds = effectiveLowLatencyEnabled
         ? zapAudioFallbackActive
           ? effectiveBackgroundPlayEnabled
@@ -1420,6 +1498,21 @@ export function Player({
             : effectiveLowLatencyEnabled && typeof reportedTargetLatency === "number" && reportedTargetLatency >= 4
             ? Math.min(2, reportedTargetLatency / 3)
             : targetBufferSeconds;
+        const observedStartupBufferSeconds = Math.max(bufferedAhead, startupRange?.duration ?? 0);
+        setStartupBufferMetrics((current) => {
+          if (
+            Math.abs(current.bufferedSeconds - observedStartupBufferSeconds) < 0.05 &&
+            Math.abs(current.targetSeconds - startupBufferGoalSeconds) < 0.05
+          ) {
+            return current;
+          }
+          return {
+            bufferedSeconds: observedStartupBufferSeconds,
+            targetSeconds: startupBufferGoalSeconds
+          };
+        });
+        video.dataset.dstreamStartupBufferCurrent = observedStartupBufferSeconds.toFixed(3);
+        video.dataset.dstreamStartupBufferGoal = startupBufferGoalSeconds.toFixed(3);
         const bufferedLiveSyncTarget =
           effectiveLowLatencyEnabled && typeof liveSyncPosition === "number"
             ? findBufferedLiveSyncTarget(startupRanges, liveSyncPosition, startupBufferGoalSeconds)
@@ -1436,6 +1529,16 @@ export function Player({
               preferredStartupLatency
             )
           : null;
+        const startupBufferToleranceSeconds = 0.15;
+        const startupRangeIsCurrent = isBufferedLiveStartupRangeCurrent(
+          startupRange,
+          liveSyncPosition,
+          Math.max(1, Math.min(2, startupBufferGoalSeconds / 2))
+        );
+        const hasSafeBufferedStartupTarget =
+          bufferedStartupTarget !== null &&
+          startupRangeIsCurrent &&
+          observedStartupBufferSeconds + startupBufferToleranceSeconds >= startupBufferGoalSeconds;
         if (
           !fallbackAttempted &&
           onUnbufferedLiveTimeout &&
@@ -1456,7 +1559,8 @@ export function Player({
           else scheduleNextStartupCheck(waitedMs);
           return;
         }
-        const waitingForBufferedLiveSync = effectiveLowLatencyEnabled && bufferedLiveSyncTarget === null;
+        const waitingForBufferedLiveSync =
+          effectiveLowLatencyEnabled && bufferedLiveSyncTarget === null && !hasSafeBufferedStartupTarget;
         if (waitingForBufferedLiveSync && waitedMs < maxWaitMs) {
           scheduleNextStartupCheck(waitedMs);
           return;
@@ -1485,11 +1589,16 @@ export function Player({
               // ignore
             }
           }
+          const alignedBufferedAhead = getBufferedAheadSeconds();
           if (
             effectiveLowLatencyEnabled &&
-            getBufferedAheadSeconds() + 0.05 < startupBufferGoalSeconds &&
+            (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+              alignedBufferedAhead + startupBufferToleranceSeconds < startupBufferGoalSeconds) &&
             waitedMs < maxWaitMs
-          ) return;
+          ) {
+            scheduleStartupCheck(100);
+            return;
+          }
           startNow();
         }
       }
@@ -1517,6 +1626,7 @@ export function Player({
       setNeedsClick(false);
       setQualityOptions([]);
       setQualityIndicator("Auto");
+      setStartupBufferMetrics({ bufferedSeconds: 0, targetSeconds: 0 });
       setNote(reason);
       try {
         beforeStart?.();
@@ -1549,8 +1659,10 @@ export function Player({
       clearWhepStallTimer();
       setNeedsClick(false);
       setStatus("Playing");
+      setHasPlaybackStarted(true);
       if (!playbackStartedSent) {
         playbackStartedSent = true;
+        video.dataset.dstreamStartupDurationMs = String(Math.max(0, Date.now() - startupBeganAtMs));
         try {
           onPlaybackStartedRef.current?.();
         } catch {
@@ -1570,6 +1682,7 @@ export function Player({
     };
     const onStalled = () => {
       clearPlaybackStableTimer();
+      setStatus((prev) => (prev === "Click to play" ? prev : "Buffering…"));
       if (playbackModeRef.current !== "whep") return;
       clearWhepStallTimer();
       whepStallTimer = setTimeout(() => {
@@ -1897,6 +2010,16 @@ export function Player({
             void refreshRotatingMaster();
           }, 30_000);
         }
+        const compatibilityStorage = getBrowserStorage();
+        if (
+          compatibilityStorage &&
+          isZapStreamHlsUrl(hlsSource) &&
+          !preferSourceVideoRef.current &&
+          prefersStableAudioForSource(compatibilityStorage, hlsSource) &&
+          switchZapSourceToAudio("remembered-video-instability")
+        ) {
+          return;
+        }
         waitForHlsStartupBuffer(
           hls,
           isZapStreamHlsUrl(hlsSource) ? () => switchZapSourceToAudio("video-startup-timeout") : undefined
@@ -1938,7 +2061,8 @@ export function Player({
           (reason === "playlist-timing-corrected" ||
             reason === "repeated-video-buffer-gap" ||
             reason === "video-startup-timeout" ||
-            reason === "video-fragment-invalid") &&
+            reason === "video-fragment-invalid" ||
+            reason === "remembered-video-instability") &&
           preferSourceVideoRef.current
         ) return false;
         if (
@@ -1958,9 +2082,20 @@ export function Player({
         setNote(null);
         setQualityOptions([]);
         setQualityIndicator("Audio");
+        setStartupBufferMetrics({ bufferedSeconds: 0, targetSeconds: 0 });
         setAudioOnlyFallbackActive(true);
         video.dataset.dstreamSourceMode = "zap-audio-fallback";
         video.dataset.dstreamAudioFallbackReason = reason;
+        if (
+          reason === "playlist-timing-corrected" ||
+          reason === "repeated-video-buffer-gap" ||
+          reason === "video-fragment-invalid" ||
+          reason === "video-decoder-recovery-exhausted" ||
+          reason === "video-decoder-recovery-failed"
+        ) {
+          const compatibilityStorage = getBrowserStorage();
+          if (compatibilityStorage) rememberStableAudioForSource(compatibilityStorage, hlsSource);
+        }
         setTimeout(() => {
           if (cancelled || hlsRef.current !== hls) return;
           try {
@@ -2506,6 +2641,8 @@ export function Player({
 
   const trySourceVideo = () => {
     preferSourceVideoRef.current = true;
+    const compatibilityStorage = getBrowserStorage();
+    if (compatibilityStorage) forgetStableAudioForSource(compatibilityStorage, normalizedSrc);
     setAudioOnlyFallbackActive(false);
     setError(null);
     setNeedsClick(false);
@@ -2670,6 +2807,54 @@ export function Player({
             ) : (
               <img src="/logo_trimmed.png" alt="dStream" className="h-20 w-20 object-contain opacity-40" />
             )}
+          </div>
+        )}
+
+        {startupOverlayVisible && startupPresentation && nsfwConsented && !error && !needsClick && (
+          <div
+            data-testid="player-startup-overlay"
+            data-startup-stage={startupPresentation.stage}
+            data-startup-progress={
+              startupPresentation.progressPercent === null ? "indeterminate" : startupPresentation.progressPercent.toFixed(1)
+            }
+            data-startup-buffered={startupBufferMetrics.bufferedSeconds.toFixed(3)}
+            data-startup-target={startupBufferMetrics.targetSeconds.toFixed(3)}
+            className={`pointer-events-none absolute inset-0 z-[25] flex items-center justify-center px-4 text-center ${
+              hasPlaybackStarted ? "bg-black/55" : "bg-black/70"
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex w-full max-w-sm flex-col items-center">
+              <LoaderCircle className="mb-3 h-6 w-6 animate-spin text-white" aria-hidden="true" />
+              <p data-testid="player-startup-title" className="text-sm font-semibold text-white">
+                {startupPresentation.title}
+              </p>
+              <p data-testid="player-startup-detail" className="mt-1 text-xs leading-5 text-neutral-300">
+                {startupPresentation.detail}
+              </p>
+              {startupPresentation.progressPercent !== null && (
+                <div
+                  className="mt-3 h-1 w-full max-w-56 overflow-hidden rounded-full bg-white/20"
+                  role="progressbar"
+                  aria-label="Playback buffer"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(startupPresentation.progressPercent)}
+                >
+                  <div
+                    className="h-full rounded-full bg-cyan-400 transition-[width] duration-200"
+                    style={{ width: `${startupPresentation.progressPercent}%` }}
+                  />
+                </div>
+              )}
+              <p className="mt-2 text-[11px] tabular-nums text-neutral-400" aria-hidden="true">
+                {startupPresentation.elapsedLabel}
+              </p>
+              {startupPresentation.slowMessage && (
+                <p className="mt-1 text-[11px] leading-4 text-neutral-300">{startupPresentation.slowMessage}</p>
+              )}
+            </div>
           </div>
         )}
 

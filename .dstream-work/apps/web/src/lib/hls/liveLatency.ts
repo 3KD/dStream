@@ -3,6 +3,19 @@ export type BufferedTimeRange = {
   end: number;
 };
 
+export function resolveAdaptiveLiveStartupBufferSeconds({
+  backgroundPlayEnabled,
+  variantCount,
+  configuredLiveSyncDuration
+}: {
+  backgroundPlayEnabled: boolean;
+  variantCount: number;
+  configuredLiveSyncDuration: number;
+}): number {
+  if (backgroundPlayEnabled || variantCount > 1) return 8;
+  return Number.isFinite(configuredLiveSyncDuration) && configuredLiveSyncDuration >= 12 ? 4 : 0.5;
+}
+
 export function findBufferedLiveSyncTarget(
   ranges: readonly BufferedTimeRange[],
   liveSyncPosition: number,
@@ -16,6 +29,25 @@ export function findBufferedLiveSyncTarget(
     if (liveSyncPosition >= range.start && liveSyncPosition <= range.end - endPadding) return liveSyncPosition;
   }
   return null;
+}
+
+export function isBufferedLiveStartupRangeCurrent(
+  range: BufferedTimeRange | null | undefined,
+  liveSyncPosition: number | null | undefined,
+  maxDistanceBehind = 2
+): boolean {
+  if (typeof liveSyncPosition !== "number" || !Number.isFinite(liveSyncPosition)) return true;
+  if (
+    !range ||
+    !Number.isFinite(range.start) ||
+    !Number.isFinite(range.end) ||
+    range.end <= range.start ||
+    !Number.isFinite(maxDistanceBehind) ||
+    maxDistanceBehind < 0
+  ) {
+    return false;
+  }
+  return range.end + maxDistanceBehind >= liveSyncPosition;
 }
 
 export function findBufferedLiveStartupTarget(
@@ -38,7 +70,11 @@ export function findBufferedLiveStartupTarget(
   if (!latestRange) return null;
 
   const duration = latestRange.end - latestRange.start;
-  const safeEnd = latestRange.end - Math.min(minimumBufferAhead, duration / 2);
+  const boundaryPadding = Math.min(0.1, duration / 4);
+  const earliestSafeStart = latestRange.start + boundaryPadding;
+  const availableBufferAhead = Math.max(boundaryPadding, duration - boundaryPadding);
+  const requiredBufferAhead = Math.min(minimumBufferAhead, availableBufferAhead);
+  const safeEnd = latestRange.end - requiredBufferAhead;
   if (preferredLatency === undefined) {
     if (
       typeof liveSyncPosition === "number" &&
@@ -52,7 +88,7 @@ export function findBufferedLiveStartupTarget(
   }
 
   const boundedLatency = Math.max(minimumBufferAhead, preferredLatency);
-  const fallbackTarget = latestRange.end - Math.min(boundedLatency, duration / 2);
+  const fallbackTarget = Math.min(safeEnd, Math.max(earliestSafeStart, latestRange.end - boundedLatency));
   const maximumAcceptedLag = boundedLatency + Math.max(1, minimumBufferAhead);
   if (
     typeof liveSyncPosition === "number" &&
