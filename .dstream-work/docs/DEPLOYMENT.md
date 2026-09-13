@@ -38,6 +38,7 @@ See `.env.example`. Quick reference:
 - `NEXT_PUBLIC_SUPPORT_DOGE_ADDRESS`: optional Dogecoin donation address.
 - `NEXT_PUBLIC_SUPPORT_BCH_ADDRESS`: optional Bitcoin Cash donation address.
 - `NEXT_PUBLIC_SUPPORT_ADA_ADDRESS`: optional Cardano donation address.
+- `NEXT_PUBLIC_RTMP_INGEST_ORIGIN`: public RTMP server shown in Broadcast Studio for OBS and other encoders. Point it directly at the MediaMTX origin with a DNS-only hostname or origin IP; CDN-proxied hostnames generally do not forward RTMP.
 
 **TURN (bundled compose service)**
 - `TURN_REALM`: TURN realm (default `dstream.stream`).
