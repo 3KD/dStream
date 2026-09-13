@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   formatPlaybackStartupElapsed,
+  isEvidenceBackedZapAudioFallbackReason,
   playbackRecoveryOverlayDelayMs,
   resolvePlaybackStartupPresentation
 } from "./playbackStartup";
+
+test("Zap startup delay alone does not justify dropping source video", () => {
+  assert.equal(isEvidenceBackedZapAudioFallbackReason("video-startup-timeout"), false);
+  assert.equal(isEvidenceBackedZapAudioFallbackReason("repeated-video-buffer-gap"), true);
+  assert.equal(isEvidenceBackedZapAudioFallbackReason("video-fragment-invalid"), true);
+  assert.equal(isEvidenceBackedZapAudioFallbackReason("video-decoder-recovery-exhausted"), true);
+});
 
 test("startup presentation reports an indeterminate source connection", () => {
   assert.deepEqual(
@@ -84,7 +92,7 @@ test("a post-start wait is presented as recovery rather than startup", () => {
   );
 });
 
-test("stable audio fallback clearly describes the transition", () => {
+test("audio fallback describes the transition without blaming the source", () => {
   const presentation = resolvePlaybackStartupPresentation({
     status: "Switching to audio...",
     isLiveStream: true,
@@ -94,8 +102,8 @@ test("stable audio fallback clearly describes the transition", () => {
     elapsedMs: 4_000
   });
   assert.equal(presentation?.stage, "switching");
-  assert.equal(presentation?.title, "Switching to stable audio");
-  assert.match(presentation?.detail ?? "", /source video is unstable/i);
+  assert.equal(presentation?.title, "Continuing with audio");
+  assert.equal(presentation?.detail, "Video playback could not continue. Loading the source audio track.");
 });
 
 test("terminal and user-controlled states do not produce a loading overlay", () => {

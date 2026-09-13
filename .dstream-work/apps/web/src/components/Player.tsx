@@ -40,6 +40,7 @@ import {
   shouldCheckBackgroundPlaybackProgress
 } from "@/lib/playbackLifecycle";
 import {
+  isEvidenceBackedZapAudioFallbackReason,
   playbackRecoveryOverlayDelayMs,
   resolvePlaybackStartupPresentation
 } from "@/lib/playbackStartup";
@@ -1302,6 +1303,7 @@ export function Player({
     playbackSessionGenerationRef.current += 1;
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
     video.dataset.dstreamSourceMode = "primary";
+    delete video.dataset.dstreamAudioFallbackReason;
     setAudioOnlyFallbackActive(false);
     video.dataset.dstreamPlaybackSignature = JSON.stringify({
       isMobilePlayback,
@@ -1440,7 +1442,7 @@ export function Player({
       sendReady();
       if (video.paused || video.ended) attemptStartupPlayback();
     };
-    const waitForHlsStartupBuffer = (hls: Hls, onUnbufferedLiveTimeout?: () => boolean) => {
+    const waitForHlsStartupBuffer = (hls: Hls) => {
       clearHlsStartupListener();
       if (!isLiveStream) {
         beginHlsPlayback();
@@ -1481,10 +1483,8 @@ export function Player({
           : effectiveBackgroundPlayEnabled
             ? 12_000
             : 8_000;
-      const fallbackWaitMs = onUnbufferedLiveTimeout ? 4_000 : null;
       const startedAt = Date.now();
       let started = false;
-      let fallbackAttempted = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
       const cleanup = () => {
         if (startupTimer) {
@@ -1511,10 +1511,7 @@ export function Player({
         startupTimer = setTimeout(maybeStart, Math.max(0, delayMs));
       };
       const scheduleNextStartupCheck = (waitedMs: number) => {
-        const deadlines = [maxWaitMs];
-        if (!fallbackAttempted && fallbackWaitMs !== null) deadlines.push(fallbackWaitMs);
-        const nextDeadline = Math.min(...deadlines.filter((deadline) => deadline > waitedMs));
-        scheduleStartupCheck(nextDeadline - waitedMs);
+        scheduleStartupCheck(maxWaitMs - waitedMs);
       };
       function maybeStart() {
         if (started || cancelled) return;
@@ -1573,21 +1570,6 @@ export function Player({
           bufferedStartupTarget !== null &&
           startupRangeIsCurrent &&
           observedStartupBufferSeconds + startupBufferToleranceSeconds >= startupBufferGoalSeconds;
-        if (
-          !fallbackAttempted &&
-          onUnbufferedLiveTimeout &&
-          fallbackWaitMs !== null &&
-          waitedMs >= fallbackWaitMs &&
-          (!hasStartupMedia || bufferedLiveSyncTarget === null)
-        ) {
-          fallbackAttempted = true;
-          if (onUnbufferedLiveTimeout()) {
-            started = true;
-            cleanup();
-            removeHlsStartupListener = null;
-            return;
-          }
-        }
         if (!hasStartupMedia) {
           if (waitedMs >= maxWaitMs) scheduleStartupCheck(250);
           else scheduleNextStartupCheck(waitedMs);
@@ -2054,10 +2036,7 @@ export function Player({
         ) {
           return;
         }
-        waitForHlsStartupBuffer(
-          hls,
-          isZapStreamHlsUrl(hlsSource) ? () => switchZapSourceToAudio("video-startup-timeout") : undefined
-        );
+        waitForHlsStartupBuffer(hls);
       });
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -2090,11 +2069,14 @@ export function Player({
         if (data.frag?.sn !== undefined) video.dataset.dstreamHlsFragment = String(data.frag.sn);
       });
       switchZapSourceToAudio = (reason: string) => {
-        if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
+        if (
+          zapAudioFallbackActive ||
+          !isZapStreamHlsUrl(hlsSource) ||
+          !isEvidenceBackedZapAudioFallbackReason(reason)
+        ) return false;
         if (
           (reason === "playlist-timing-corrected" ||
             reason === "repeated-video-buffer-gap" ||
-            reason === "video-startup-timeout" ||
             reason === "video-fragment-invalid" ||
             reason === "remembered-video-instability") &&
           preferSourceVideoRef.current

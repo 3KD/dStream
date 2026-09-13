@@ -18,6 +18,17 @@ export interface PlaybackStartupPresentationInput {
   elapsedMs: number;
 }
 
+export function isEvidenceBackedZapAudioFallbackReason(reason: string): boolean {
+  return (
+    reason === "playlist-timing-corrected" ||
+    reason === "repeated-video-buffer-gap" ||
+    reason === "video-fragment-invalid" ||
+    reason === "remembered-video-instability" ||
+    reason === "video-decoder-recovery-exhausted" ||
+    reason === "video-decoder-recovery-failed"
+  );
+}
+
 function finiteNonNegative(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
@@ -70,8 +81,8 @@ export function resolvePlaybackStartupPresentation({
   if (normalized.includes("switching to audio")) {
     return {
       stage: "switching",
-      title: "Switching to stable audio",
-      detail: "The source video is unstable. Loading its audio rendition.",
+      title: "Continuing with audio",
+      detail: "Video playback could not continue. Loading the source audio track.",
       elapsedLabel,
       progressPercent: null,
       slowMessage
