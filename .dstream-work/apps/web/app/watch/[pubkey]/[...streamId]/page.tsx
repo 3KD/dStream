@@ -21,6 +21,7 @@ import { shortenText } from "@/lib/encoding";
 import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
+import { shouldQueueQuickPlayHandoff } from "@/lib/playbackLifecycle";
 import { getNostrRelays } from "@/lib/config";
 import { comparePaymentAssetOrder } from "@/lib/payments/catalog";
 import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
@@ -308,6 +309,11 @@ export default function WatchPage() {
   const playbackStarted = startedPlaybackSessionKey === playbackSessionKey;
   const handlePlaybackStarted = useCallback(() => {
     startTransition(() => setStartedPlaybackSessionKey(playbackSessionKey));
+  }, [playbackSessionKey]);
+  const [handoffPlaybackSessionKey, setHandoffPlaybackSessionKey] = useState<string | null>(null);
+  const playbackHandoffReady = handoffPlaybackSessionKey === playbackSessionKey;
+  const handlePlaybackHandoffReady = useCallback(() => {
+    startTransition(() => setHandoffPlaybackSessionKey(playbackSessionKey));
   }, [playbackSessionKey]);
   const [chatRuntimeSessionKey, setChatRuntimeSessionKey] = useState<string | null>(null);
   const [socialRuntimeSessionKey, setSocialRuntimeSessionKey] = useState<string | null>(null);
@@ -957,14 +963,20 @@ export default function WatchPage() {
   }, [liveAccessToken, originStreamId, shouldTryWhep]);
 
   useEffect(() => {
-    if (!playbackStarted) return;
-    if (!pubkey || !streamId) return;
     const nextUrl = playbackStreamUrl.trim();
-    if (!nextUrl || !isLikelyPlayableMediaUrl(nextUrl)) return;
-    if (livePrivateAccessRequired && !liveAccessToken) return;
-    
-    // Prevent the broadcaster's own screen from queueing into the global mini-player
-    if (identity?.pubkey === pubkey) return;
+    if (
+      !shouldQueueQuickPlayHandoff({
+        hasPlaybackStarted: playbackHandoffReady,
+        streamPubkey: pubkey,
+        streamId,
+        playbackUrl: nextUrl,
+        urlIsPlayable: isLikelyPlayableMediaUrl(nextUrl),
+        privateAccessRequired: livePrivateAccessRequired,
+        accessToken: liveAccessToken,
+        viewerPubkey: identity?.pubkey
+      })
+    ) return;
+    if (!pubkey || !streamId) return;
 
     setQuickPlayStream({
       streamPubkey: pubkey,
@@ -973,7 +985,7 @@ export default function WatchPage() {
       hlsUrl: nextUrl,
       whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
     });
-  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackStarted, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackHandoffReady, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -1970,6 +1982,7 @@ export default function WatchPage() {
       e2eSentRef.current.player = true;
       postE2E({ type: "dstream:e2e", t: "watch_player_ready", streamPubkey: pubkey ?? "", streamId });
     },
+    onPlaybackStarted: handlePlaybackHandoffReady,
     onPlaybackStable: handlePlaybackStarted
   }), [
     playbackStreamUrl,
@@ -1989,6 +2002,7 @@ export default function WatchPage() {
     mobilePortraitLayout,
     announce?.image,
     announce?.title,
+    handlePlaybackHandoffReady,
     handlePlaybackStarted,
     pubkey,
     streamId

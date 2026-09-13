@@ -4,6 +4,10 @@ import dynamic from "next/dynamic";
 import { LoaderCircle } from "lucide-react";
 import { createContext, useContext, useState, ReactNode, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import {
+  resolveGlobalPlayerHostPlacement,
+  type GlobalPlayerHostPlacement
+} from "@/lib/playbackLifecycle";
 
 const Player = dynamic(() => import("@/components/Player").then((module) => module.Player), {
   ssr: false,
@@ -34,6 +38,15 @@ interface GlobalPlayerContextValue {
 
 const GlobalPlayerContext = createContext<GlobalPlayerContextValue | null>(null);
 
+function applyHostPlacement(host: HTMLElement, placement: GlobalPlayerHostPlacement) {
+  host.style.left = placement.left;
+  host.style.top = placement.top;
+  host.style.width = placement.width;
+  host.style.height = placement.height;
+  host.style.zIndex = placement.zIndex;
+  host.style.pointerEvents = placement.pointerEvents;
+}
+
 export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
   const [forceTick, setForceTick] = useState(0);
   const portalsRef = useRef<Record<string, HTMLElement>>({});
@@ -47,10 +60,16 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
     const host = document.createElement("div");
     host.setAttribute("data-global-player-host", "true");
     host.className = "fixed overflow-hidden";
-    host.style.left = "-10000px";
-    host.style.top = "0";
-    host.style.width = "1px";
-    host.style.height = "1px";
+    applyHostPlacement(
+      host,
+      resolveGlobalPlayerHostPlacement({
+        active: false,
+        slotId: null,
+        targetConnected: false,
+        targetRect: null,
+        targetPointerEvents: null
+      })
+    );
     permanentHostRootRef.current?.appendChild(host);
     playerHostRef.current = host;
     setPlayerHost(host);
@@ -107,33 +126,64 @@ export function GlobalPlayerProvider({ children }: { children: ReactNode }) {
 
   const syncPortalPosition = useCallback((id: string) => {
     const host = playerHostRef.current;
+    if (!host || activeRequestIdRef.current !== id) return;
     const target = portalsRef.current[id];
-    if (!host || activeRequestIdRef.current !== id || !target?.isConnected) return;
+    if (!target?.isConnected) {
+      applyHostPlacement(
+        host,
+        resolveGlobalPlayerHostPlacement({
+          active: false,
+          slotId: id,
+          targetConnected: false,
+          targetRect: null,
+          targetPointerEvents: null
+        })
+      );
+      return;
+    }
 
     const rect = target.getBoundingClientRect();
-    host.style.left = `${rect.left}px`;
-    host.style.top = `${rect.top}px`;
-    host.style.width = `${Math.max(1, rect.width)}px`;
-    host.style.height = `${Math.max(1, rect.height)}px`;
-    host.style.zIndex = id === "quickplay-dock" ? "9999" : "1";
-    host.style.pointerEvents = getComputedStyle(target).pointerEvents;
+    applyHostPlacement(
+      host,
+      resolveGlobalPlayerHostPlacement({
+        active: true,
+        slotId: id,
+        targetConnected: target.isConnected,
+        targetRect: rect,
+        targetPointerEvents: getComputedStyle(target).pointerEvents
+      })
+    );
   }, []);
 
   useLayoutEffect(() => {
     const host = playerHostRef.current;
     if (!host || !playerHost) return;
     if (!activeRequest) {
-      host.style.left = "-10000px";
-      host.style.width = "1px";
-      host.style.height = "1px";
+      applyHostPlacement(
+        host,
+        resolveGlobalPlayerHostPlacement({
+          active: false,
+          slotId: null,
+          targetConnected: false,
+          targetRect: null,
+          targetPointerEvents: null
+        })
+      );
       return;
     }
 
     const target = portalsRef.current[activeRequest.id];
     if (!target?.isConnected) {
-      host.style.left = "-10000px";
-      host.style.width = "1px";
-      host.style.height = "1px";
+      applyHostPlacement(
+        host,
+        resolveGlobalPlayerHostPlacement({
+          active: false,
+          slotId: activeRequest.id,
+          targetConnected: false,
+          targetRect: null,
+          targetPointerEvents: null
+        })
+      );
       return;
     }
 

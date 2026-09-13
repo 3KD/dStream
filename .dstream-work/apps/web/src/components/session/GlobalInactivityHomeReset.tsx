@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { QUICK_PLAY_STORAGE_KEY, useQuickPlay } from "@/context/QuickPlayContext";
+import { shouldResetInactiveSession } from "@/lib/playbackLifecycle";
 
 const LAST_VISIT_STORAGE_KEY = "dstream_last_visit_at_ms_v1";
 const INACTIVITY_RESET_MS = 20 * 60 * 1000;
@@ -65,10 +66,18 @@ export function GlobalInactivityHomeReset() {
   const resetIfInactive = useCallback(() => {
     const nowMs = Date.now();
     const lastVisitAtMs = readLastVisitAtMs();
-    const inactive = typeof lastVisitAtMs === "number" && nowMs - lastVisitAtMs >= INACTIVITY_RESET_MS;
+    const mediaPlaybackActive = hasActiveMediaPlayback();
     writeLastVisitAtMs(nowMs);
-    if (playbackActive || hasActiveMediaPlayback()) return;
-    if (!inactive || redirectingRef.current) return;
+    if (
+      !shouldResetInactiveSession({
+        nowMs,
+        lastVisitAtMs,
+        inactivityMs: INACTIVITY_RESET_MS,
+        playbackActive,
+        mediaPlaybackActive,
+        redirecting: redirectingRef.current
+      })
+    ) return;
 
     clearPlayers();
     if (pathname !== "/") {

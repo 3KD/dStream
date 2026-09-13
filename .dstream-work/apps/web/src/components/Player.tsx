@@ -35,6 +35,11 @@ import { inferMediaUrlKind } from "@/lib/mediaUrl";
 import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import { resolveStartupAudioPreference } from "@/lib/playbackAudio";
 import {
+  resolveBackgroundPlaybackDecision,
+  resolveLivePlaybackRecoveryDecision,
+  shouldCheckBackgroundPlaybackProgress
+} from "@/lib/playbackLifecycle";
+import {
   playbackRecoveryOverlayDelayMs,
   resolvePlaybackStartupPresentation
 } from "@/lib/playbackStartup";
@@ -748,10 +753,18 @@ export function Player({
     };
 
     const attemptBackgroundPlay = (allowVisibleResume = false) => {
-      if (video.ended) return;
-      if (!allowVisibleResume && document.visibilityState !== "hidden") return;
+      const decision = resolveBackgroundPlaybackDecision({
+        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+        documentHidden: document.visibilityState === "hidden",
+        allowVisibleResume,
+        ended: video.ended,
+        startupGatePending: startupGatePendingRef.current,
+        userPaused: userPausedPlaybackRef.current,
+        mediaMarkedUserPaused: isMediaUserPaused(video)
+      });
+      if (!decision.shouldRememberRequest) return;
       backgroundPlaybackRequested = true;
-      if (startupGatePendingRef.current) return;
+      if (!decision.shouldCallPlay) return;
       configureAudioSessionForPlayback();
       restorePreferredPlaybackVolume();
       void video.play().catch(() => {
@@ -788,8 +801,15 @@ export function Player({
     };
 
     const onPause = () => {
-      if (document.visibilityState !== "hidden" && !pageLifecycleHidden) return;
-      if (userPausedPlaybackRef.current || isMediaUserPaused(video)) return;
+      if (
+        !shouldCheckBackgroundPlaybackProgress({
+          documentHidden: document.visibilityState === "hidden",
+          pageLifecycleHidden,
+          ended: video.ended,
+          userPaused: userPausedPlaybackRef.current,
+          mediaMarkedUserPaused: isMediaUserPaused(video)
+        })
+      ) return;
       const pausedAt = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       attemptBackgroundPlay(true);
       scheduleBestEffortRetry();
@@ -797,10 +817,13 @@ export function Player({
       const checkBackgroundProgress = () => {
         progressCheckTimer = null;
         if (
-          document.visibilityState !== "hidden" ||
-          userPausedPlaybackRef.current ||
-          isMediaUserPaused(video) ||
-          video.ended
+          !shouldCheckBackgroundPlaybackProgress({
+            documentHidden: document.visibilityState === "hidden",
+            pageLifecycleHidden,
+            ended: video.ended,
+            userPaused: userPausedPlaybackRef.current,
+            mediaMarkedUserPaused: isMediaUserPaused(video)
+          })
         ) return;
         const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
         if (currentTime > pausedAt + 0.25) {
@@ -905,12 +928,6 @@ export function Player({
         return;
       }
 
-      if (video.ended) {
-        requestLivePlaybackReload("Live media ended unexpectedly. Reconnected to the current live window.");
-        markHealthy(now, currentTime, frameCount);
-        return;
-      }
-
       if (video.paused && !startupGatePendingRef.current) {
         void video.play().catch(() => {
           setStatus("Click to play");
@@ -952,17 +969,6 @@ export function Player({
         }
         return true;
       };
-      const starvationRecoveryThresholdMs = 6_000;
-      if (
-        hasObservedPlaybackProgress &&
-        stalledForMs >= starvationRecoveryThresholdMs &&
-        bufferAhead < 0.25 &&
-        video.readyState <= 2 &&
-        tryInSessionRecovery("The live buffer ran dry. Retrying a more stable rendition without resetting playback.")
-      ) {
-        return;
-      }
-
       const hlsActivity = liveHlsActivityRef.current;
       const lastHlsActivityAt = Math.max(
         hlsActivity.lastFragBufferedAt,
@@ -973,10 +979,38 @@ export function Player({
       const stallThresholdMs = hasObservedPlaybackProgress ? (hidden ? 30_000 : 20_000) : hidden ? 45_000 : 35_000;
       const mediaFeedStale = lastHlsActivityAt === 0 || now - lastHlsActivityAt >= stallThresholdMs;
       const bufferedDecoderFrozen = hasObservedPlaybackProgress && bufferAhead >= 0.5 && video.readyState >= 3;
-      if (stalledForMs >= stallThresholdMs && (mediaFeedStale || bufferedDecoderFrozen)) {
-        if (tryInSessionRecovery("Live playback stopped advancing. Retrying without resetting the player.")) return;
-        if (hidden) return;
+      const recoveryDecision = resolveLivePlaybackRecoveryDecision({
+        isLiveStream,
+        needsClick,
+        userPaused: userPausedPlaybackRef.current,
+        mediaMarkedUserPaused: isMediaUserPaused(video),
+        ended: video.ended,
+        hidden,
+        hasObservedPlaybackProgress,
+        stalledForMs,
+        bufferAheadSeconds: bufferAhead,
+        readyState: video.readyState,
+        mediaFeedStale,
+        bufferedDecoderFrozen,
+        canAttemptInSessionRecovery: playbackModeRef.current === "hls" && !!hls && inSessionRecoveryAttempts < 3
+      });
+      if (recoveryDecision.action === "recover-in-session") {
+        const reason =
+          recoveryDecision.reason === "buffer-starved"
+            ? "The live buffer ran dry. Retrying a more stable rendition without resetting playback."
+            : "Live playback stopped advancing. Retrying without resetting the player.";
+        if (tryInSessionRecovery(reason)) return;
+        if (hidden || recoveryDecision.reason === "buffer-starved") return;
         requestLivePlaybackReload("Live playback stopped advancing. Reconnected to the current live window.");
+        markHealthy(now, currentTime, frameCount);
+        return;
+      }
+      if (recoveryDecision.action === "reload-session") {
+        const reason =
+          recoveryDecision.reason === "ended"
+            ? "Live media ended unexpectedly. Reconnected to the current live window."
+            : "Live playback stopped advancing. Reconnected to the current live window.";
+        requestLivePlaybackReload(reason);
         markHealthy(now, currentTime, frameCount);
       }
     };
