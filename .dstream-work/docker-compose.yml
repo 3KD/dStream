@@ -9,6 +9,7 @@ services:
         # For local usage, this points the browser at the locally exposed relay port.
         NEXT_PUBLIC_NOSTR_RELAYS: "${NEXT_PUBLIC_NOSTR_RELAYS:-ws://localhost:8081}"
         NEXT_PUBLIC_HLS_ORIGIN: "${NEXT_PUBLIC_HLS_ORIGIN:-}"
+        NEXT_PUBLIC_RTMP_INGEST_ORIGIN: "${NEXT_PUBLIC_RTMP_INGEST_ORIGIN:-}"
         # Optional. Helps WebRTC (WHIP + P2P) on restrictive networks/NAT.
         NEXT_PUBLIC_WEBRTC_ICE_SERVERS: "${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-stun:stun.cloudflare.com:3478}"
         NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS: "${NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS:-}"
