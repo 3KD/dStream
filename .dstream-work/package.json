@@ -16,7 +16,7 @@
     "test:monero:refund": "node --test --import tsx apps/web/src/lib/monero/refundPolicy.test.ts",
     "test:social": "node --test --import tsx apps/web/src/lib/social/store.test.ts",
     "test:inbox": "node --test --import tsx apps/web/src/lib/inbox/dm.test.ts",
-    "test:chat": "node --test --import tsx apps/web/src/lib/chatCommands.test.ts",
+    "test:chat": "node --test --import tsx apps/web/src/lib/chatCommands.test.ts apps/web/src/lib/chatNotificationSound.test.ts",
     "test:profile": "node --test --import tsx apps/web/src/lib/profile.test.ts",
     "test:payments": "node --test --import tsx apps/web/src/lib/payments/payments.test.ts apps/web/src/lib/payments/paymentIntents.test.ts apps/web/src/lib/payments/server/readiness.test.ts apps/web/src/lib/payments/server/server.test.ts apps/web/src/lib/payments/server/allRails.test.ts",
     "test:vod": "node --test --import tsx apps/web/src/lib/videoPolicy.test.ts",

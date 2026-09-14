@@ -1,9 +1,8 @@
 "use client";
 
-import { Users, ArrowDownToLine, Bitcoin } from "lucide-react";
+import { Users, ArrowDownToLine, Bell, BellOff, Bitcoin } from "lucide-react";
 
-import { useEffect, useRef } from "react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { StreamPaymentMethod } from "@dstream/protocol";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useStreamModeration } from "@/hooks/useStreamModeration";
@@ -11,6 +10,11 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
 import { parseChatCommand } from "@/lib/chatCommands";
 import { STREAM_CHAT_CLEAR_REASON } from "@/lib/chatModeration";
+import {
+  collectNewChatNotificationMessages,
+  readChatNotificationSoundPreference,
+  writeChatNotificationSoundPreference
+} from "@/lib/chatNotificationSound";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { buildSignedScopeProof, submitModerationReport } from "@/lib/moderation/reportClient";
 import { useNostrProfile, useNostrProfiles } from "@/hooks/useNostrProfiles";
@@ -80,9 +84,14 @@ export function ChatBox({
   const [composerDraft, setComposerDraft] = useState("");
   const [composerDraftVersion, setComposerDraftVersion] = useState(0);
   const [tipDialogOpen, setTipDialogOpen] = useState(false);
+  const [chatNotificationSoundEnabled, setChatNotificationSoundEnabled] = useState<boolean | null>(null);
 
   const lastMessageSentAtRef = useRef<number>(0);
   const clearRequestSeenRef = useRef<number>(0);
+  const chatNotificationSeenIdsRef = useRef<Set<string>>(new Set());
+  const chatNotificationActiveSinceRef = useRef(Date.now());
+  const chatNotificationAudioContextRef = useRef<AudioContext | null>(null);
+  const lastChatNotificationSoundAtRef = useRef(0);
 
   const moderation = useStreamModeration({
     streamPubkey,
@@ -139,6 +148,114 @@ export function ChatBox({
   const profilesByPubkey = useNostrProfiles(visiblePubkeys);
 
   const [isAutoScroll, setIsAutoScroll] = useState(true);
+
+  const getChatNotificationAudioContext = useCallback(async (): Promise<AudioContext | null> => {
+    if (typeof window === "undefined") return null;
+    const AudioContextClass = window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return null;
+
+    let audioContext = chatNotificationAudioContextRef.current;
+    if (!audioContext || audioContext.state === "closed") {
+      audioContext = new AudioContextClass();
+      chatNotificationAudioContextRef.current = audioContext;
+    }
+    if (audioContext.state === "suspended") {
+      try {
+        await audioContext.resume();
+      } catch {
+        return null;
+      }
+    }
+    return audioContext.state === "running" ? audioContext : null;
+  }, []);
+
+  const playChatNotificationSound = useCallback(async () => {
+    const audioContext = await getChatNotificationAudioContext();
+    if (!audioContext) return;
+
+    const startAt = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(740, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(1_040, startAt + 0.09);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.055, startAt + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.19);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.addEventListener("ended", () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    });
+    oscillator.start(startAt);
+    oscillator.stop(startAt + 0.2);
+  }, [getChatNotificationAudioContext]);
+
+  useEffect(() => {
+    let storage: Storage | null = null;
+    try {
+      storage = typeof window === "undefined" ? null : window.localStorage;
+    } catch {
+      // Storage can be unavailable in private or restricted browser contexts.
+    }
+    setChatNotificationSoundEnabled(readChatNotificationSoundPreference(storage));
+  }, []);
+
+  useEffect(() => {
+    chatNotificationSeenIdsRef.current.clear();
+    chatNotificationActiveSinceRef.current = Date.now();
+    lastChatNotificationSoundAtRef.current = 0;
+  }, [streamId, streamPubkey]);
+
+  useEffect(() => {
+    const incomingMessages = collectNewChatNotificationMessages({
+      messages: visibleMessages,
+      seenIds: chatNotificationSeenIdsRef.current,
+      viewerPubkey,
+      activeSinceMs: chatNotificationActiveSinceRef.current
+    });
+    if (chatNotificationSoundEnabled !== true || incomingMessages.length === 0) return;
+
+    const now = Date.now();
+    if (now - lastChatNotificationSoundAtRef.current < 250) return;
+    lastChatNotificationSoundAtRef.current = now;
+    void playChatNotificationSound();
+  }, [chatNotificationSoundEnabled, playChatNotificationSound, viewerPubkey, visibleMessages]);
+
+  useEffect(() => {
+    if (chatNotificationSoundEnabled !== true || typeof window === "undefined") return;
+    const unlockAudio = () => void getChatNotificationAudioContext();
+    window.addEventListener("pointerdown", unlockAudio, { capture: true, once: true });
+    window.addEventListener("keydown", unlockAudio, { capture: true, once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio, true);
+      window.removeEventListener("keydown", unlockAudio, true);
+    };
+  }, [chatNotificationSoundEnabled, getChatNotificationAudioContext]);
+
+  useEffect(
+    () => () => {
+      const audioContext = chatNotificationAudioContextRef.current;
+      chatNotificationAudioContextRef.current = null;
+      if (audioContext && audioContext.state !== "closed") void audioContext.close();
+    },
+    []
+  );
+
+  const toggleChatNotificationSound = useCallback(() => {
+    const enabled = chatNotificationSoundEnabled !== true;
+    let storage: Storage | null = null;
+    try {
+      storage = typeof window === "undefined" ? null : window.localStorage;
+    } catch {
+      // Storage can be unavailable in private or restricted browser contexts.
+    }
+    writeChatNotificationSoundPreference(storage, enabled);
+    setChatNotificationSoundEnabled(enabled);
+    if (enabled) void playChatNotificationSound();
+  }, [chatNotificationSoundEnabled, playChatNotificationSound]);
 
   useEffect(() => {
     if (!scrollRef.current || !innerScrollRef.current) return;
@@ -476,6 +593,20 @@ export function ChatBox({
         </div>
         <div className="flex items-center gap-4">
           {headerRightSlot}
+          <button
+            type="button"
+            onClick={toggleChatNotificationSound}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-800 hover:text-white"
+            aria-label={chatNotificationSoundEnabled === true ? "Mute chat notifications" : "Enable chat sound notifications"}
+            aria-pressed={chatNotificationSoundEnabled === true}
+            title={chatNotificationSoundEnabled === true ? "Mute chat notifications" : "Enable chat sound notifications"}
+          >
+            {chatNotificationSoundEnabled === true ? (
+              <Bell className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <BellOff className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
           <button
             type="button"
             onClick={() => setTipDialogOpen(true)}
