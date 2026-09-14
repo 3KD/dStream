@@ -6,6 +6,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY index.mjs /app/index.mjs
+COPY index.mjs policy.mjs /app/
 
 CMD ["node", "/app/index.mjs"]

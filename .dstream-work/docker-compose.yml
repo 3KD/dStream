@@ -221,6 +221,7 @@ services:
     restart: unless-stopped
 
   transcoder:
+    profiles: ["transcoding"]
     image: dstream-transcoder:latest
     build:
       context: ./services/transcoder
@@ -233,6 +234,11 @@ services:
       TRANSCODER_POLL_MS: "${TRANSCODER_POLL_MS:-2500}"
       TRANSCODER_STALE_MS: "${TRANSCODER_STALE_MS:-12000}"
       TRANSCODER_MAX_STREAMS: "${TRANSCODER_MAX_STREAMS:-6}"
+      TRANSCODER_RESTART_BASE_MS: "${TRANSCODER_RESTART_BASE_MS:-2000}"
+      TRANSCODER_RESTART_MAX_MS: "${TRANSCODER_RESTART_MAX_MS:-60000}"
+      TRANSCODER_RESTART_RESET_MS: "${TRANSCODER_RESTART_RESET_MS:-120000}"
+      TRANSCODER_CIRCUIT_FAILURES: "${TRANSCODER_CIRCUIT_FAILURES:-8}"
+      TRANSCODER_CIRCUIT_COOLDOWN_MS: "${TRANSCODER_CIRCUIT_COOLDOWN_MS:-300000}"
     depends_on:
       mediamtx:
         condition: service_started

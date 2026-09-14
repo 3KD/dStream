@@ -26,6 +26,9 @@ npm run stack:up:real-wallet
 
 # Optional: plain compose (Safari/Chrome typically ok; Firefox may fail ICE without a non-loopback host)
 docker compose up -d --build
+
+# Optional adaptive ladder on a dedicated encoding-capable host
+COMPOSE_PROFILES=transcoding docker compose up -d --build transcoder
 ```
 
 Web: `http://localhost:5656` (or set `DSTREAM_WEB_PORT`)
@@ -185,7 +188,7 @@ Playback behavior in `/watch/:npub/:streamId`:
 - If caption tags are present, watch injects subtitle tracks into the video element (native caption controls).
 - If host mode is `host_only`, watch disables peer assist and surfaces host-policy reason in UI.
 - If host mode is `p2p_economy`, watch applies FCFS queueing from live presence and targets active-set peers up to threshold `T`.
-- Root Docker Compose also runs `transcoder`, which auto-generates derived rendition streams (`__r720p`, `__r480p`, `__r360p`) from live sources.
+- Root Docker Compose provides an opt-in `transcoding` profile for derived rendition streams. Keep it disabled on small origin hosts; enable it only on a dedicated encoding-capable host.
 
 Stake refund anti-abuse policy:
 

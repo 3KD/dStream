@@ -156,8 +156,8 @@ parse_local_build_services() {
 
   if [[ "${raw}" == "auto" ]]; then
     if docker_ready; then
-      LOCAL_BUILD_SERVICES=(web manifest transcoder)
-      LOCAL_BUILD_SERVICE_COUNT=3
+      LOCAL_BUILD_SERVICES=(web manifest)
+      LOCAL_BUILD_SERVICE_COUNT=2
     else
       echo "🔹 Local Docker unavailable; falling back to remote app builds."
       LOCAL_BUILD_SERVICES=()

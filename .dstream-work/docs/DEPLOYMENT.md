@@ -97,7 +97,8 @@ See `.env.example`. Quick reference:
 
 An unset provider remains inactive and fails closed. Check the effective status at `GET /api/payments/capabilities` or Settings > Monetization > Wallet Integrations.
 
-**Server-only (origin ladder transcoder)**
+**Server-only (origin ladder transcoder, opt-in)**
+- The transcoder is disabled by default. Set `COMPOSE_PROFILES=transcoding` only on a host with enough CPU for the configured software encodes.
 - `TRANSCODER_SOURCE_HLS_BASE`: source HLS base for reading live origin playlists (default `http://mediamtx:8880`).
 - `TRANSCODER_OUTPUT_RTMP_BASE`: RTMP publish base for derived renditions (default `rtmp://mediamtx:1935`).
 - `TRANSCODER_PROFILES`: comma-separated profile spec `id:width:height:videoBitrate:audioBitrate`.
@@ -287,7 +288,7 @@ DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/
 
 Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that sets that project dir automatically before delegating to the repo-root script. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
 
-When local Docker is available, the deploy script prebuilds and streams the `web`, `manifest`, and `transcoder` images so the production host only has to load and restart them. Set `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=none` if you need to fall back to remote app builds.
+When local Docker is available, the deploy script prebuilds and streams the `web` and `manifest` images so the production host only has to load and restart them. Include `transcoder` explicitly in `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES` only when deploying the opt-in `transcoding` profile.
 
 To validate a specific env file without exporting it into your shell:
 
@@ -307,13 +308,15 @@ See also `docs/HARDENING.md` and `docs/OPS_RUNBOOK.md`.
 
 ### Automatic ladder generation
 
-Root compose includes a `transcoder` service that watches active origin streams and publishes derived renditions back into MediaMTX:
+Root compose includes an opt-in `transcoding` profile that watches active origin streams and publishes derived renditions back into MediaMTX:
 
 - `<originStreamId>__r720p`
 - `<originStreamId>__r480p`
 - `<originStreamId>__r360p`
 
 `/broadcast` can auto-publish these rendition hints in kind `30311` announces. `/watch` consumes them and builds a synthetic master playlist via `/api/hls-master`.
+
+Enable it with `COMPOSE_PROFILES=transcoding` only on a dedicated encoding-capable host. Failed encodes use capped exponential restart delays and a cooldown circuit instead of restarting continuously.
 
 When the web app runs in a container, `localhost` inside that container is **not** the host. Set:
 - `DSTREAM_WHIP_PROXY_ORIGIN` to the origin service name + port (e.g. `http://mediamtx:8889`)

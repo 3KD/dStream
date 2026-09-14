@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { restartDecision } from "./policy.mjs";
 
 const HLS_DIR = (process.env.HLS_DIR || "/hls").trim();
 const SOURCE_HLS_BASE = (process.env.TRANSCODER_SOURCE_HLS_BASE || "http://mediamtx:8880").trim().replace(/\/$/, "");
@@ -8,6 +9,11 @@ const OUTPUT_RTMP_BASE = (process.env.TRANSCODER_OUTPUT_RTMP_BASE || "rtmp://med
 const POLL_MS = Math.max(500, Number(process.env.TRANSCODER_POLL_MS || "2500"));
 const STALE_MS = Math.max(3000, Number(process.env.TRANSCODER_STALE_MS || "12000"));
 const MAX_JOBS = Math.max(1, Number(process.env.TRANSCODER_MAX_STREAMS || "6"));
+const RESTART_BASE_MS = Math.max(500, Number(process.env.TRANSCODER_RESTART_BASE_MS || "2000"));
+const RESTART_MAX_MS = Math.max(RESTART_BASE_MS, Number(process.env.TRANSCODER_RESTART_MAX_MS || "60000"));
+const RESTART_RESET_MS = Math.max(10_000, Number(process.env.TRANSCODER_RESTART_RESET_MS || "120000"));
+const CIRCUIT_FAILURES = Math.max(2, Number(process.env.TRANSCODER_CIRCUIT_FAILURES || "8"));
+const CIRCUIT_COOLDOWN_MS = Math.max(RESTART_MAX_MS, Number(process.env.TRANSCODER_CIRCUIT_COOLDOWN_MS || "300000"));
 const PROFILE_RAW =
   process.env.TRANSCODER_PROFILES || "360p:640:360:700k:64k";
 const RENDITION_SUFFIX = /__r([0-9]{3,4}p)$/;
@@ -183,6 +189,8 @@ class ProfileRunner {
     this.child = null;
     this.restartTimer = null;
     this.stopped = false;
+    this.failureCount = 0;
+    this.startedAtMs = 0;
   }
 
   start() {
@@ -191,6 +199,7 @@ class ProfileRunner {
     const args = buildFfmpegArgs(this.sourceName, this.profile);
     const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
     this.child = child;
+    this.startedAtMs = Date.now();
 
     child.stdout?.on("data", (buf) => {
       const line = String(buf || "").trim();
@@ -203,11 +212,24 @@ class ProfileRunner {
     child.on("exit", (code, signal) => {
       this.child = null;
       if (this.stopped) return;
-      console.warn(`[transcoder:${this.sourceName}:${this.profile.id}] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+      const decision = restartDecision({
+        failureCount: this.failureCount,
+        runDurationMs: Date.now() - this.startedAtMs,
+        resetAfterMs: RESTART_RESET_MS,
+        baseMs: RESTART_BASE_MS,
+        maxMs: RESTART_MAX_MS,
+        circuitFailures: CIRCUIT_FAILURES,
+        circuitCooldownMs: CIRCUIT_COOLDOWN_MS
+      });
+      this.failureCount = decision.failureCount;
+      console.warn(
+        `[transcoder:${this.sourceName}:${this.profile.id}] exited code=${code ?? "null"} signal=${signal ?? "null"}; ` +
+        `restart_ms=${decision.delayMs} circuit_open=${decision.circuitOpen}`
+      );
       this.restartTimer = setTimeout(() => {
         this.restartTimer = null;
         this.start();
-      }, 1000);
+      }, decision.delayMs);
     });
   }
 
@@ -307,6 +329,11 @@ async function main() {
   console.log(`[transcoder] output_rtmp_base=${OUTPUT_RTMP_BASE}`);
   console.log(`[transcoder] profiles=${PROFILES.map((p) => p.id).join(",")}`);
   console.log(`[transcoder] poll_ms=${POLL_MS} stale_ms=${STALE_MS} max_jobs=${MAX_JOBS}`);
+  console.log(
+    `[transcoder] restart_base_ms=${RESTART_BASE_MS} restart_max_ms=${RESTART_MAX_MS} ` +
+    `restart_reset_ms=${RESTART_RESET_MS} circuit_failures=${CIRCUIT_FAILURES} ` +
+    `circuit_cooldown_ms=${CIRCUIT_COOLDOWN_MS}`
+  );
 
   while (!shuttingDown) {
     try {
