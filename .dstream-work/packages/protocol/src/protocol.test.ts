@@ -82,6 +82,11 @@ test("stream announce: build + parse roundtrip", () => {
         height: 720
       }
     ],
+    referenceUrls: [
+      "https://radio.example.com/live.mp3",
+      "https://radio.example.com/live.mp3",
+      "javascript:alert(1)"
+    ],
     topics: ["zeta", "alpha", "alpha"]
   });
 
@@ -135,7 +140,30 @@ test("stream announce: build + parse roundtrip", () => {
       codecs: undefined
     }
   ]);
+  assert.deepEqual(parsed.referenceUrls, ["https://radio.example.com/live.mp3"]);
   assert.deepEqual(parsed.topics, ["alpha", "zeta"]);
+});
+
+test("stream announce: preserves safe web reference tags from other clients", () => {
+  const parsed = parseStreamAnnounceEvent({
+    kind: NOSTR_KINDS.STREAM_ANNOUNCE,
+    pubkey: STREAM_PUBKEY,
+    created_at: 127,
+    tags: [
+      ["d", "external-live"],
+      ["title", "External live"],
+      ["status", "live"],
+      ["streaming", "https://video.example.com/live.m3u8"],
+      ["r", "https://radio.example.com/live.mp3"],
+      ["r", "https://radio.example.com/live.mp3"],
+      ["r", "nostr:npub1invalid"],
+      ["r", "not a url"]
+    ],
+    content: ""
+  });
+
+  assert.ok(parsed);
+  assert.deepEqual(parsed.referenceUrls, ["https://radio.example.com/live.mp3"]);
 });
 
 test("stream announce: explicit private visibility supports an owner-only stream", () => {

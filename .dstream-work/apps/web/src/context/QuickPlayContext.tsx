@@ -8,6 +8,8 @@ export interface QuickPlayStreamRef {
   title: string;
   hlsUrl?: string;
   whepUrl?: string;
+  audioFallbackUrl?: string;
+  preferAudioFallback?: boolean;
 }
 
 interface QuickPlayContextValue {
@@ -40,7 +42,9 @@ function normalizeStreamRef(value: QuickPlayStreamRef): QuickPlayStreamRef {
     streamId: value.streamId.trim(),
     title: value.title.trim() || value.streamId.trim(),
     hlsUrl: normalizePlaybackUrl(value.hlsUrl),
-    whepUrl: normalizePlaybackUrl(value.whepUrl)
+    whepUrl: normalizePlaybackUrl(value.whepUrl),
+    audioFallbackUrl: normalizePlaybackUrl(value.audioFallbackUrl),
+    preferAudioFallback: value.preferAudioFallback === true
   };
 }
 

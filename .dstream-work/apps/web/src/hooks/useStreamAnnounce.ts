@@ -27,6 +27,57 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
     setAnnounceEvent(null);
     latestRef.current = null;
 
+    let cancelled = false;
+    let lookupSettled = false;
+    let relaySettled = false;
+    const finishLoadingIfSettled = () => {
+      if (cancelled) return;
+      if (latestRef.current || (lookupSettled && relaySettled)) setIsLoading(false);
+    };
+    const applyCandidate = (parsed: StreamAnnounce, event: NostrEvent | null) => {
+      if (cancelled) return;
+      if (parsed.pubkey !== pubkey || parsed.streamId !== streamId) return;
+      const eventId = typeof event?.id === "string" ? event.id : "";
+      const latest = latestRef.current;
+      if (
+        latest &&
+        (parsed.createdAt < latest.createdAt ||
+          (parsed.createdAt === latest.createdAt && eventId <= latest.eventId))
+      ) {
+        return;
+      }
+      latestRef.current = { createdAt: parsed.createdAt, eventId };
+      setAnnounce(parsed);
+      setAnnounceEvent(event);
+      setIsLoading(false);
+    };
+
+    const lookupController = new AbortController();
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ pubkey, streamId });
+        const response = await fetch(`/api/discovery/stream?${params.toString()}`, {
+          cache: "no-store",
+          signal: lookupController.signal
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const match = payload?.announce as StreamAnnounce | undefined;
+        if (!match || !Number.isFinite(match.createdAt)) return;
+        const raw = match.raw;
+        const rawEvent =
+          raw && raw.kind === 30311 && raw.pubkey === pubkey && Array.isArray(raw.tags)
+            ? (raw as NostrEvent)
+            : null;
+        applyCandidate(match, rawEvent);
+      } catch {
+        // Direct relay delivery remains the source-of-truth fallback.
+      } finally {
+        lookupSettled = true;
+        finishLoadingIfSettled();
+      }
+    })();
+
     const filter: Filter = {
       kinds: [30311],
       authors: [pubkey],
@@ -39,26 +90,22 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
       onevent: (event: any) => {
         const parsed = parseStreamAnnounceEvent(event);
         if (!parsed) return;
-        if (parsed.pubkey !== pubkey || parsed.streamId !== streamId) return;
-        const eventId = typeof event?.id === "string" ? event.id : "";
-        const latest = latestRef.current;
-        if (
-          latest &&
-          (parsed.createdAt < latest.createdAt ||
-            (parsed.createdAt === latest.createdAt && eventId <= latest.eventId))
-        ) {
-          return;
-        }
-        latestRef.current = { createdAt: parsed.createdAt, eventId };
-        setAnnounce(parsed);
-        setAnnounceEvent(event as NostrEvent);
+        applyCandidate(parsed, event as NostrEvent);
       },
-      oneose: () => setIsLoading(false)
+      oneose: () => {
+        relaySettled = true;
+        finishLoadingIfSettled();
+      }
     });
 
-    const timeout = setTimeout(() => setIsLoading(false), 4000);
+    const timeout = setTimeout(() => {
+      relaySettled = true;
+      finishLoadingIfSettled();
+    }, 4000);
 
     return () => {
+      cancelled = true;
+      lookupController.abort();
       clearTimeout(timeout);
       try {
         (sub as any).close?.();

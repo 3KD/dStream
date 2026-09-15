@@ -21,7 +21,14 @@ import { useQuickPlayActions } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
-import { isHttpLikeMediaUrl, isLikelyHlsUrl, isLikelyPlayableMediaUrl, isLikelyPublicPlayableMediaUrl } from "@/lib/mediaUrl";
+import {
+  isHttpLikeMediaUrl,
+  isLikelyHlsUrl,
+  isLikelyPlayableMediaUrl,
+  isLikelyPublicAudioUrl,
+  isLikelyPublicPlayableMediaUrl,
+  resolvePreferredRadioAudioUrl
+} from "@/lib/mediaUrl";
 import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey } from "@/lib/quickplay";
 import { getNostrRelays } from "@/lib/config";
@@ -755,10 +762,33 @@ export default function WatchPage() {
     if (!playbackAccessToken) return streamUrl;
     return withQueryParam(streamUrl, playbackAccessTokenParam, playbackAccessToken);
   }, [playbackAccessToken, playbackAccessTokenParam, streamUrl]);
+  const preferredRadioAudioUrl = useMemo(
+    () => resolvePreferredRadioAudioUrl(announce?.referenceUrls, announce?.topics),
+    [announce?.referenceUrls, announce?.topics]
+  );
+  const audioFallbackUrl = useMemo(
+    () => preferredRadioAudioUrl ?? (announce?.referenceUrls ?? []).find((url) => isLikelyPublicAudioUrl(url)) ?? null,
+    [announce?.referenceUrls, preferredRadioAudioUrl]
+  );
   const playbackStateKey = useMemo(() => {
     if (!pubkey || !playbackStreamUrl) return undefined;
     return deriveQuickPlayPlaybackStateKey({ pubkey, streamId, hlsUrl: playbackStreamUrl });
   }, [playbackStreamUrl, pubkey, streamId]);
+  const [matchingHandoffPlayer, setMatchingHandoffPlayer] = useState(false);
+  useLayoutEffect(() => {
+    const video = document.querySelector("[data-global-player-host] video");
+    if (!(video instanceof HTMLVideoElement) || !playbackStreamUrl) {
+      setMatchingHandoffPlayer(false);
+      return;
+    }
+    try {
+      const signature = JSON.parse(video.dataset.dstreamPlaybackSignature ?? "null");
+      setMatchingHandoffPlayer(signature?.src === playbackStreamUrl);
+    } catch {
+      setMatchingHandoffPlayer(false);
+    }
+  }, [playbackStreamUrl, pubkey, streamId]);
+  const playbackSourceResolved = matchingHandoffPlayer || !!announce || !announceLoading;
 
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;
@@ -792,9 +822,11 @@ export default function WatchPage() {
       streamId,
       title: announce?.title?.trim() || "Live Stream",
       hlsUrl: nextUrl,
-      whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
+      whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined,
+      audioFallbackUrl: audioFallbackUrl ?? undefined,
+      preferAudioFallback: !!preferredRadioAudioUrl
     });
-  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, mediaHasPlayed, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, audioFallbackUrl, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, mediaHasPlayed, playbackStreamUrl, preferredRadioAudioUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -1754,6 +1786,8 @@ export default function WatchPage() {
 
   const globalPlayerProps = useMemo(() => ({
     src: playbackStreamUrl,
+    audioFallbackSrc: audioFallbackUrl,
+    preferAudioFallback: !!preferredRadioAudioUrl,
     fallbackSrc:
       announce?.status === "live" && canUseLocalFallback
         ? liveAccessToken
@@ -1796,6 +1830,8 @@ export default function WatchPage() {
     }
   }), [
     playbackStreamUrl,
+    audioFallbackUrl,
+    preferredRadioAudioUrl,
     announce?.status,
     canUseLocalFallback,
     fallbackUrl,
@@ -2032,7 +2068,7 @@ export default function WatchPage() {
                       </div>
                     </div>
                   </div>
-                ) : streamUrl ? (
+                ) : streamUrl && playbackSourceResolved ? (
                   <>
                     <GlobalPlayerSlot
                     id="watch-page"
@@ -2041,7 +2077,9 @@ export default function WatchPage() {
                   </>
                 ) : (
                   <div className="h-full rounded-2xl border border-neutral-800 bg-neutral-900/40 flex items-center justify-center px-6 text-center text-sm text-neutral-400">
-                    {announceLoading ? "Resolving stream source…" : "Unable to resolve a playable stream source."}
+                    {announceLoading || (streamUrl && !playbackSourceResolved)
+                      ? "Resolving stream source…"
+                      : "Unable to resolve a playable stream source."}
                   </div>
                 )}
               </div>

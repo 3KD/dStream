@@ -13,102 +13,28 @@ import { useQuickPlayActions } from "@/context/QuickPlayContext";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { flushSync } from "react-dom";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 
 import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
-import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
+import { isLikelyLivePlayableMediaUrl, resolvePreferredRadioAudioUrl } from "@/lib/mediaUrl";
 import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
 
 const STREAM_HISTORY_BATCH_SIZE = 12;
-const LIVE_PLAYER_PREWARM_TIMEOUT_MS = 30_000;
-const LIVE_PLAYER_STABLE_BEFORE_NAVIGATION_MS = 8_000;
+const LIVE_PLAYER_START_TIMEOUT_MS = 10_000;
 
 interface BrowsePlayerPrewarm {
   streamPubkey: string;
   streamId: string;
   title: string;
+  watchHref: string;
   hlsUrl: string;
   whepUrl: string | null;
+  audioFallbackUrl: string | null;
+  preferAudioFallback: boolean;
   playbackStateKey: string;
-}
-
-function playerSignatureSource(video: HTMLVideoElement): string | null {
-  try {
-    const signature = JSON.parse(video.dataset.dstreamPlaybackSignature ?? "null") as { src?: unknown } | null;
-    return typeof signature?.src === "string" ? signature.src : null;
-  } catch {
-    return null;
-  }
-}
-
-function waitForPrimedPlayback(
-  expectedSrc: string,
-  previousSession: string | undefined,
-  signal: AbortSignal
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    let timeoutId = 0;
-    let stablePlaybackTimer = 0;
-
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      window.clearTimeout(stablePlaybackTimer);
-      document.removeEventListener("playing", onPlaying, true);
-      document.removeEventListener("waiting", onPlaybackInterrupted, true);
-      document.removeEventListener("stalled", onPlaybackInterrupted, true);
-      document.removeEventListener("pause", onPlaybackInterrupted, true);
-      signal.removeEventListener("abort", onAbort);
-    };
-    const settle = (shouldNavigate: boolean) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(shouldNavigate);
-    };
-    const isExpectedPlayer = (video: HTMLVideoElement) =>
-      video.closest("[data-global-player-host='true']") !== null &&
-      playerSignatureSource(video) === expectedSrc &&
-      video.dataset.dstreamPlaybackSession !== previousSession;
-    const scheduleStableNavigation = (video: HTMLVideoElement) => {
-      if (!isExpectedPlayer(video)) return;
-      window.clearTimeout(stablePlaybackTimer);
-      stablePlaybackTimer = window.setTimeout(() => {
-        if (!video.paused && !video.ended && video.readyState >= 2) settle(true);
-      }, LIVE_PLAYER_STABLE_BEFORE_NAVIGATION_MS);
-    };
-    const onPlaying = (event: Event) => {
-      if (event.target instanceof HTMLVideoElement) scheduleStableNavigation(event.target);
-    };
-    const onPlaybackInterrupted = (event: Event) => {
-      if (!(event.target instanceof HTMLVideoElement) || !isExpectedPlayer(event.target)) return;
-      window.clearTimeout(stablePlaybackTimer);
-      stablePlaybackTimer = 0;
-    };
-    const onAbort = () => settle(false);
-
-    const currentVideo = document.querySelector<HTMLVideoElement>("[data-global-player-host='true'] video");
-    if (
-      currentVideo &&
-      playerSignatureSource(currentVideo) === expectedSrc &&
-      !currentVideo.paused &&
-      !currentVideo.ended &&
-      currentVideo.readyState >= 2
-    ) {
-      scheduleStableNavigation(currentVideo);
-    }
-
-    document.addEventListener("playing", onPlaying, true);
-    document.addEventListener("waiting", onPlaybackInterrupted, true);
-    document.addEventListener("stalled", onPlaybackInterrupted, true);
-    document.addEventListener("pause", onPlaybackInterrupted, true);
-    signal.addEventListener("abort", onAbort, { once: true });
-    timeoutId = window.setTimeout(() => settle(true), LIVE_PLAYER_PREWARM_TIMEOUT_MS);
-  });
 }
 
 function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
@@ -136,7 +62,7 @@ export default function BrowseClient() {
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
   const [navigatingToStream, setNavigatingToStream] = useState(false);
   const [playerPrewarm, setPlayerPrewarm] = useState<BrowsePlayerPrewarm | null>(null);
-  const pendingNavigationAbortRef = useRef<AbortController | null>(null);
+  const [prewarmNavigationStarted, setPrewarmNavigationStarted] = useState(false);
   const { clearQuickPlayStream } = useQuickPlayActions();
   const { streams: liveStreams, isLoading: liveLoading } = useStreamAnnounces({
     enabled: !navigatingToStream,
@@ -169,13 +95,6 @@ export default function BrowseClient() {
     if (guildQuery) setCuratedOnly(true);
   }, [guildQuery]);
 
-  useEffect(
-    () => () => {
-      pendingNavigationAbortRef.current?.abort();
-    },
-    []
-  );
-
   const { guilds, isLoading: guildsLoading } = useGuilds({ enabled: !navigatingToStream, limit: 80 });
   const { guild: selectedGuild, isLoading: selectedGuildLoading } = useGuild({
     pubkey: navigatingToStream ? "" : guildPubkeyHex ?? "",
@@ -187,9 +106,26 @@ export default function BrowseClient() {
     setNavigatingToStream(true);
   };
 
+  const finishLiveWatchNavigation = useCallback(() => {
+    if (!playerPrewarm || prewarmNavigationStarted) return;
+    setPrewarmNavigationStarted(true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => router.push(playerPrewarm.watchHref));
+    });
+  }, [playerPrewarm, prewarmNavigationStarted, router]);
+
+  useEffect(() => {
+    if (!playerPrewarm || prewarmNavigationStarted) return;
+    const timeout = window.setTimeout(finishLiveWatchNavigation, LIVE_PLAYER_START_TIMEOUT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [finishLiveWatchNavigation, playerPrewarm, prewarmNavigationStarted]);
+
   const beginLiveWatchNavigation = (
     event: ReactMouseEvent<HTMLAnchorElement>,
-    stream: Pick<StreamAnnounce, "pubkey" | "streamId" | "title" | "streaming" | "status" | "streamVisibility">,
+    stream: Pick<
+      StreamAnnounce,
+      "pubkey" | "streamId" | "title" | "streaming" | "status" | "streamVisibility" | "referenceUrls" | "topics"
+    >,
     watchHref: string
   ) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -199,42 +135,31 @@ export default function BrowseClient() {
       stream.streamVisibility !== "private" &&
       isLikelyLivePlayableMediaUrl(hlsUrl);
     if (!hlsUrl || !canPrewarm) {
+      clearQuickPlayStream();
       setNavigatingToStream(true);
       return;
     }
 
     event.preventDefault();
-    pendingNavigationAbortRef.current?.abort();
-    const navigationAbort = new AbortController();
-    pendingNavigationAbortRef.current = navigationAbort;
-    const activeVideo = document.querySelector<HTMLVideoElement>("[data-global-player-host='true'] video");
-    const playbackReady = waitForPrimedPlayback(
-      hlsUrl,
-      activeVideo?.dataset.dstreamPlaybackSession,
-      navigationAbort.signal
-    );
-    const nextPlayerPrewarm: BrowsePlayerPrewarm = {
+    const preferredRadioAudioUrl = resolvePreferredRadioAudioUrl(stream.referenceUrls, stream.topics);
+    setPrewarmNavigationStarted(false);
+    clearQuickPlayStream();
+    setNavigatingToStream(true);
+    setPlayerPrewarm({
       streamPubkey: stream.pubkey,
       streamId: stream.streamId,
       title: stream.title?.trim() || stream.streamId,
+      watchHref,
       hlsUrl,
       whepUrl:
         deriveQuickPlayWhepUrl({ pubkey: stream.pubkey, streamId: stream.streamId }, hlsUrl) ?? null,
+      audioFallbackUrl: preferredRadioAudioUrl,
+      preferAudioFallback: !!preferredRadioAudioUrl,
       playbackStateKey: deriveQuickPlayPlaybackStateKey({
         pubkey: stream.pubkey,
         streamId: stream.streamId,
         hlsUrl
       })
-    };
-
-    flushSync(() => {
-      clearQuickPlayStream();
-      setNavigatingToStream(true);
-      setPlayerPrewarm(nextPlayerPrewarm);
-    });
-    void playbackReady.then((shouldNavigate) => {
-      if (!shouldNavigate || navigationAbort.signal.aborted) return;
-      router.push(watchHref);
     });
   };
 
@@ -301,18 +226,20 @@ export default function BrowseClient() {
         ? {
             src: playerPrewarm.hlsUrl,
             whepSrc: playerPrewarm.whepUrl,
+            audioFallbackSrc: playerPrewarm.audioFallbackUrl,
+            preferAudioFallback: playerPrewarm.preferAudioFallback,
             autoplayMuted: false,
             isLiveStream: true,
             showTimelineControls: false,
             showAuxControls: false,
             showNativeControls: false,
             playbackStateKey: playerPrewarm.playbackStateKey,
-            overlayTitle: playerPrewarm.title
+            overlayTitle: playerPrewarm.title,
+            onPlaying: finishLiveWatchNavigation
           }
         : null,
-    [playerPrewarm]
+    [finishLiveWatchNavigation, playerPrewarm]
   );
-
   const curatedLabel = !guildQuery
     ? "Curated only"
     : selectedGuild?.name

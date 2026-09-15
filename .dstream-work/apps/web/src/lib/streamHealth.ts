@@ -113,12 +113,19 @@ async function readManifest(response: Response): Promise<string | null> {
   return text.length <= MAX_MANIFEST_BYTES ? text : null;
 }
 
-async function probeSegment(segmentUrl: URL): Promise<StreamHealthResult> {
-  const response = await fetchPublic(segmentUrl, { headers: { range: "bytes=0-65535" } });
+export function isDefinitiveSegmentHttpFailure(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
+async function probeMediaResponse(response: Response, mediaUrl: URL): Promise<StreamHealthResult> {
   if (!response.ok) {
-    return { ok: false, definitive: response.status >= 400 && response.status < 500, reason: `segment_http_${response.status}` };
+    return {
+      ok: false,
+      definitive: isDefinitiveSegmentHttpFailure(response.status),
+      reason: `segment_http_${response.status}`
+    };
   }
-  if (!hasUsableCors(response, segmentUrl)) return { ok: false, definitive: true, reason: "segment_cors" };
+  if (!hasUsableCors(response, mediaUrl)) return { ok: false, definitive: true, reason: "segment_cors" };
   const reader = response.body?.getReader();
   if (!reader) return { ok: false, definitive: false, reason: "empty_segment" };
   try {
@@ -129,6 +136,11 @@ async function probeSegment(segmentUrl: URL): Promise<StreamHealthResult> {
   } finally {
     await reader.cancel().catch(() => undefined);
   }
+}
+
+async function probeSegment(segmentUrl: URL): Promise<StreamHealthResult> {
+  const response = await fetchPublic(segmentUrl, { headers: { range: "bytes=0-65535" } });
+  return probeMediaResponse(response, segmentUrl);
 }
 
 function resolveSourceUrl(input: string): URL | null {
@@ -153,7 +165,7 @@ export async function probeStreamSource(input: string): Promise<StreamHealthResu
 
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
     if (contentType.startsWith("video/") || contentType.startsWith("audio/")) {
-      return probeSegment(sourceUrl);
+      return probeMediaResponse(response, sourceUrl);
     }
 
     let manifestUrl = new URL(response.url || sourceUrl.href);

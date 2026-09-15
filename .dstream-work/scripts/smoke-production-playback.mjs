@@ -249,7 +249,7 @@ async function observeStartupStability(page, label) {
     fail(`${label}: expected source mode ${EXPECTED_SOURCE_MODE}, received ${result.sourceMode}`);
   }
   if (
-    EXPECTED_SOURCE_MODE === "zap-audio-fallback" &&
+    EXPECTED_SOURCE_MODE.includes("audio-fallback") &&
     (!result.fallbackVisualVisible || !result.fallbackArtworkLoaded)
   ) {
     fail(

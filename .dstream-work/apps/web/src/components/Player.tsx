@@ -20,12 +20,14 @@ import type { P2PSwarm } from "@/lib/p2p/swarm";
 import type { IntegritySession } from "@/lib/integrity/session";
 import { WhepClient } from "@/lib/whep";
 import { pickPlaybackMode } from "@/lib/whep-fallback";
-import { inferMediaUrlKind } from "@/lib/mediaUrl";
+import { inferMediaUrlKind, isLikelyPublicAudioUrl } from "@/lib/mediaUrl";
 import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
 import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
 
 interface PlayerProps {
   src: string;
+  audioFallbackSrc?: string | null;
+  preferAudioFallback?: boolean;
   fallbackSrc?: string | null;
   posterSrc?: string | null;
   whepSrc?: string | null;
@@ -231,22 +233,30 @@ type HlsPlaybackTuningOptions = {
   lowLatencyEnabled: boolean;
   backgroundPlayEnabled: boolean;
   bridgeLiveGaps?: boolean;
+  preferCompleteSegments?: boolean;
+  completeSegmentLiveSyncCount?: number | null;
   liveSyncDurationSeconds?: number | null;
 };
 
 function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
   const lowLatencyMode = options.lowLatencyEnabled;
+  const completedSegmentMode = options.preferCompleteSegments === true;
+  const latencyFocusedMode = lowLatencyMode || completedSegmentMode;
   const stableLiveSyncDuration =
     options.liveSyncDurationSeconds ?? (options.backgroundPlayEnabled ? 30 : 24);
   return {
     lowLatencyMode,
-    maxBufferLength: options.backgroundPlayEnabled ? 180 : lowLatencyMode ? 45 : 90,
-    maxMaxBufferLength: options.backgroundPlayEnabled ? 240 : lowLatencyMode ? 90 : 120,
+    maxBufferLength: options.backgroundPlayEnabled ? 180 : latencyFocusedMode ? 45 : 90,
+    maxMaxBufferLength: options.backgroundPlayEnabled ? 240 : latencyFocusedMode ? 90 : 120,
     backBufferLength: 60,
-    liveSyncDurationCount: lowLatencyMode ? 4 : undefined,
-    liveSyncDuration: lowLatencyMode ? undefined : stableLiveSyncDuration,
-    liveMaxLatencyDurationCount: lowLatencyMode ? Number.POSITIVE_INFINITY : undefined,
-    liveMaxLatencyDuration: lowLatencyMode ? undefined : Number.POSITIVE_INFINITY,
+    liveSyncDurationCount: completedSegmentMode
+      ? options.completeSegmentLiveSyncCount ?? 2
+      : lowLatencyMode
+        ? 4
+        : undefined,
+    liveSyncDuration: latencyFocusedMode ? undefined : stableLiveSyncDuration,
+    liveMaxLatencyDurationCount: latencyFocusedMode ? Number.POSITIVE_INFINITY : undefined,
+    liveMaxLatencyDuration: latencyFocusedMode ? undefined : Number.POSITIVE_INFINITY,
     liveSyncOnStallIncrease: 1,
     // Large tolerances hide complete segment holes from the loader's buffer scheduling.
     maxBufferHole: 0.1,
@@ -288,6 +298,8 @@ function applyHlsPlaybackTuning(hls: Hls, options: HlsPlaybackTuningOptions): vo
 
 export function Player({
   src,
+  audioFallbackSrc,
+  preferAudioFallback = false,
   fallbackSrc,
   posterSrc,
   whepSrc,
@@ -325,9 +337,32 @@ export function Player({
     lastLevelUpdatedAt: 0
   });
   const lastLivePlaybackRecoveryAtRef = useRef(0);
+  const audioFallbackActivationRef = useRef<((reason: string) => boolean) | null>(null);
+  const audioFallbackRecoveryRef = useRef<((reason: string) => boolean) | null>(null);
+  const pendingAudioFallbackReasonRef = useRef<string | null>(null);
 
+  const audioFallbackSrcRef = useRef(audioFallbackSrc);
+  const audioFallbackPrimarySrcRef = useRef(normalizedSrc);
   const fallbackSrcRef = useRef(fallbackSrc);
   const playbackStateKeyRef = useRef(playbackStateKey);
+
+  useEffect(() => {
+    if (audioFallbackPrimarySrcRef.current !== normalizedSrc) {
+      audioFallbackPrimarySrcRef.current = normalizedSrc;
+      audioFallbackSrcRef.current = audioFallbackSrc;
+    } else if ((audioFallbackSrc ?? "").trim()) {
+      audioFallbackSrcRef.current = audioFallbackSrc;
+    }
+    // Route handoff can briefly omit metadata; only upgrade an active session here.
+    const reason =
+      pendingAudioFallbackReasonRef.current ??
+      (preferAudioFallback && !preferSourceVideoRef.current
+        ? "Creator-published radio audio selected."
+        : null);
+    if (reason && audioFallbackActivationRef.current?.(reason)) {
+      pendingAudioFallbackReasonRef.current = null;
+    }
+  }, [audioFallbackSrc, normalizedSrc, preferAudioFallback]);
 
   useEffect(() => {
     fallbackSrcRef.current = fallbackSrc;
@@ -349,11 +384,11 @@ export function Player({
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("hls");
   const [note, setNote] = useState<string | null>(null);
   const [audioOnlyFallbackActive, setAudioOnlyFallbackActive] = useState(false);
-  const [isMobilePlayback, setIsMobilePlayback] = useState(false);
-  const [isFirefoxPlayback, setIsFirefoxPlayback] = useState(false);
+  const [isMobilePlayback, setIsMobilePlayback] = useState(() => isLikelyMobilePlaybackDevice());
+  const [isFirefoxPlayback, setIsFirefoxPlayback] = useState(() => isLikelyFirefoxBrowser());
   const [isHovered, setIsHovered] = useState(false);
-  const [preferNativeHls, setPreferNativeHls] = useState(false);
-  const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(false);
+  const [preferNativeHls, setPreferNativeHls] = useState(() => shouldPreferNativeHlsPlayback());
+  const [playbackEnvironmentReady, setPlaybackEnvironmentReady] = useState(true);
   const [playbackReloadNonce, setPlaybackReloadNonce] = useState(0);
   const playbackSessionGenerationRef = useRef(0);
   const preferSourceVideoRef = useRef(false);
@@ -384,13 +419,13 @@ export function Player({
     setPlaybackEnvironmentReady(true);
   }, []);
 
-  const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(false);
-  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(false);
+  const [backgroundPlayEnabled, setBackgroundPlayEnabled] = useState(() => readBackgroundPlayPreference());
+  const [backgroundPlayPreferenceLoaded, setBackgroundPlayPreferenceLoaded] = useState(true);
   const effectiveBackgroundPlayEnabled = backgroundPlayEnabledOverride ?? backgroundPlayEnabled;
   const effectiveAutoplayMuted = effectiveBackgroundPlayEnabled ? false : isMobilePlayback ? true : (autoplayMuted ?? true);
   const playbackStartupPolicyReady =
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
-  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
+  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(() => !isLikelyFirefoxBrowser());
   const hlsCompatibilityPolicy = resolveHlsPlaybackCompatibilityPolicy({
     sourceUrl: normalizedSrc,
     isFirefox: isFirefoxPlayback,
@@ -399,6 +434,8 @@ export function Player({
   const stableHlsCompatibilityMode = hlsCompatibilityPolicy.stableMode;
   const bridgeLiveGaps = hlsCompatibilityPolicy.bridgeLiveGaps;
   const effectiveLowLatencyEnabled = hlsCompatibilityPolicy.lowLatencyEnabled;
+  const preferCompleteSegments = hlsCompatibilityPolicy.preferCompleteSegments;
+  const completeSegmentLiveSyncCount = hlsCompatibilityPolicy.completeSegmentLiveSyncCount;
   const liveSyncDurationSeconds = hlsCompatibilityPolicy.liveSyncDurationSeconds;
   const rotatingHlsProviderMode = isRotatingHlsProviderUrl(normalizedSrc);
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
@@ -489,9 +526,18 @@ export function Player({
       lowLatencyEnabled: effectiveLowLatencyEnabled,
       backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
       bridgeLiveGaps,
+      preferCompleteSegments,
+      completeSegmentLiveSyncCount,
       liveSyncDurationSeconds
     });
-  }, [bridgeLiveGaps, effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled, liveSyncDurationSeconds]);
+  }, [
+    bridgeLiveGaps,
+    completeSegmentLiveSyncCount,
+    effectiveBackgroundPlayEnabled,
+    effectiveLowLatencyEnabled,
+    liveSyncDurationSeconds,
+    preferCompleteSegments
+  ]);
 
   useEffect(() => {
     const hls = hlsRef.current;
@@ -801,6 +847,10 @@ export function Player({
       }
 
       if (video.ended) {
+        if (audioFallbackRecoveryRef.current?.("The live audio source ended unexpectedly. Reconnecting.")) {
+          markHealthy(now, currentTime, frameCount);
+          return;
+        }
         requestLivePlaybackReload("Live media ended unexpectedly. Reconnected to the current live window.");
         markHealthy(now, currentTime, frameCount);
         return;
@@ -841,13 +891,26 @@ export function Player({
         } catch {
           // The next watchdog pass can escalate if the HLS instance cannot restart.
         }
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
+        if (!startupGatePendingRef.current) {
+          void video.play().catch(() => {
+            setStatus("Click to play");
+            setNeedsClick(true);
+          });
+        }
         return true;
       };
       const starvationRecoveryThresholdMs = 6_000;
+      const audioFallbackActive = (video.dataset.dstreamSourceMode ?? "").includes("audio-fallback");
+      if (
+        audioFallbackActive &&
+        stalledForMs >= starvationRecoveryThresholdMs &&
+        bufferAhead < 0.25 &&
+        video.readyState <= 2 &&
+        audioFallbackRecoveryRef.current?.("The live audio buffer ran dry. Reconnecting.")
+      ) {
+        markHealthy(now, currentTime, frameCount);
+        return;
+      }
       if (
         hasObservedPlaybackProgress &&
         stalledForMs >= starvationRecoveryThresholdMs &&
@@ -869,6 +932,10 @@ export function Player({
       const mediaFeedStale = lastHlsActivityAt === 0 || now - lastHlsActivityAt >= stallThresholdMs;
       const bufferedDecoderFrozen = hasObservedPlaybackProgress && bufferAhead >= 0.5 && video.readyState >= 3;
       if (stalledForMs >= stallThresholdMs && (mediaFeedStale || bufferedDecoderFrozen)) {
+        if (audioFallbackActive && audioFallbackRecoveryRef.current?.("Live audio stopped advancing. Reconnecting.")) {
+          markHealthy(now, currentTime, frameCount);
+          return;
+        }
         if (tryInSessionRecovery("Live playback stopped advancing. Retrying without resetting the player.")) return;
         if (hidden) return;
         requestLivePlaybackReload("Live playback stopped advancing. Reconnected to the current live window.");
@@ -1024,11 +1091,19 @@ export function Player({
 
     const primarySrc = normalizedSrc;
     const primaryKind = inferMediaUrlKind(primarySrc);
+    const getAudioFallbackSrc = () => (audioFallbackSrcRef.current ?? "").trim();
+    const canUseAudioFallbackSource = (candidate: string) =>
+      candidate !== primarySrc && isLikelyPublicAudioUrl(candidate);
     const getBackupSrc = () => (fallbackSrcRef.current ?? "").trim();
     const canUseBackupSource = (candidate: string) =>
       candidate.length > 0 && candidate !== primarySrc && !isExternalPlaybackUrl(primarySrc);
     let backupTried = false;
     let zapAudioFallbackActive = false;
+    let declaredAudioFallbackActive = false;
+    let declaredAudioReconnectAttempts = 0;
+    let declaredAudioReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let switchToDeclaredAudioFallback: (reason: string) => boolean = () => false;
+    let reconnectDeclaredAudioFallback: (reason: string) => boolean = () => false;
 
     if (!primarySrc || !videoRef.current) return;
 
@@ -1050,12 +1125,17 @@ export function Player({
     playbackSessionGenerationRef.current += 1;
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
     video.dataset.dstreamSourceMode = "primary";
+    audioFallbackActivationRef.current = null;
+    audioFallbackRecoveryRef.current = null;
+    pendingAudioFallbackReasonRef.current = null;
     setAudioOnlyFallbackActive(false);
     video.dataset.dstreamPlaybackSignature = JSON.stringify({
       isMobilePlayback,
       isFirefoxPlayback,
       isLiveStream,
       lowLatencyEnabled: effectiveLowLatencyEnabled,
+      preferCompleteSegments,
+      completeSegmentLiveSyncCount,
       liveSyncDurationSeconds,
       playbackStartupPolicyReady,
       preferNativeHls,
@@ -1286,6 +1366,8 @@ export function Player({
     };
     const handlePlaying = () => {
       clearWhepStallTimer();
+      if (declaredAudioFallbackActive) declaredAudioReconnectAttempts = 0;
+      pendingAudioFallbackReasonRef.current = null;
       setNeedsClick(false);
       setStatus("Playing");
       onPlayingRef.current?.();
@@ -1309,24 +1391,44 @@ export function Player({
       if (playbackModeRef.current !== "whep") return;
       fallbackFromWhepToHls("Low-latency stream error. Switched to HLS for stability.");
     };
+    const onUnexpectedLiveEnd = () => {
+      if (!isLiveStream || cancelled) return;
+      if (declaredAudioFallbackActive) {
+        reconnectDeclaredAudioFallback("The audio source ended unexpectedly. Reconnecting.");
+        return;
+      }
+      switchToDeclaredAudioFallback("The source video ended while the broadcast is still live.");
+    };
     video.addEventListener("playing", handlePlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onStalled);
     video.addEventListener("error", onErrorFallback);
+    video.addEventListener("ended", onUnexpectedLiveEnd);
 
     const integrityEnabled = !!integrity?.enabled;
 
-    const startDirect = (mediaSource: string): boolean => {
+    const startDirect = (mediaSource: string, options: { audioFallback?: boolean } = {}): boolean => {
       setStartupGatePending(false);
       setPlaybackMode("direct");
       setQualityOptions([]);
-      setQualityIndicator("Source");
+      setQualityIndicator(options.audioFallback ? "Audio" : "Source");
+      if (options.audioFallback) {
+        video.dataset.dstreamSourceMode = "declared-audio-fallback";
+        setAudioOnlyFallbackActive(true);
+      }
       const onLoaded = () => {
+        if (options.audioFallback) declaredAudioReconnectAttempts = 0;
         applyPersistedSeek();
         setStatus("Ready");
         sendReady();
       };
       const onDirectError = () => {
+        if (
+          options.audioFallback &&
+          reconnectDeclaredAudioFallback("The audio source connection was interrupted. Reconnecting.")
+        ) {
+          return;
+        }
         if (
           tryHlsBackup("Primary stream unavailable (trying backup stream path).", () => {
             try {
@@ -1356,6 +1458,79 @@ export function Player({
       };
       return true;
     };
+
+    const startDeclaredAudioSource = (audioSource: string, reason: string): boolean => {
+      if (cancelled || !canUseAudioFallbackSource(audioSource)) return false;
+      clearHlsStartupListener();
+      clearWhepStallTimer();
+      try {
+        hlsRef.current?.destroy();
+      } catch {
+        // ignore
+      }
+      hlsRef.current = null;
+      if (whepRef.current) {
+        void whepRef.current.close();
+        whepRef.current = null;
+      }
+      try {
+        removeNativeListener?.();
+      } catch {
+        // ignore
+      }
+      removeNativeListener = null;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        // ignore
+      }
+      setError(null);
+      setNeedsClick(false);
+      setStatus("Loading audio…");
+      setNote(null);
+      video.dataset.dstreamAudioFallbackReason = reason;
+      return startDirect(audioSource, { audioFallback: true });
+    };
+
+    switchToDeclaredAudioFallback = (reason: string) => {
+      const audioSource = getAudioFallbackSrc();
+      if (declaredAudioFallbackActive || cancelled || !canUseAudioFallbackSource(audioSource)) return false;
+      declaredAudioFallbackActive = true;
+      setTimeout(() => {
+        if (!startDeclaredAudioSource(audioSource, reason)) declaredAudioFallbackActive = false;
+      }, 0);
+      return true;
+    };
+
+    const switchOrQueueDeclaredAudioFallback = (reason: string) => {
+      if (declaredAudioFallbackActive) return true;
+      if (switchToDeclaredAudioFallback(reason)) {
+        pendingAudioFallbackReasonRef.current = null;
+        return true;
+      }
+      pendingAudioFallbackReasonRef.current = reason;
+      return false;
+    };
+
+    reconnectDeclaredAudioFallback = (reason: string) => {
+      const audioSource = getAudioFallbackSrc();
+      if (!declaredAudioFallbackActive || cancelled || !canUseAudioFallbackSource(audioSource)) return false;
+      if (declaredAudioReconnectTimer) return true;
+      declaredAudioReconnectAttempts += 1;
+      const delayMs = Math.min(8_000, 500 * 2 ** Math.min(declaredAudioReconnectAttempts - 1, 4));
+      setError(null);
+      setNeedsClick(false);
+      setStatus("Reconnecting audio…");
+      declaredAudioReconnectTimer = setTimeout(() => {
+        declaredAudioReconnectTimer = null;
+        startDeclaredAudioSource(audioSource, reason);
+      }, delayMs);
+      return true;
+    };
+    audioFallbackActivationRef.current = switchToDeclaredAudioFallback;
+    audioFallbackRecoveryRef.current = reconnectDeclaredAudioFallback;
 
     const startHls = (hlsSource: string, options: { skipNative?: boolean } = {}): boolean => {
       let mediaRecoveryAttempts = 0;
@@ -1496,6 +1671,8 @@ export function Player({
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
         bridgeLiveGaps,
+        preferCompleteSegments,
+        completeSegmentLiveSyncCount,
         liveSyncDurationSeconds
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
@@ -1536,6 +1713,8 @@ export function Player({
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
         bridgeLiveGaps,
+        preferCompleteSegments,
+        completeSegmentLiveSyncCount,
         liveSyncDurationSeconds
       });
       hlsRef.current = hls;
@@ -1543,13 +1722,8 @@ export function Player({
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
 
-      let rotatingMasterRefreshTimer: ReturnType<typeof setInterval> | null = null;
       let rotatingMasterRefreshPromise: Promise<boolean> | null = null;
       let rotatingMasterRefreshCount = 0;
-      const clearRotatingMasterRefresh = () => {
-        if (rotatingMasterRefreshTimer) clearInterval(rotatingMasterRefreshTimer);
-        rotatingMasterRefreshTimer = null;
-      };
       const refreshRotatingMaster = (): Promise<boolean> => {
         if (!rotatingMasterMode || cancelled || hlsRef.current !== hls) return Promise.resolve(false);
         if (rotatingMasterRefreshPromise) return rotatingMasterRefreshPromise;
@@ -1592,13 +1766,14 @@ export function Player({
         });
         return refresh;
       };
-      hls.on(Hls.Events.DESTROYING, clearRotatingMasterRefresh);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         applyHlsPlaybackTuning(hls, {
           lowLatencyEnabled: effectiveLowLatencyEnabled,
           backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
           bridgeLiveGaps,
+          preferCompleteSegments,
+          completeSegmentLiveSyncCount,
           liveSyncDurationSeconds
         });
         applyPersistedSeek();
@@ -1616,12 +1791,8 @@ export function Player({
             ? "Auto"
             : options.find((o) => o.value === selectedQualityRef.current)?.label ?? "Manual"
         );
-        if (rotatingMasterMode && !rotatingMasterRefreshTimer) {
-          rotatingMasterRefreshTimer = setInterval(() => {
-            void refreshRotatingMaster();
-          }, 2_500);
-        }
-        const useBrowserManagedStartup = rotatingMasterMode || (!isMobilePlayback && isThirdPartyPlaybackUrl(hlsSource));
+        const useBrowserManagedStartup =
+          !isMobilePlayback && isThirdPartyPlaybackUrl(hlsSource) && !rotatingMasterMode;
         waitForHlsStartupBuffer(hls, useBrowserManagedStartup);
       });
 
@@ -1712,6 +1883,7 @@ export function Player({
         if (!data.fatal) return;
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
+            if (switchOrQueueDeclaredAudioFallback("The source video connection failed. Switched to audio.")) return;
             if (
               (!isLiveStream || !hasBufferedHlsFragment) &&
               (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) &&
@@ -1741,10 +1913,12 @@ export function Player({
                   } catch {
                     return;
                   }
-                  void video.play().catch(() => {
-                    setStatus("Click to play");
-                    setNeedsClick(true);
-                  });
+                  if (!startupGatePendingRef.current) {
+                    void video.play().catch(() => {
+                      setStatus("Click to play");
+                      setNeedsClick(true);
+                    });
+                  }
                 }, retryDelayMs);
               }
               break;
@@ -1753,6 +1927,7 @@ export function Player({
             setStatus("Error");
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
+            if (switchOrQueueDeclaredAudioFallback("The source video could not be decoded. Switched to audio.")) return;
             setError(null);
             setStatus("Recovering…");
             mediaRecoveryAttempts++;
@@ -1769,10 +1944,12 @@ export function Player({
                 setError("Unable to decode this media source.");
                 setStatus("Error");
               }
-              void video.play().catch(() => {
-                setStatus("Click to play");
-                setNeedsClick(true);
-              });
+              if (!startupGatePendingRef.current) {
+                void video.play().catch(() => {
+                  setStatus("Click to play");
+                  setNeedsClick(true);
+                });
+              }
             } catch {
               if (isLiveStream && !switchZapSourceToAudio("video-decoder-recovery-failed")) {
                 requestLivePlaybackReload("Media recovery failed. Reconnected with a fresh player session.");
@@ -1780,6 +1957,7 @@ export function Player({
             }
             break;
           default:
+            if (switchOrQueueDeclaredAudioFallback("The source video failed. Switched to audio.")) return;
             if (isLiveStream) {
               requestLivePlaybackReload("The player encountered a fatal error. Reconnected with a fresh session.");
             } else {
@@ -1843,7 +2021,15 @@ export function Player({
       }
     };
 
-    if (integrityEnabled) {
+    const preferredAudioSource = getAudioFallbackSrc();
+    if (
+      preferAudioFallback &&
+      !preferSourceVideoRef.current &&
+      canUseAudioFallbackSource(preferredAudioSource)
+    ) {
+      declaredAudioFallbackActive = true;
+      startDeclaredAudioSource(preferredAudioSource, "Creator-published radio audio selected.");
+    } else if (integrityEnabled) {
       if (primaryKind === "direct") {
         setNote("Integrity verification unavailable for direct media source.");
         startDirect(primarySrc);
@@ -1887,10 +2073,15 @@ export function Player({
         video.removeEventListener("waiting", onWaiting);
         video.removeEventListener("stalled", onStalled);
         video.removeEventListener("error", onErrorFallback);
+        video.removeEventListener("ended", onUnexpectedLiveEnd);
       } catch {
         // ignore
       }
       clearWhepStallTimer();
+      if (declaredAudioReconnectTimer) clearTimeout(declaredAudioReconnectTimer);
+      audioFallbackActivationRef.current = null;
+      audioFallbackRecoveryRef.current = null;
+      pendingAudioFallbackReasonRef.current = null;
       clearHlsStartupListener();
       hlsRef.current?.destroy();
       hlsRef.current = null;
@@ -1917,6 +2108,8 @@ export function Player({
     isFirefoxPlayback,
     isLiveStream,
     effectiveLowLatencyEnabled,
+    preferCompleteSegments,
+    completeSegmentLiveSyncCount,
     liveSyncDurationSeconds,
     playbackReloadNonce,
     playbackStartupPolicyReady,

@@ -1,6 +1,6 @@
 import { M3U8Parser } from "hls.js";
 
-const ROTATING_PROVIDER_ROOTS = ["zap.stream", "letsfo.com"] as const;
+const ROTATING_PROVIDER_ROOTS = ["zap.stream", "letsfo.com", "streamroad.money"] as const;
 
 export type RotatingMasterLevel = {
   url: string;
@@ -80,6 +80,8 @@ export type HlsPlaybackCompatibilityPolicy = {
   stableMode: boolean;
   bridgeLiveGaps: boolean;
   lowLatencyEnabled: boolean;
+  preferCompleteSegments: boolean;
+  completeSegmentLiveSyncCount: number | null;
   liveSyncDurationSeconds: number | null;
 };
 
@@ -88,13 +90,22 @@ export function resolveHlsPlaybackCompatibilityPolicy(options: {
   isFirefox: boolean;
   lowLatencyEnabled: boolean;
 }): HlsPlaybackCompatibilityPolicy {
-  const rotatingProvider = isRotatingHlsProviderUrl(options.sourceUrl);
-  const stableMode = options.isFirefox || rotatingProvider;
+  const stableMode = options.isFirefox;
+  const preferCompleteSegments = isRotatingHlsProviderUrl(options.sourceUrl);
+  const streamroadProvider = (() => {
+    try {
+      return hasProviderRoot(new URL(options.sourceUrl).hostname.toLowerCase(), "streamroad.money");
+    } catch {
+      return false;
+    }
+  })();
   return {
     stableMode,
     bridgeLiveGaps: stableMode,
-    lowLatencyEnabled: options.lowLatencyEnabled && !stableMode,
-    liveSyncDurationSeconds: rotatingProvider ? 8 : null
+    lowLatencyEnabled: options.lowLatencyEnabled && !stableMode && !preferCompleteSegments,
+    preferCompleteSegments,
+    completeSegmentLiveSyncCount: preferCompleteSegments ? (streamroadProvider ? 3 : 2) : null,
+    liveSyncDurationSeconds: null
   };
 }
 

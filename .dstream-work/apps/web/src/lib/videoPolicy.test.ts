@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { StreamAnnounce } from "@dstream/protocol";
-import { isLikelyLivePlayableMediaUrl, isLikelyLivePlaybackUrl, isLikelyPlayableMediaUrl, isLikelyVideoPlaybackUrl } from "./mediaUrl";
+import {
+  isLikelyLivePlayableMediaUrl,
+  isLikelyLivePlaybackUrl,
+  isLikelyPlayableMediaUrl,
+  isLikelyPublicAudioUrl,
+  isLikelyVideoPlaybackUrl,
+  resolvePreferredRadioAudioUrl
+} from "./mediaUrl";
 import { isReplayEligibleStream } from "./videoPolicy";
 
 function buildAnnounce(overrides: Partial<StreamAnnounce>): StreamAnnounce {
@@ -23,7 +30,8 @@ function buildAnnounce(overrides: Partial<StreamAnnounce>): StreamAnnounce {
     createdAt: 1_700_000_000,
     raw: { pubkey: "f".repeat(64), created_at: 1_700_000_000, kind: 30311, tags: [], content: "" },
     ...overrides,
-    streamVisibility: overrides.streamVisibility ?? "public"
+    streamVisibility: overrides.streamVisibility ?? "public",
+    referenceUrls: overrides.referenceUrls ?? []
   };
 }
 
@@ -38,6 +46,22 @@ test("generic /stream page URL is not treated as media playback", () => {
   assert.equal(isLikelyPlayableMediaUrl(url), false);
   assert.equal(isLikelyLivePlaybackUrl(url), false);
   assert.equal(isLikelyLivePlayableMediaUrl(url), false);
+});
+
+test("only public direct-audio URLs qualify as audio fallbacks", () => {
+  assert.equal(isLikelyPublicAudioUrl("https://radio.example.com/listen/live.mp3"), true);
+  assert.equal(isLikelyPublicAudioUrl("https://radio.example.com/about"), false);
+  assert.equal(isLikelyPublicAudioUrl("https://radio.example.com/live.m3u8"), false);
+  assert.equal(isLikelyPublicAudioUrl("http://radio.example.com/live.mp3"), false);
+  assert.equal(isLikelyPublicAudioUrl("http://localhost:8080/live.mp3"), false);
+  assert.equal(isLikelyPublicAudioUrl("/api/audio/live.mp3"), true);
+});
+
+test("radio-tagged streams may prefer their declared direct-audio reference", () => {
+  const audioUrl = "https://radio.example.com/listen/live.mp3";
+  assert.equal(resolvePreferredRadioAudioUrl([audioUrl], ["music", "radio"]), audioUrl);
+  assert.equal(resolvePreferredRadioAudioUrl([audioUrl], ["music"]), null);
+  assert.equal(resolvePreferredRadioAudioUrl(["https://radio.example.com/about"], ["radio"]), null);
 });
 
 test("video endpoint URL is excluded from live-playable classification", () => {

@@ -105,6 +105,7 @@ export interface StreamAnnounce {
   payments: StreamPaymentMethod[];
   captions: StreamCaptionTrack[];
   renditions: StreamRendition[];
+  referenceUrls: string[];
   topics: string[];
   currentParticipants?: number;
   createdAt: number;

@@ -291,6 +291,26 @@ function normalizeVipPubkeys(input: string[]): string[] {
   return out;
 }
 
+function normalizeReferenceUrls(input: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    const value = (raw ?? "").trim();
+    if (!value) continue;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") continue;
+      const normalized = parsed.href;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      out.push(normalized);
+    } catch {
+      // Ignore malformed and non-web references.
+    }
+  }
+  return out;
+}
+
 function normalizeCaptionTrack(input: StreamCaptionTrack): StreamCaptionTrack | null {
   const lang = (input.lang ?? "").trim().toLowerCase();
   const label = (input.label ?? "").trim();
@@ -394,6 +414,7 @@ export interface BuildStreamAnnounceInput {
   stakeNote?: string;
   captions?: StreamCaptionTrack[];
   renditions?: StreamRendition[];
+  referenceUrls?: string[];
   topics?: string[];
 }
 
@@ -501,6 +522,10 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
     ]);
   }
 
+  for (const referenceUrl of normalizeReferenceUrls(input.referenceUrls ?? [])) {
+    tags.push(["r", referenceUrl]);
+  }
+
   for (const topic of sortTopicTags(input.topics ?? [])) {
     tags.push(["t", topic]);
   }
@@ -600,6 +625,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   const stakeAmountAtomic = stakeAmountAtomicRaw && /^\d+$/.test(stakeAmountAtomicRaw) ? stakeAmountAtomicRaw : undefined;
   const captions = event.tags.map(parseCaptionTag).filter((value): value is StreamCaptionTrack => !!value);
   const renditions = event.tags.map(parseRenditionTag).filter((value): value is StreamRendition => !!value);
+  const referenceUrls = normalizeReferenceUrls(getAllTagValues(event.tags, "r"));
   const paymentTags = event.tags.map(parsePaymentTag).filter((value): value is StreamPaymentMethod => !!value);
   const legacyXmrRaw = getFirstTagValue(event.tags, "xmr");
   const legacyXmr = legacyXmrRaw ? normalizePaymentMethod({ asset: "xmr", address: legacyXmrRaw })?.address : undefined;
@@ -638,6 +664,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
     payments,
     captions,
     renditions,
+    referenceUrls,
     topics: sortTopicTags(getAllTagValues(event.tags, "t")),
     currentParticipants: parsePositiveInt(
       getFirstTagValue(event.tags, "current_participants") ??

@@ -15,6 +15,7 @@ const DIRECT_MEDIA_EXTENSIONS = [
   ".flac",
   ".opus"
 ] as const;
+const DIRECT_AUDIO_EXTENSIONS = [".ogg", ".mp3", ".m4a", ".aac", ".wav", ".flac", ".opus"] as const;
 
 const HLS_PATH_MARKERS = ["/hls/", "/api/hls/", "/whep", "/whip", "/master.m3u8", "/manifest.m3u8"] as const;
 const LIVE_PATH_MARKERS = ["/hls/live.m3u8", "/live.m3u8", "/whep", "/whip"] as const;
@@ -77,6 +78,21 @@ export function isLikelyHlsUrl(input: string | null | undefined): boolean {
 
 export function isLikelyPlayableMediaUrl(input: string | null | undefined): boolean {
   return inferMediaUrlKind(input) !== "unknown";
+}
+
+export function isLikelyPublicAudioUrl(input: string | null | undefined): boolean {
+  if (!isLikelyPublicPlaybackUrl(input)) return false;
+  const path = splitPathFromUrl(input ?? "");
+  return DIRECT_AUDIO_EXTENSIONS.some((extension) => path.endsWith(extension));
+}
+
+export function resolvePreferredRadioAudioUrl(
+  referenceUrls: readonly string[] | null | undefined,
+  topics: readonly string[] | null | undefined
+): string | null {
+  const isRadio = (topics ?? []).some((topic) => topic.trim().toLowerCase() === "radio");
+  if (!isRadio) return null;
+  return (referenceUrls ?? []).find((url) => isLikelyPublicAudioUrl(url)) ?? null;
 }
 
 export function isLikelyLivePlaybackUrl(input: string | null | undefined): boolean {

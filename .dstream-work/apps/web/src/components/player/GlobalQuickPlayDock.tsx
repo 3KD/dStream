@@ -13,6 +13,7 @@ import { makeOriginStreamId } from "@/lib/origin";
 import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
 import { buildWatchHref } from "@/lib/watchHref";
 import { setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
+import { isLikelyPublicAudioUrl, resolvePreferredRadioAudioUrl } from "@/lib/mediaUrl";
 import {
   MINI_PLAYER_DEFAULT_WIDTH,
   MINI_PLAYER_VIEWPORT_GAP,
@@ -215,6 +216,15 @@ export function GlobalQuickPlayDock() {
     );
   }, [hlsSrc, quickPlayStream]);
 
+  const audioFallbackSrc = useMemo(() => {
+    const explicit = quickPlayStream?.audioFallbackUrl?.trim();
+    if (explicit && isLikelyPublicAudioUrl(explicit)) return explicit;
+    return (announce?.referenceUrls ?? []).find((url) => isLikelyPublicAudioUrl(url)) ?? null;
+  }, [announce?.referenceUrls, quickPlayStream?.audioFallbackUrl]);
+  const preferAudioFallback =
+    quickPlayStream?.preferAudioFallback === true ||
+    !!resolvePreferredRadioAudioUrl(announce?.referenceUrls, announce?.topics);
+
   const watchHref = quickPlayStream
     ? buildWatchHref(quickPlayStream.streamPubkey, quickPlayStream.streamId)
     : null;
@@ -356,7 +366,7 @@ export function GlobalQuickPlayDock() {
         return;
       }
       const syncSourceMode = () => {
-        setAudioOnlyMode(found.dataset.dstreamSourceMode === "zap-audio-fallback");
+        setAudioOnlyMode((found.dataset.dstreamSourceMode ?? "").includes("audio-fallback"));
       };
       if (attachedVideo === found) {
         setIsPlaying(!found.paused && !found.ended);
@@ -744,6 +754,8 @@ export function GlobalQuickPlayDock() {
 
   const globalPlayerProps = useMemo(() => ({
     src: hlsSrc,
+    audioFallbackSrc,
+    preferAudioFallback,
     posterSrc: announce?.image ?? null,
     whepSrc,
     autoplayMuted: false,
@@ -753,7 +765,7 @@ export function GlobalQuickPlayDock() {
     showNativeControls: false,
     playbackStateKey,
     overlayTitle: quickPlayStream?.title || announce?.title || "Live stream"
-  }), [announce?.image, announce?.title, hlsSrc, playbackStateKey, quickPlayStream?.title, whepSrc]);
+  }), [announce?.image, announce?.title, audioFallbackSrc, hlsSrc, playbackStateKey, preferAudioFallback, quickPlayStream?.title, whepSrc]);
 
   useEffect(() => {
     if (!quickPlayStream) {

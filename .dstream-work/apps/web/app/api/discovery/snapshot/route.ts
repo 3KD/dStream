@@ -3,6 +3,7 @@ import { SimplePool, type Filter } from "nostr-tools";
 import { makeStreamKey, NOSTR_KINDS, parseDiscoveryModerationEvent, parseStreamAnnounceEvent, type StreamAnnounce } from "@dstream/protocol";
 import { getDiscoveryOperatorPubkeys, getNostrRelays } from "@/lib/config";
 import { shouldRefreshDiscoverySnapshot } from "@/lib/discoverySnapshot";
+import { isLikelyPublicAudioUrl } from "@/lib/mediaUrl";
 import { probeStreamSource } from "@/lib/streamHealth";
 
 export const runtime = "nodejs";
@@ -56,7 +57,18 @@ async function applySourceHealth(streams: StreamAnnounce[]): Promise<StreamAnnou
       const index = cursor++;
       const stream = liveCandidates[index];
       const source = (stream.streaming ?? "").trim();
-      const health = await probeStreamSource(source);
+      let health = await probeStreamSource(source);
+      if (!health.ok) {
+        const audioFallbacks = (stream.referenceUrls ?? [])
+          .filter((candidate) => isLikelyPublicAudioUrl(candidate))
+          .slice(0, 2);
+        for (const fallbackSource of audioFallbacks) {
+          const fallbackHealth = await probeStreamSource(fallbackSource);
+          if (!fallbackHealth.ok) continue;
+          health = fallbackHealth;
+          break;
+        }
+      }
       if (health.ok) {
         sourceHealth.set(source, { failures: 0, checkedAt: Date.now() });
         results.set(makeStreamKey(stream.pubkey, stream.streamId), stream);

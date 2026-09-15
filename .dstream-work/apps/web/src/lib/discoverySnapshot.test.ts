@@ -40,7 +40,8 @@ function stream(overrides: Partial<StreamAnnounce> = {}): StreamAnnounce {
       tags: [],
       content: ""
     },
-    ...overrides
+    ...overrides,
+    referenceUrls: overrides.referenceUrls ?? []
   };
 }
 

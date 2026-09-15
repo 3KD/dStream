@@ -25,21 +25,29 @@ async function loadMasterParser() {
   return hls.M3U8Parser;
 }
 
-test("identifies Zap and letsfo rotating HLS providers without suffix confusion", () => {
+test("identifies supported rotating HLS providers without suffix confusion", () => {
   assert.equal(isZapStreamHlsUrl("https://zap.stream/live.m3u8"), true);
   assert.equal(isRotatingHlsProviderUrl("https://s1.letsfo.com/id/hls/live.m3u8"), true);
+  assert.equal(isRotatingHlsProviderUrl("https://api.streamroad.money/id/hls/live.m3u8"), true);
   assert.equal(isRotatingHlsProviderUrl("https://evilletsfo.com/live.m3u8"), false);
   assert.equal(isRotatingHlsProviderUrl("/api/hls/local/index.m3u8"), false);
 });
 
-test("uses bounded complete-segment playback for rotating providers", () => {
+test("uses completed segments near the live edge for rotating providers", () => {
   assert.deepEqual(
     resolveHlsPlaybackCompatibilityPolicy({
       sourceUrl: "https://api-uk.zap.stream/id/hls/live.m3u8",
       isFirefox: false,
       lowLatencyEnabled: true
     }),
-    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+    {
+      stableMode: false,
+      bridgeLiveGaps: false,
+      lowLatencyEnabled: false,
+      preferCompleteSegments: true,
+      completeSegmentLiveSyncCount: 2,
+      liveSyncDurationSeconds: null
+    }
   );
   assert.deepEqual(
     resolveHlsPlaybackCompatibilityPolicy({
@@ -47,18 +55,32 @@ test("uses bounded complete-segment playback for rotating providers", () => {
       isFirefox: false,
       lowLatencyEnabled: true
     }),
-    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+    {
+      stableMode: false,
+      bridgeLiveGaps: false,
+      lowLatencyEnabled: false,
+      preferCompleteSegments: true,
+      completeSegmentLiveSyncCount: 2,
+      liveSyncDurationSeconds: null
+    }
   );
 });
 
-test("keeps rotating-provider timing when Firefox also needs stable mode", () => {
+test("keeps Firefox compatibility mode for rotating providers", () => {
   assert.deepEqual(
     resolveHlsPlaybackCompatibilityPolicy({
       sourceUrl: "https://api-uk.zap.stream/id/hls/live.m3u8",
       isFirefox: true,
       lowLatencyEnabled: true
     }),
-    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+    {
+      stableMode: true,
+      bridgeLiveGaps: true,
+      lowLatencyEnabled: false,
+      preferCompleteSegments: true,
+      completeSegmentLiveSyncCount: 2,
+      liveSyncDurationSeconds: null
+    }
   );
 });
 
@@ -69,7 +91,14 @@ test("limits generic stable compatibility mode to Firefox", () => {
       isFirefox: true,
       lowLatencyEnabled: true
     }),
-    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: null }
+    {
+      stableMode: true,
+      bridgeLiveGaps: true,
+      lowLatencyEnabled: false,
+      preferCompleteSegments: false,
+      completeSegmentLiveSyncCount: null,
+      liveSyncDurationSeconds: null
+    }
   );
   assert.deepEqual(
     resolveHlsPlaybackCompatibilityPolicy({
@@ -77,8 +106,25 @@ test("limits generic stable compatibility mode to Firefox", () => {
       isFirefox: false,
       lowLatencyEnabled: true
     }),
-    { stableMode: false, bridgeLiveGaps: false, lowLatencyEnabled: true, liveSyncDurationSeconds: null }
+    {
+      stableMode: false,
+      bridgeLiveGaps: false,
+      lowLatencyEnabled: true,
+      preferCompleteSegments: false,
+      completeSegmentLiveSyncCount: null,
+      liveSyncDurationSeconds: null
+    }
   );
+});
+
+test("gives Streamroad one additional completed segment of live reserve", () => {
+  const policy = resolveHlsPlaybackCompatibilityPolicy({
+    sourceUrl: "https://api.streamroad.money/id/hls/live.m3u8",
+    isFirefox: false,
+    lowLatencyEnabled: true
+  });
+  assert.equal(policy.preferCompleteSegments, true);
+  assert.equal(policy.completeSegmentLiveSyncCount, 3);
 });
 
 test("parses rotating master renditions and resolves their relative URLs", async () => {
