@@ -4,7 +4,8 @@ import {
   applyRotatingMasterSnapshot,
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
-  parseRotatingMasterPlaylist
+  parseRotatingMasterPlaylist,
+  resolveHlsPlaybackCompatibilityPolicy
 } from "./rotatingMaster";
 
 function master(audioId: string, video360Id: string, video720Id: string): string {
@@ -29,6 +30,55 @@ test("identifies Zap and letsfo rotating HLS providers without suffix confusion"
   assert.equal(isRotatingHlsProviderUrl("https://s1.letsfo.com/id/hls/live.m3u8"), true);
   assert.equal(isRotatingHlsProviderUrl("https://evilletsfo.com/live.m3u8"), false);
   assert.equal(isRotatingHlsProviderUrl("/api/hls/local/index.m3u8"), false);
+});
+
+test("uses bounded complete-segment playback for rotating providers", () => {
+  assert.deepEqual(
+    resolveHlsPlaybackCompatibilityPolicy({
+      sourceUrl: "https://api-uk.zap.stream/id/hls/live.m3u8",
+      isFirefox: false,
+      lowLatencyEnabled: true
+    }),
+    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+  );
+  assert.deepEqual(
+    resolveHlsPlaybackCompatibilityPolicy({
+      sourceUrl: "https://s1.letsfo.com/id/hls/live.m3u8",
+      isFirefox: false,
+      lowLatencyEnabled: true
+    }),
+    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+  );
+});
+
+test("keeps rotating-provider timing when Firefox also needs stable mode", () => {
+  assert.deepEqual(
+    resolveHlsPlaybackCompatibilityPolicy({
+      sourceUrl: "https://api-uk.zap.stream/id/hls/live.m3u8",
+      isFirefox: true,
+      lowLatencyEnabled: true
+    }),
+    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: 8 }
+  );
+});
+
+test("limits generic stable compatibility mode to Firefox", () => {
+  assert.deepEqual(
+    resolveHlsPlaybackCompatibilityPolicy({
+      sourceUrl: "https://cdn.example.com/live.m3u8",
+      isFirefox: true,
+      lowLatencyEnabled: true
+    }),
+    { stableMode: true, bridgeLiveGaps: true, lowLatencyEnabled: false, liveSyncDurationSeconds: null }
+  );
+  assert.deepEqual(
+    resolveHlsPlaybackCompatibilityPolicy({
+      sourceUrl: "https://cdn.example.com/live.m3u8",
+      isFirefox: false,
+      lowLatencyEnabled: true
+    }),
+    { stableMode: false, bridgeLiveGaps: false, lowLatencyEnabled: true, liveSyncDurationSeconds: null }
+  );
 });
 
 test("parses rotating master renditions and resolves their relative URLs", async () => {

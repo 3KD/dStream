@@ -32,7 +32,9 @@ const LIVE_HINT_GRACE_SEC = (() => {
 })();
 const LIVE_PRUNE_INTERVAL_MS = 15_000;
 const STREAM_ANNOUNCE_LOOKBACK_ALL_SEC = 45 * 24 * 60 * 60;
-const STREAM_ANNOUNCE_MIN_LIMIT_ALL = 320;
+const STREAM_ANNOUNCE_LIVE_RELAY_LIMIT = 96;
+const STREAM_ANNOUNCE_UPDATE_RELAY_LIMIT = 160;
+const STREAM_ANNOUNCE_UPDATE_LOOKBACK_SEC = 15 * 60;
 const STREAM_CACHE_MAX_ITEMS = 360;
 const STREAM_CACHE_REFRESH_MS = 90_000;
 const STREAM_DISCOVERY_TIMEOUT_MS = 4_000;
@@ -498,11 +500,25 @@ function connectDirectoryFeed() {
     emitSnapshot({ isLoading: true });
   }
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const snapshotOverlapSince = streamDirectoryStore.serverLiveKeysQueriedAtSec
+    ? streamDirectoryStore.serverLiveKeysQueriedAtSec - 120
+    : nowSec - STREAM_ANNOUNCE_UPDATE_LOOKBACK_SEC;
+  const updateSince = Math.max(
+    nowSec - LIVE_HINT_GRACE_SEC,
+    Math.min(nowSec - STREAM_ANNOUNCE_UPDATE_LOOKBACK_SEC, snapshotOverlapSince)
+  );
   const filters: Filter[] = [
     {
       kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],
-      since: Math.floor(Date.now() / 1000) - STREAM_ANNOUNCE_LOOKBACK_ALL_SEC,
-      limit: Math.max(STREAM_ANNOUNCE_MIN_LIMIT_ALL, STREAM_CACHE_MAX_ITEMS * 2)
+      "#status": ["live"],
+      since: nowSec - LIVE_HINT_GRACE_SEC,
+      limit: STREAM_ANNOUNCE_LIVE_RELAY_LIMIT
+    },
+    {
+      kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],
+      since: updateSince,
+      limit: STREAM_ANNOUNCE_UPDATE_RELAY_LIMIT
     }
   ];
 
@@ -555,6 +571,10 @@ function startDirectoryFeed(relays: string[], operatorPubkeys: string[]) {
     connectDirectoryFeed();
   }
 
+  // The server snapshot owns archive hydration; direct relays provide current
+  // live entries and status changes without replaying the full archive in-browser.
+  void hydrateFromServerSnapshotFallback();
+
   if (!streamDirectoryStore.pruneInterval) {
     streamDirectoryStore.pruneInterval = setInterval(() => applyStreamSnapshot(), LIVE_PRUNE_INTERVAL_MS);
   }
@@ -565,6 +585,10 @@ function startDirectoryFeed(relays: string[], operatorPubkeys: string[]) {
 
 function stopDirectoryFeed() {
   closeDirectorySubscription();
+  if (applySnapshotTimer) {
+    clearTimeout(applySnapshotTimer);
+    applySnapshotTimer = null;
+  }
   if (streamDirectoryStore.pruneInterval) {
     clearInterval(streamDirectoryStore.pruneInterval);
     streamDirectoryStore.pruneInterval = null;

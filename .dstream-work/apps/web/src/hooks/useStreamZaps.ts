@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type { Filter } from "nostr-tools";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -34,6 +34,25 @@ export function useStreamZaps(scope: { streamPubkey: string; streamId: string; w
       since,
       limit: 2000
     };
+    let cancelled = false;
+    let publishTimer: ReturnType<typeof setTimeout> | null = null;
+    const publishReceipts = () => {
+      if (cancelled) return;
+      if (publishTimer) {
+        clearTimeout(publishTimer);
+        publishTimer = null;
+      }
+      const next = Array.from(byIdRef.current.values()).sort((a, b) => {
+        const byCreated = b.createdAt - a.createdAt;
+        if (byCreated !== 0) return byCreated;
+        return a.id.localeCompare(b.id);
+      });
+      startTransition(() => setReceipts(next));
+    };
+    const schedulePublish = () => {
+      if (publishTimer) return;
+      publishTimer = setTimeout(publishReceipts, 100);
+    };
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
@@ -43,18 +62,17 @@ export function useStreamZaps(scope: { streamPubkey: string; streamId: string; w
         const prev = byIdRef.current.get(parsed.id);
         if (prev && prev.createdAt >= parsed.createdAt) return;
         byIdRef.current.set(parsed.id, parsed);
-        setReceipts(
-          Array.from(byIdRef.current.values()).sort((a, b) => {
-            const byCreated = b.createdAt - a.createdAt;
-            if (byCreated !== 0) return byCreated;
-            return a.id.localeCompare(b.id);
-          })
-        );
+        schedulePublish();
       },
-      oneose: () => setIsConnected(true)
+      oneose: () => {
+        publishReceipts();
+        setIsConnected(true);
+      }
     });
 
     return () => {
+      cancelled = true;
+      if (publishTimer) clearTimeout(publishTimer);
       try {
         (sub as any).close?.();
       } catch {

@@ -1,9 +1,8 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Flag, Star, X, Network, Share2, ArrowDownToLine, ArrowUpFromLine, Database, Download, LoaderCircle, Upload } from "lucide-react";
-import QRCode from "qrcode";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { ChatBox } from "@/components/chat/ChatBox";
@@ -18,7 +17,7 @@ import { usePublishPresence } from "@/hooks/usePublishPresence";
 import { useStreamZaps } from "@/hooks/useStreamZaps";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
 import { useIdentity } from "@/context/IdentityContext";
-import { useQuickPlay } from "@/context/QuickPlayContext";
+import { useQuickPlayActions } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
@@ -37,7 +36,7 @@ import {
 } from "@/lib/access/client";
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
-import { P2PSwarm, type P2PSwarmStats } from "@/lib/p2p/swarm";
+import type { P2PSwarm, P2PSwarmStats } from "@/lib/p2p/swarm";
 import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
 import { canEnableP2pAssist, isP2pStakeSatisfied, normalizeStakeRequiredAtomic } from "@/lib/p2p/stakeGate";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
@@ -52,6 +51,11 @@ function base64EncodeUtf8(input: string): string {
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
+}
+
+async function createQrDataUrl(uri: string): Promise<string> {
+  const { default: QRCode } = await import("qrcode");
+  return QRCode.toDataURL(uri, { margin: 1, width: 176 });
 }
 
 function normalizeHex64(input: string | null | undefined): string | null {
@@ -220,12 +224,34 @@ export default function WatchPage() {
   const e2eSentRef = useRef({ loaded: false, player: false, chat: false, integrityVerified: false, integrityTamper: false });
   const tipAutoOpenedRef = useRef(false);
   const { identity, signEvent, nip04 } = useIdentity();
-  const { setQuickPlayStream } = useQuickPlay();
+  const { setQuickPlayStream } = useQuickPlayActions();
   const social = useSocial();
   const relays = useMemo(() => getNostrRelays(), []);
   const pubkey = useMemo(() => pubkeyParamToHex(pubkeyParam), [pubkeyParam]);
   const npub = useMemo(() => (pubkey ? pubkeyHexToNpub(pubkey) : null), [pubkey]);
   const originStreamId = useMemo(() => (pubkey ? makeOriginStreamId(pubkey, streamId) : null), [pubkey, streamId]);
+  const [mediaHasPlayed, setMediaHasPlayed] = useState(false);
+  const [liveDataEnabled, setLiveDataEnabled] = useState(false);
+  const [p2pStartupEnabled, setP2pStartupEnabled] = useState(false);
+  const handlePlayerPlaying = useCallback(() => setMediaHasPlayed(true), []);
+
+  useEffect(() => {
+    setMediaHasPlayed(false);
+    setLiveDataEnabled(false);
+    setP2pStartupEnabled(false);
+  }, [pubkey, streamId]);
+
+  useEffect(() => {
+    if (!mediaHasPlayed) return;
+    const timer = setTimeout(() => setLiveDataEnabled(true), 5_000);
+    return () => clearTimeout(timer);
+  }, [mediaHasPlayed]);
+
+  useEffect(() => {
+    if (!mediaHasPlayed) return;
+    const timer = setTimeout(() => setP2pStartupEnabled(true), 30_000);
+    return () => clearTimeout(timer);
+  }, [mediaHasPlayed]);
 
   const { announce, announceEvent, isLoading: announceLoading } = useStreamAnnounce(pubkey ?? "", streamId);
   const latestAnnounceEventRef = useRef(announceEvent);
@@ -233,13 +259,16 @@ export default function WatchPage() {
     latestAnnounceEventRef.current = announceEvent;
   }, [announceEvent]);
   const hasAnnounceEvent = !!announceEvent;
-  const hostProfile = useNostrProfile(pubkey);
+  const hostProfile = useNostrProfile(liveDataEnabled ? pubkey : null);
   const manifestSignerPubkey = announce?.manifestSignerPubkey ?? manifestSignerQuery;
-  const { viewerCount, viewerPubkeys } = useStreamPresence({ streamPubkey: pubkey ?? "", streamId });
+  const { viewerCount, viewerPubkeys } = useStreamPresence({
+    streamPubkey: liveDataEnabled ? pubkey ?? "" : "",
+    streamId: liveDataEnabled ? streamId : ""
+  });
   const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
   const { count: zapCount, totalSats: zapTotalSats, isConnected: zapsConnected } = useStreamZaps({
-    streamPubkey: pubkey ?? "",
-    streamId
+    streamPubkey: liveDataEnabled ? pubkey ?? "" : "",
+    streamId: liveDataEnabled ? streamId : ""
   });
   const { session: integritySession, snapshot: integritySnapshot } = useStreamIntegrity({
     streamPubkey: pubkey ?? "",
@@ -257,7 +286,7 @@ export default function WatchPage() {
   const { status: presenceStatus, lastSentAt } = usePublishPresence({
     streamPubkey: pubkey ?? "",
     streamId,
-    enabled: presenceEnabled
+    enabled: liveDataEnabled && presenceEnabled
   });
 
   const p2pEnabled = social.settings.p2pAssistEnabled;
@@ -367,6 +396,7 @@ export default function WatchPage() {
 
   const ephemeralSignalIdentityRef = useRef<SignalIdentity | null>(null);
   const signalIdentity = useMemo<SignalIdentity | null>(() => {
+    if (!liveDataEnabled) return null;
     if (identity && nip04) {
       return {
         pubkey: identity.pubkey,
@@ -383,7 +413,7 @@ export default function WatchPage() {
       }
     }
     return ephemeralSignalIdentityRef.current;
-  }, [identity, nip04, signEvent, stakeRequiredAtomic]);
+  }, [identity, liveDataEnabled, nip04, signEvent, stakeRequiredAtomic]);
 
   const p2pAllowed = useMemo(
     () =>
@@ -396,6 +426,15 @@ export default function WatchPage() {
       }),
     [identity, nip04, signalIdentity, stakeRequiredAtomic, stakeStatus?.confirmedAtomic]
   );
+  const p2pPeerCandidates = useMemo(() => {
+    const self = signalIdentity?.pubkey ?? null;
+    let desired = viewerPubkeys.filter((candidate) => candidate !== self && !social.isBlocked(candidate));
+    if (social.settings.p2pPeerMode === "trusted_only") {
+      desired = desired.filter((candidate) => social.isTrusted(candidate));
+    }
+    return desired;
+  }, [signalIdentity?.pubkey, social.isBlocked, social.isTrusted, social.settings.p2pPeerMode, viewerPubkeys]);
+  const hasP2pPeerCandidates = p2pPeerCandidates.length > 0;
 
   const [p2pSwarm, setP2pSwarm] = useState<P2PSwarm | null>(null);
   const [p2pStats, setP2pStats] = useState<P2PSwarmStats | null>(null);
@@ -431,7 +470,7 @@ export default function WatchPage() {
   const mobilePortraitLayout = mobileLayoutMode === "portrait";
   const desktopWatchLayout = mobileLayoutMode === "desktop";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const anchor = mobilePortraitLayout ? mobilePortraitChatAnchorRef.current : dockedChatAnchorRef.current;
     const shell = mobilePortraitLayout ? mobilePortraitChatShellRef.current : dockedChatShellRef.current;
     if (!anchor || !shell) return;
@@ -439,8 +478,8 @@ export default function WatchPage() {
     let frame = 0;
     let lastLayout = "";
     const visualViewport = window.visualViewport;
-    const minimumTopInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
-    const bottomInset = desktopWatchLayout ? 24 : mobileLandscapeLayout ? 16 : 0;
+    const minimumTopInset = desktopWatchLayout ? 24 : 16;
+    const bottomInset = desktopWatchLayout ? 24 : 16;
     const footerInset = mobilePortraitLayout ? 16 : bottomInset;
 
     const updateChatViewport = () => {
@@ -511,41 +550,63 @@ export default function WatchPage() {
 
 
   useEffect(() => {
-    if (!p2pEnabled || !p2pAllowed || !signalIdentity || !pubkey) {
+    if (
+      !liveDataEnabled ||
+      !p2pStartupEnabled ||
+      !p2pEnabled ||
+      !p2pAllowed ||
+      !signalIdentity ||
+      !pubkey ||
+      !hasP2pPeerCandidates
+    ) {
       setP2pSwarm(null);
       setP2pStats(null);
       return;
     }
 
-    const swarm = new P2PSwarm({
-      identity: signalIdentity,
-      relays,
-      streamPubkey: pubkey,
-      streamId
-    });
-
     let alive = true;
-    setP2pSwarm(swarm);
-    void swarm.start().catch(() => {
-      if (!alive) return;
-      social.updateSettings({ p2pAssistEnabled: false });
-    });
+    let swarm: P2PSwarm | null = null;
+    void import("@/lib/p2p/swarm")
+      .then(async ({ P2PSwarm: P2PSwarmRuntime }) => {
+        if (!alive) return;
+        const nextSwarm = new P2PSwarmRuntime({
+          identity: signalIdentity,
+          relays,
+          streamPubkey: pubkey,
+          streamId
+        });
+        swarm = nextSwarm;
+        setP2pSwarm(nextSwarm);
+        await nextSwarm.start();
+        if (!alive) nextSwarm.stop();
+      })
+      .catch(() => {
+        if (!alive) return;
+        setP2pSwarm(null);
+        social.updateSettings({ p2pAssistEnabled: false });
+      });
 
     return () => {
       alive = false;
-      swarm.stop();
+      swarm?.stop();
     };
-  }, [p2pAllowed, p2pEnabled, pubkey, relays, signalIdentity, social.updateSettings, streamId]);
+  }, [
+    liveDataEnabled,
+    p2pAllowed,
+    p2pEnabled,
+    hasP2pPeerCandidates,
+    p2pStartupEnabled,
+    pubkey,
+    relays,
+    signalIdentity,
+    social.updateSettings,
+    streamId
+  ]);
 
   useEffect(() => {
     if (!p2pEnabled || !p2pAllowed || !p2pSwarm) return;
-    const self = signalIdentity?.pubkey ?? null;
-    let desired = viewerPubkeys.filter((pk) => pk !== self && !social.isBlocked(pk));
-    if (social.settings.p2pPeerMode === "trusted_only") {
-      desired = desired.filter((pk) => social.isTrusted(pk));
-    }
-    p2pSwarm.setDesiredPeers(desired);
-  }, [p2pAllowed, p2pEnabled, p2pSwarm, signalIdentity?.pubkey, social.isBlocked, social.isTrusted, social.settings.p2pPeerMode, viewerPubkeys]);
+    p2pSwarm.setDesiredPeers(p2pPeerCandidates);
+  }, [p2pAllowed, p2pEnabled, p2pPeerCandidates, p2pSwarm]);
 
   useEffect(() => {
     if (!p2pEnabled || !p2pAllowed || !p2pSwarm) return;
@@ -717,6 +778,7 @@ export default function WatchPage() {
   }, [liveAccessToken, originStreamId, shouldTryWhep]);
 
   useEffect(() => {
+    if (!mediaHasPlayed) return;
     if (!pubkey || !streamId) return;
     const nextUrl = playbackStreamUrl.trim();
     if (!nextUrl || !isLikelyPlayableMediaUrl(nextUrl)) return;
@@ -732,7 +794,7 @@ export default function WatchPage() {
       hlsUrl: nextUrl,
       whepUrl: shouldTryWhep ? whepSrc ?? undefined : undefined
     });
-  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
+  }, [announce?.title, identity?.pubkey, liveAccessToken, livePrivateAccessRequired, mediaHasPlayed, playbackStreamUrl, pubkey, setQuickPlayStream, shouldTryWhep, streamId, whepSrc]);
 
   const captionTracks = useMemo(() => {
     return (announce?.captions ?? [])
@@ -1309,7 +1371,7 @@ export default function WatchPage() {
     void (async () => {
       try {
         const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createQrDataUrl(uri);
         if (cancelled) return;
         setVideoUnlockQr(dataUrl);
       } catch {
@@ -1410,7 +1472,7 @@ export default function WatchPage() {
     void (async () => {
       try {
         const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createQrDataUrl(uri);
         if (cancelled) return;
         setVerifiedTipQr(dataUrl);
       } catch {
@@ -1624,7 +1686,7 @@ export default function WatchPage() {
     void (async () => {
       try {
         const uri = `monero:${address}`;
-        const dataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 176 });
+        const dataUrl = await createQrDataUrl(uri);
         if (cancelled) return;
         setStakeQr(dataUrl);
       } catch {
@@ -1726,6 +1788,7 @@ export default function WatchPage() {
         />
       </button>
     ) : null,
+    onPlaying: handlePlayerPlaying,
     onReady: () => {
       if (!e2e || e2eSentRef.current.player) return;
       e2eSentRef.current.player = true;
@@ -1744,6 +1807,7 @@ export default function WatchPage() {
     effectiveViewerCount,
     p2pStats?.peersConnected,
     playbackStateKey,
+    handlePlayerPlaying,
     e2e,
     social,
     mobilePortraitLayout,
@@ -1786,6 +1850,7 @@ export default function WatchPage() {
       paymentMethods={paymentMethods}
       draftStorageKey={`dstream_watch_chat_draft_v1:${pubkey ?? ""}:${streamId}`}
       viewerCount={effectiveViewerCount}
+      liveDataEnabled={liveDataEnabled}
       onMessageCountChange={(count) => {
         if (!e2e || e2eSentRef.current.chat) return;
         if (count <= 0) return;
@@ -1994,7 +2059,7 @@ export default function WatchPage() {
                 <div
                   ref={mobilePortraitChatShellRef}
                   data-testid="watch-chat-panel-mobile-portrait"
-                  className="fixed inset-x-4 bottom-0 z-[60] isolate flex h-[clamp(15rem,calc(100svh-20rem),32rem)] flex-col bg-neutral-950"
+                  className="fixed inset-x-4 bottom-4 z-[60] isolate flex h-[clamp(15rem,calc(100svh-20rem),32rem)] flex-col bg-neutral-950"
                 >
                   <div className="flex h-full flex-1 flex-col">
                     {chatBox}

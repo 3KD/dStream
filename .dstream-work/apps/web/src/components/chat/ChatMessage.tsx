@@ -1,13 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useSocial } from "@/context/SocialContext";
 import { shortenText } from "@/lib/encoding";
 import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { BadgeCheck, CheckCircle2, EllipsisVertical, Flag, Gem, RadioTower, ShieldCheck } from "lucide-react";
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
 import type { ReactNode } from "react";
+
+interface ChatMessageProps {
+  msg: StreamChatMessage;
+  emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>;
+  isBroadcaster: boolean;
+  canModerate?: boolean;
+  canManageRoles?: boolean;
+  profileName?: string | null;
+  isModerator?: boolean;
+  isSubscriber?: boolean;
+  isVerified?: boolean;
+  isWhisper?: boolean;
+  whisperLabel?: string;
+  remoteMuted?: boolean;
+  remoteBlocked?: boolean;
+  moderationBusy?: boolean;
+  roleBusy?: boolean;
+  subscriberRoleBusy?: boolean;
+  reportBusy?: boolean;
+  onModerationAction?: (action: StreamModerationAction) => void;
+  onToggleModerator?: () => void;
+  onToggleSubscriber?: () => void;
+  onReportUser?: () => void;
+  onReportMessage?: () => void;
+  onReplyToUser?: () => void;
+  onWhisperToUser?: () => void;
+}
 
 function renderContentWithEmotes(content: string, emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>, isApproved?: boolean): ReactNode[] {
   if (!emotesDict || Object.keys(emotesDict).length === 0) {
@@ -38,7 +65,7 @@ function renderContentWithEmotes(content: string, emotesDict?: Record<string, { 
   });
 }
 
-export function ChatMessage({
+function ChatMessageComponent({
   msg,
   emotesDict,
   isBroadcaster,
@@ -63,35 +90,8 @@ export function ChatMessage({
   onReportMessage,
   onReplyToUser,
   onWhisperToUser
-}: {
-  msg: StreamChatMessage;
-  emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>;
-  isBroadcaster: boolean;
-  canModerate?: boolean;
-  canManageRoles?: boolean;
-  profileName?: string | null;
-  isModerator?: boolean;
-  isSubscriber?: boolean;
-  isVerified?: boolean;
-  isWhisper?: boolean;
-  whisperLabel?: string;
-  remoteMuted?: boolean;
-  remoteBlocked?: boolean;
-  moderationBusy?: boolean;
-  roleBusy?: boolean;
-  subscriberRoleBusy?: boolean;
-  reportBusy?: boolean;
-  onModerationAction?: (action: StreamModerationAction) => void;
-  onToggleModerator?: () => void;
-  onToggleSubscriber?: () => void;
-  onReportUser?: () => void;
-  onReportMessage?: () => void;
-  onReplyToUser?: () => void;
-  onWhisperToUser?: () => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const time = mounted ? new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--";
+}: ChatMessageProps) {
+  const time = new Date(msg.createdAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const social = useSocial();
   const alias = social.getAlias(msg.pubkey);
   const trusted = social.isTrusted(msg.pubkey);
@@ -139,7 +139,11 @@ export function ChatMessage({
     <div className={`group/message relative py-1.5 px-3 hover:bg-neutral-800/50 ${isWhisper ? "bg-purple-950/10" : ""}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <Link href={profileHref} className={`font-medium text-sm truncate hover:underline ${isBroadcaster ? "text-red-400" : "text-neutral-200"}`}>
+          <Link
+            href={profileHref}
+            prefetch={false}
+            className={`font-medium text-sm truncate hover:underline ${isBroadcaster ? "text-red-400" : "text-neutral-200"}`}
+          >
             {displayLabel}
           </Link>
           {displayLabel !== pubkeyLabel && <span className="text-[10px] text-neutral-500 font-mono truncate">{pubkeyLabel}</span>}
@@ -188,7 +192,7 @@ export function ChatMessage({
           {isWhisper && (
             <span className="text-[10px] bg-purple-950/50 border border-purple-700/30 text-purple-200 px-1.5 py-0.5 rounded">WHISPER</span>
           )}
-          <span className="text-[10px] text-neutral-500">{time}</span>
+          <span className="text-[10px] text-neutral-500" suppressHydrationWarning>{time}</span>
         </div>
         {isWhisper && whisperLabel && <div className="text-[11px] text-purple-200/80 mb-0.5">{whisperLabel}</div>}
         <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>
@@ -320,3 +324,34 @@ export function ChatMessage({
     </div>
   );
 }
+
+function sameCallbackAvailability(previous: ChatMessageProps, next: ChatMessageProps): boolean {
+  return Boolean(previous.onModerationAction) === Boolean(next.onModerationAction) &&
+    Boolean(previous.onToggleModerator) === Boolean(next.onToggleModerator) &&
+    Boolean(previous.onToggleSubscriber) === Boolean(next.onToggleSubscriber) &&
+    Boolean(previous.onReportUser) === Boolean(next.onReportUser) &&
+    Boolean(previous.onReportMessage) === Boolean(next.onReportMessage) &&
+    Boolean(previous.onReplyToUser) === Boolean(next.onReplyToUser) &&
+    Boolean(previous.onWhisperToUser) === Boolean(next.onWhisperToUser);
+}
+
+export const ChatMessage = memo(ChatMessageComponent, (previous, next) =>
+  previous.msg === next.msg &&
+  previous.emotesDict === next.emotesDict &&
+  previous.isBroadcaster === next.isBroadcaster &&
+  previous.canModerate === next.canModerate &&
+  previous.canManageRoles === next.canManageRoles &&
+  previous.profileName === next.profileName &&
+  previous.isModerator === next.isModerator &&
+  previous.isSubscriber === next.isSubscriber &&
+  previous.isVerified === next.isVerified &&
+  previous.isWhisper === next.isWhisper &&
+  previous.whisperLabel === next.whisperLabel &&
+  previous.remoteMuted === next.remoteMuted &&
+  previous.remoteBlocked === next.remoteBlocked &&
+  previous.moderationBusy === next.moderationBusy &&
+  previous.roleBusy === next.roleBusy &&
+  previous.subscriberRoleBusy === next.subscriberRoleBusy &&
+  previous.reportBusy === next.reportBusy &&
+  sameCallbackAvailability(previous, next)
+);

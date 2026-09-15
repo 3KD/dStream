@@ -35,6 +35,8 @@ interface ChatReportTarget {
   summary: string;
 }
 
+const CHAT_RENDER_BATCH_SIZE = 60;
+
 export function ChatBox({
   streamPubkey,
   streamId,
@@ -48,6 +50,7 @@ export function ChatBox({
   headerRightSlot,
   paymentMethods,
   draftStorageKey,
+  liveDataEnabled = true,
   className
 }: {
   streamPubkey: string;
@@ -62,12 +65,17 @@ export function ChatBox({
   headerRightSlot?: ReactNode;
   paymentMethods?: StreamPaymentMethod[];
   draftStorageKey?: string;
+  liveDataEnabled?: boolean;
   className?: string;
 }) {
   const { identity, ensureIdentity, signEvent } = useIdentity();
   const social = useSocial();
-  const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({ streamPubkey, streamId });
-  const globalEmotesMap = useEmotes([streamPubkey, identity?.pubkey]);
+  const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({
+    streamPubkey,
+    streamId,
+    enabled: liveDataEnabled
+  });
+  const globalEmotesMap = useEmotes(liveDataEnabled ? [streamPubkey, identity?.pubkey] : []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerScrollRef = useRef<HTMLDivElement>(null);
   const nip05Policy = useMemo(() => getNip05Policy(), []);
@@ -85,6 +93,7 @@ export function ChatBox({
   const [composerDraftVersion, setComposerDraftVersion] = useState(0);
   const [tipDialogOpen, setTipDialogOpen] = useState(false);
   const [chatNotificationSoundEnabled, setChatNotificationSoundEnabled] = useState<boolean | null>(null);
+  const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(CHAT_RENDER_BATCH_SIZE);
 
   const lastMessageSentAtRef = useRef<number>(0);
   const clearRequestSeenRef = useRef<number>(0);
@@ -94,13 +103,13 @@ export function ChatBox({
   const lastChatNotificationSoundAtRef = useRef(0);
 
   const moderation = useStreamModeration({
-    streamPubkey,
-    streamId,
+    streamPubkey: liveDataEnabled ? streamPubkey : "",
+    streamId: liveDataEnabled ? streamId : "",
     identityPubkey: identity?.pubkey ?? null,
     signEvent
   });
 
-  const selfProfile = useNostrProfile(identity?.pubkey ?? null);
+  const selfProfile = useNostrProfile(liveDataEnabled ? identity?.pubkey ?? null : null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(new Set());
   const isOwner = !!(identity && identity.pubkey === streamPubkey);
   const viewerPubkey = identity?.pubkey?.toLowerCase() ?? null;
@@ -142,10 +151,15 @@ export function ChatBox({
     [effectiveChatClearedAt, hiddenMessageIds, messages, moderation.remoteBlocked, moderation.remoteMuted, social]
   );
 
+  const renderedMessages = useMemo(
+    () => visibleMessages.slice(-visibleHistoryLimit),
+    [visibleHistoryLimit, visibleMessages]
+  );
+  const olderMessageCount = visibleMessages.length - renderedMessages.length;
   const hiddenCount = messages.length - visibleMessages.length;
   const normalizedViewerCount = typeof viewerCount === "number" && Number.isFinite(viewerCount) ? Math.max(0, viewerCount) : 0;
-  const visiblePubkeys = useMemo(() => visibleMessages.map((message) => message.pubkey), [visibleMessages]);
-  const profilesByPubkey = useNostrProfiles(visiblePubkeys);
+  const visiblePubkeys = useMemo(() => renderedMessages.map((message) => message.pubkey), [renderedMessages]);
+  const profilesByPubkey = useNostrProfiles(liveDataEnabled ? visiblePubkeys : []);
 
   const [isAutoScroll, setIsAutoScroll] = useState(true);
 
@@ -207,6 +221,7 @@ export function ChatBox({
     chatNotificationSeenIdsRef.current.clear();
     chatNotificationActiveSinceRef.current = Date.now();
     lastChatNotificationSoundAtRef.current = 0;
+    setVisibleHistoryLimit(CHAT_RENDER_BATCH_SIZE);
   }, [streamId, streamPubkey]);
 
   useEffect(() => {
@@ -259,11 +274,13 @@ export function ChatBox({
 
   useEffect(() => {
     if (!scrollRef.current || !innerScrollRef.current) return;
+    const scrollElement = scrollRef.current;
     const observer = new ResizeObserver(() => {
-      if (isAutoScroll && scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      if (isAutoScroll) {
+        scrollElement.scrollTop = scrollElement.scrollHeight;
       }
     });
+    observer.observe(scrollElement);
     observer.observe(innerScrollRef.current);
     return () => observer.disconnect();
   }, [isAutoScroll]);
@@ -589,7 +606,9 @@ export function ChatBox({
               {normalizedViewerCount}
             </span>
           ) : null}
-          {!isConnected && moderation.isLoading && <span className="text-[10px] text-neutral-500">syncing moderation…</span>}
+          {liveDataEnabled && !isConnected && moderation.isLoading && (
+            <span className="text-[10px] text-neutral-500">syncing moderation…</span>
+          )}
         </div>
         <div className="flex items-center gap-4">
           {headerRightSlot}
@@ -653,7 +672,18 @@ export function ChatBox({
             <div ref={innerScrollRef} className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
           ) : (
             <div ref={innerScrollRef} className="py-2">
-              {visibleMessages.map((m) => {
+              {olderMessageCount > 0 ? (
+                <div className="px-3 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleHistoryLimit((current) => current + CHAT_RENDER_BATCH_SIZE)}
+                    className="w-full rounded-md border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-xs text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
+                  >
+                    Show {Math.min(CHAT_RENDER_BATCH_SIZE, olderMessageCount)} older messages
+                  </button>
+                </div>
+              ) : null}
+              {renderedMessages.map((m) => {
                 const isWhisper = m.visibility === "whisper";
                 const recipients = (m.whisperRecipients ?? []).filter(Boolean);
                 const profileRecord = profilesByPubkey[m.pubkey];

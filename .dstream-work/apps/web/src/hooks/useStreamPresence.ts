@@ -18,8 +18,13 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
   const lastSeenRef = useRef<Map<string, number>>(new Map());
   const lastEventCreatedAtRef = useRef<Map<string, number>>(new Map());
   const firstSeenRef = useRef<Map<string, number>>(new Map());
+  const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recompute = useCallback(() => {
+    if (recomputeTimerRef.current) {
+      clearTimeout(recomputeTimerRef.current);
+      recomputeTimerRef.current = null;
+    }
     const rows = Array.from(lastSeenRef.current.entries())
       .map(([pubkey, lastSeen]) => ({
         pubkey,
@@ -33,8 +38,18 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
       });
 
     setViewerCount(rows.length);
-    setViewerPubkeys(rows.map((row) => row.pubkey));
+    const nextPubkeys = rows.map((row) => row.pubkey);
+    setViewerPubkeys((current) =>
+      current.length === nextPubkeys.length && current.every((pubkey, index) => pubkey === nextPubkeys[index])
+        ? current
+        : nextPubkeys
+    );
   }, []);
+
+  const scheduleRecompute = useCallback(() => {
+    if (recomputeTimerRef.current) return;
+    recomputeTimerRef.current = setTimeout(recompute, 100);
+  }, [recompute]);
 
   const prune = useCallback(() => {
     const now = Math.floor(Date.now() / 1000);
@@ -50,8 +65,8 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
       }
     }
 
-    if (changed) recompute();
-  }, [recompute, windowSec]);
+    if (changed) scheduleRecompute();
+  }, [scheduleRecompute, windowSec]);
 
   useEffect(() => {
     if (!streamPubkey || !streamId) return;
@@ -96,16 +111,23 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
         lastEventCreatedAtRef.current.set(pubkey, createdAt);
         if (!firstSeenRef.current.has(pubkey)) firstSeenRef.current.set(pubkey, now);
         lastSeenRef.current.set(pubkey, now);
-        recompute();
-        prune();
+        scheduleRecompute();
       },
-      oneose: () => setIsConnected(true)
+      oneose: () => {
+        prune();
+        recompute();
+        setIsConnected(true);
+      }
     });
 
     const interval = setInterval(prune, 10_000);
 
     return () => {
       clearInterval(interval);
+      if (recomputeTimerRef.current) {
+        clearTimeout(recomputeTimerRef.current);
+        recomputeTimerRef.current = null;
+      }
       try {
         (sub as any).close?.();
       } catch {
@@ -113,7 +135,7 @@ export function useStreamPresence(scope: { streamPubkey: string; streamId: strin
       }
       setIsConnected(false);
     };
-  }, [prune, recompute, relays, streamId, streamPubkey, windowSec]);
+  }, [prune, recompute, relays, scheduleRecompute, streamId, streamPubkey, windowSec]);
 
   return { viewerCount, viewerPubkeys, isConnected };
 }

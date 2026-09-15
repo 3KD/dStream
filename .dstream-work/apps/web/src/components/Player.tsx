@@ -8,7 +8,8 @@ import {
   applyRotatingMasterSnapshot,
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
-  parseRotatingMasterPlaylist
+  parseRotatingMasterPlaylist,
+  resolveHlsPlaybackCompatibilityPolicy
 } from "@/lib/hls/rotatingMaster";
 import {
   readBackgroundPlayPreference,
@@ -31,6 +32,7 @@ interface PlayerProps {
   p2pSwarm?: P2PSwarm | null;
   integrity?: IntegritySession | null;
   onReady?: () => void;
+  onPlaying?: () => void;
   autoplayMuted?: boolean;
   isLiveStream?: boolean;
   showTimelineControls?: boolean;
@@ -197,6 +199,15 @@ function isExternalPlaybackUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
+function isThirdPartyPlaybackUrl(value: string): boolean {
+  if (!isExternalPlaybackUrl(value) || typeof window === "undefined") return false;
+  try {
+    return new URL(value).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function formatQualityLabel(level: { width?: number; height?: number; bitrate?: number }): string {
   const height = typeof level.height === "number" && level.height > 0 ? `${level.height}p` : null;
   const bitrate =
@@ -220,11 +231,13 @@ type HlsPlaybackTuningOptions = {
   lowLatencyEnabled: boolean;
   backgroundPlayEnabled: boolean;
   bridgeLiveGaps?: boolean;
+  liveSyncDurationSeconds?: number | null;
 };
 
 function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
   const lowLatencyMode = options.lowLatencyEnabled;
-  const stableLiveSyncDuration = options.backgroundPlayEnabled ? 30 : 24;
+  const stableLiveSyncDuration =
+    options.liveSyncDurationSeconds ?? (options.backgroundPlayEnabled ? 30 : 24);
   return {
     lowLatencyMode,
     maxBufferLength: options.backgroundPlayEnabled ? 180 : lowLatencyMode ? 45 : 90,
@@ -235,7 +248,8 @@ function getHlsPlaybackTuning(options: HlsPlaybackTuningOptions) {
     liveMaxLatencyDurationCount: lowLatencyMode ? Number.POSITIVE_INFINITY : undefined,
     liveMaxLatencyDuration: lowLatencyMode ? undefined : Number.POSITIVE_INFINITY,
     liveSyncOnStallIncrease: 1,
-    maxBufferHole: options.bridgeLiveGaps ? 2.5 : 0.1,
+    // Large tolerances hide complete segment holes from the loader's buffer scheduling.
+    maxBufferHole: 0.1,
     detectStallWithCurrentTimeMs: options.bridgeLiveGaps ? 250 : 1_250,
     highBufferWatchdogPeriod: options.bridgeLiveGaps ? 0.25 : 2
   };
@@ -280,6 +294,7 @@ export function Player({
   p2pSwarm,
   integrity,
   onReady,
+  onPlaying,
   autoplayMuted,
   isLiveStream = true,
   showTimelineControls = true,
@@ -302,6 +317,7 @@ export function Player({
   const whepRef = useRef<WhepClient | null>(null);
   const playbackModeRef = useRef<PlaybackMode>("hls");
   const onReadyRef = useRef(onReady);
+  const onPlayingRef = useRef(onPlaying);
   const selectedQualityRef = useRef(-1);
   const liveHlsActivityRef = useRef<LiveHlsActivity>({
     lastFragBufferedAt: 0,
@@ -375,9 +391,16 @@ export function Player({
   const playbackStartupPolicyReady =
     playbackEnvironmentReady && (backgroundPlayEnabledOverride !== undefined || backgroundPlayPreferenceLoaded);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(true);
+  const hlsCompatibilityPolicy = resolveHlsPlaybackCompatibilityPolicy({
+    sourceUrl: normalizedSrc,
+    isFirefox: isFirefoxPlayback,
+    lowLatencyEnabled
+  });
+  const stableHlsCompatibilityMode = hlsCompatibilityPolicy.stableMode;
+  const bridgeLiveGaps = hlsCompatibilityPolicy.bridgeLiveGaps;
+  const effectiveLowLatencyEnabled = hlsCompatibilityPolicy.lowLatencyEnabled;
+  const liveSyncDurationSeconds = hlsCompatibilityPolicy.liveSyncDurationSeconds;
   const rotatingHlsProviderMode = isRotatingHlsProviderUrl(normalizedSrc);
-  const stableHlsCompatibilityMode = isFirefoxPlayback || rotatingHlsProviderMode;
-  const effectiveLowLatencyEnabled = lowLatencyEnabled && !stableHlsCompatibilityMode;
   const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
   const [selectedQuality, setSelectedQuality] = useState(-1);
   const [qualityIndicator, setQualityIndicator] = useState("Auto");
@@ -420,6 +443,12 @@ export function Player({
   }, [onReady]);
 
   useEffect(() => {
+    onPlayingRef.current = onPlaying;
+    const video = videoRef.current;
+    if (onPlaying && video && !video.paused && !video.ended && video.readyState >= 3) onPlaying();
+  }, [onPlaying]);
+
+  useEffect(() => {
     const persisted = readPersistedPlaybackState(playbackStateKeyRef.current);
     if (persisted) {
       const persistedMuted = persisted.muted === true;
@@ -459,16 +488,16 @@ export function Player({
     applyHlsPlaybackTuning(hls, {
       lowLatencyEnabled: effectiveLowLatencyEnabled,
       backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-      bridgeLiveGaps: stableHlsCompatibilityMode
+      bridgeLiveGaps,
+      liveSyncDurationSeconds
     });
-  }, [effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled, stableHlsCompatibilityMode]);
+  }, [bridgeLiveGaps, effectiveBackgroundPlayEnabled, effectiveLowLatencyEnabled, liveSyncDurationSeconds]);
 
   useEffect(() => {
     const hls = hlsRef.current;
     if (!hls) return;
     try {
-      hls.currentLevel = selectedQuality;
-      hls.nextLevel = selectedQuality;
+      hls.loadLevel = selectedQuality;
       if (selectedQuality < 0) setQualityIndicator("Auto");
       else {
         const level = hls.levels[selectedQuality];
@@ -684,7 +713,7 @@ export function Player({
           setNote(reason);
           video.dataset.dstreamPlaybackRecoveryReason = reason;
           const hls = hlsRef.current;
-          if (playbackModeRef.current === "hls" && hls) {
+          if (playbackModeRef.current === "hls" && hls && !rotatingHlsProviderMode) {
             try {
               hls.stopLoad();
               hls.startLoad(currentTime, true);
@@ -726,7 +755,7 @@ export function Player({
       document.removeEventListener("resume", onVisibleLifecycle as EventListener);
       video.removeEventListener("pause", onPause);
     };
-  }, [effectiveBackgroundPlayEnabled]);
+  }, [effectiveBackgroundPlayEnabled, rotatingHlsProviderMode]);
 
   useEffect(() => {
     if (!isLiveStream || !playbackStartupPolicyReady) return;
@@ -805,8 +834,10 @@ export function Player({
               hls.nextLoadLevel = stableLevel;
             }
           }
-          hls.stopLoad();
-          hls.startLoad(currentTime, true);
+          if (!rotatingHlsProviderMode) {
+            hls.stopLoad();
+            hls.startLoad(currentTime, true);
+          }
         } catch {
           // The next watchdog pass can escalate if the HLS instance cannot restart.
         }
@@ -864,6 +895,7 @@ export function Player({
     playbackStartupPolicyReady,
     normalizedSrc,
     normalizedWhepSrc,
+    rotatingHlsProviderMode,
     requestLivePlaybackReload
   ]);
 
@@ -1024,6 +1056,7 @@ export function Player({
       isFirefoxPlayback,
       isLiveStream,
       lowLatencyEnabled: effectiveLowLatencyEnabled,
+      liveSyncDurationSeconds,
       playbackStartupPolicyReady,
       preferNativeHls,
       src: normalizedSrc,
@@ -1112,11 +1145,7 @@ export function Player({
           const start = video.buffered.start(index);
           const end = video.buffered.end(index);
           const duration = Math.max(0, end - start);
-          if (
-            !best ||
-            duration > best.duration + 0.05 ||
-            (Math.abs(duration - best.duration) <= 0.05 && end > best.end)
-          ) {
+          if (!best || duration > best.duration + 0.05 || (Math.abs(duration - best.duration) <= 0.05 && end > best.end)) {
             best = { start, end, duration };
           }
         }
@@ -1139,21 +1168,25 @@ export function Player({
         setNeedsClick(true);
       });
     };
-    const waitForHlsStartupBuffer = (hls: Hls) => {
+    const waitForHlsStartupBuffer = (hls: Hls, startImmediately = false) => {
       clearHlsStartupListener();
-      if (!isLiveStream) {
+      if (!isLiveStream || startImmediately) {
         beginHlsPlayback();
         return;
       }
-      const targetBufferSeconds =
-        effectiveBackgroundPlayEnabled || rotatingHlsProviderMode ? 8 : effectiveLowLatencyEnabled ? 3 : 5;
-      const maxWaitMs = rotatingHlsProviderMode
-        ? 20_000
+
+      const targetBufferSeconds = effectiveLowLatencyEnabled
+        ? effectiveBackgroundPlayEnabled
+          ? 4
+          : 3
         : effectiveBackgroundPlayEnabled
-          ? 12_000
-          : effectiveLowLatencyEnabled
-            ? 5_000
-            : 8_000;
+          ? 6
+          : 5;
+      const maxWaitMs = effectiveLowLatencyEnabled
+        ? 8_000
+        : effectiveBackgroundPlayEnabled
+          ? 10_000
+          : 8_000;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1179,13 +1212,14 @@ export function Player({
       };
       function maybeStart() {
         if (started || cancelled) return;
-        const waitedMs = Date.now() - startedAt;
         const bufferedAhead = getBufferedAheadSeconds();
         const startupRange = bufferedAhead > 0 ? null : getBestStartupRange();
+        const startupRangeDuration = startupRange?.duration ?? 0;
+        const hasPlayableStartupBuffer = bufferedAhead > 0.25 || startupRangeDuration > 0.25;
         if (
           bufferedAhead >= targetBufferSeconds ||
-          (startupRange?.duration ?? 0) >= targetBufferSeconds ||
-          waitedMs >= maxWaitMs
+          startupRangeDuration >= targetBufferSeconds ||
+          (hasPlayableStartupBuffer && Date.now() - startedAt >= maxWaitMs)
         ) {
           if (bufferedAhead === 0 && startupRange && startupRange.duration > 0.25) {
             try {
@@ -1197,6 +1231,7 @@ export function Player({
           startNow();
         }
       }
+
       setStatus("Buffering…");
       hls.on(Hls.Events.FRAG_BUFFERED, maybeStart);
       video.addEventListener("canplay", maybeStart);
@@ -1249,10 +1284,11 @@ export function Player({
       }
       startHls(primarySrc);
     };
-    const onPlaying = () => {
+    const handlePlaying = () => {
       clearWhepStallTimer();
       setNeedsClick(false);
       setStatus("Playing");
+      onPlayingRef.current?.();
     };
     const onWaiting = () => {
       setStatus((prev) => (prev === "Click to play" ? prev : "Buffering…"));
@@ -1273,7 +1309,7 @@ export function Player({
       if (playbackModeRef.current !== "whep") return;
       fallbackFromWhepToHls("Low-latency stream error. Switched to HLS for stability.");
     };
-    video.addEventListener("playing", onPlaying);
+    video.addEventListener("playing", handlePlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onStalled);
     video.addEventListener("error", onErrorFallback);
@@ -1459,7 +1495,8 @@ export function Player({
       const hlsPlaybackTuning = getHlsPlaybackTuning({
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps: stableHlsCompatibilityMode
+        bridgeLiveGaps,
+        liveSyncDurationSeconds
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
       const rotatingMasterMode = isRotatingHlsProviderUrl(hlsSource);
@@ -1482,7 +1519,7 @@ export function Player({
         fragLoadingMaxRetry: 8,
         fragLoadingRetryDelay: 250,
         fragLoadingMaxRetryTimeout: 2_000,
-        pLoader: MonotonicPlaylistLoader,
+        ...(useMonotonicPlaylistGuard ? { pLoader: MonotonicPlaylistLoader } : {}),
         ...(needsDstreamFragmentLoader ? { fLoader: P2PFragmentLoader } : {}),
         ...hlsPlaybackTuning,
         dstreamRefs: dstreamRefs,
@@ -1498,7 +1535,8 @@ export function Player({
       applyHlsPlaybackTuning(hls, {
         lowLatencyEnabled: effectiveLowLatencyEnabled,
         backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps: stableHlsCompatibilityMode
+        bridgeLiveGaps,
+        liveSyncDurationSeconds
       });
       hlsRef.current = hls;
 
@@ -1560,16 +1598,18 @@ export function Player({
         applyHlsPlaybackTuning(hls, {
           lowLatencyEnabled: effectiveLowLatencyEnabled,
           backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-          bridgeLiveGaps: stableHlsCompatibilityMode
+          bridgeLiveGaps,
+          liveSyncDurationSeconds
         });
         applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
         setQualityOptions(options);
-        try {
-          hls.currentLevel = selectedQualityRef.current;
-          hls.nextLevel = selectedQualityRef.current;
-        } catch {
-          // ignore
+        if (selectedQualityRef.current >= 0) {
+          try {
+            hls.loadLevel = selectedQualityRef.current;
+          } catch {
+            // ignore
+          }
         }
         setQualityIndicator(
           selectedQualityRef.current < 0
@@ -1581,7 +1621,8 @@ export function Player({
             void refreshRotatingMaster();
           }, 2_500);
         }
-        waitForHlsStartupBuffer(hls);
+        const useBrowserManagedStartup = rotatingMasterMode || (!isMobilePlayback && isThirdPartyPlaybackUrl(hlsSource));
+        waitForHlsStartupBuffer(hls, useBrowserManagedStartup);
       });
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -1842,7 +1883,7 @@ export function Player({
       cancelled = true;
       startupGatePendingRef.current = false;
       try {
-        video.removeEventListener("playing", onPlaying);
+        video.removeEventListener("playing", handlePlaying);
         video.removeEventListener("waiting", onWaiting);
         video.removeEventListener("stalled", onStalled);
         video.removeEventListener("error", onErrorFallback);
@@ -1876,6 +1917,7 @@ export function Player({
     isFirefoxPlayback,
     isLiveStream,
     effectiveLowLatencyEnabled,
+    liveSyncDurationSeconds,
     playbackReloadNonce,
     playbackStartupPolicyReady,
     preferNativeHls,

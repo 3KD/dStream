@@ -87,7 +87,7 @@ export function UnifiedTipDialog({
   paymentMethods = [],
   onClose
 }: UnifiedTipDialogProps) {
-  const profile = useNostrProfile(streamPubkey)?.profile;
+  const profile = useNostrProfile(open ? streamPubkey : null)?.profile;
   const { identity, signEvent } = useIdentity();
   const relays = useMemo(() => getNostrRelays(), []);
   const [showMonero, setShowMonero] = useState(false);

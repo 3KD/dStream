@@ -76,6 +76,28 @@ export function isRotatingHlsProviderUrl(value: string): boolean {
   }
 }
 
+export type HlsPlaybackCompatibilityPolicy = {
+  stableMode: boolean;
+  bridgeLiveGaps: boolean;
+  lowLatencyEnabled: boolean;
+  liveSyncDurationSeconds: number | null;
+};
+
+export function resolveHlsPlaybackCompatibilityPolicy(options: {
+  sourceUrl: string;
+  isFirefox: boolean;
+  lowLatencyEnabled: boolean;
+}): HlsPlaybackCompatibilityPolicy {
+  const rotatingProvider = isRotatingHlsProviderUrl(options.sourceUrl);
+  const stableMode = options.isFirefox || rotatingProvider;
+  return {
+    stableMode,
+    bridgeLiveGaps: stableMode,
+    lowLatencyEnabled: options.lowLatencyEnabled && !stableMode,
+    liveSyncDurationSeconds: rotatingProvider ? 8 : null
+  };
+}
+
 export function parseRotatingMasterPlaylist(
   playlist: string,
   baseUrl: string,

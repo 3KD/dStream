@@ -6,17 +6,110 @@ import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
 import { useGuild } from "@/hooks/useGuild";
 import { useGuilds } from "@/hooks/useGuilds";
-import { makeStreamKey } from "@dstream/protocol";
-import { Star } from "lucide-react";
+import { makeStreamKey, type StreamAnnounce } from "@dstream/protocol";
+import { LoaderCircle, Star } from "lucide-react";
 import { useSocial } from "@/context/SocialContext";
+import { useQuickPlayActions } from "@/context/QuickPlayContext";
+import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
 
 import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
+import { isLikelyLivePlayableMediaUrl } from "@/lib/mediaUrl";
+import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
+
+const STREAM_HISTORY_BATCH_SIZE = 12;
+const LIVE_PLAYER_PREWARM_TIMEOUT_MS = 30_000;
+const LIVE_PLAYER_STABLE_BEFORE_NAVIGATION_MS = 8_000;
+
+interface BrowsePlayerPrewarm {
+  streamPubkey: string;
+  streamId: string;
+  title: string;
+  hlsUrl: string;
+  whepUrl: string | null;
+  playbackStateKey: string;
+}
+
+function playerSignatureSource(video: HTMLVideoElement): string | null {
+  try {
+    const signature = JSON.parse(video.dataset.dstreamPlaybackSignature ?? "null") as { src?: unknown } | null;
+    return typeof signature?.src === "string" ? signature.src : null;
+  } catch {
+    return null;
+  }
+}
+
+function waitForPrimedPlayback(
+  expectedSrc: string,
+  previousSession: string | undefined,
+  signal: AbortSignal
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = 0;
+    let stablePlaybackTimer = 0;
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      window.clearTimeout(stablePlaybackTimer);
+      document.removeEventListener("playing", onPlaying, true);
+      document.removeEventListener("waiting", onPlaybackInterrupted, true);
+      document.removeEventListener("stalled", onPlaybackInterrupted, true);
+      document.removeEventListener("pause", onPlaybackInterrupted, true);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const settle = (shouldNavigate: boolean) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(shouldNavigate);
+    };
+    const isExpectedPlayer = (video: HTMLVideoElement) =>
+      video.closest("[data-global-player-host='true']") !== null &&
+      playerSignatureSource(video) === expectedSrc &&
+      video.dataset.dstreamPlaybackSession !== previousSession;
+    const scheduleStableNavigation = (video: HTMLVideoElement) => {
+      if (!isExpectedPlayer(video)) return;
+      window.clearTimeout(stablePlaybackTimer);
+      stablePlaybackTimer = window.setTimeout(() => {
+        if (!video.paused && !video.ended && video.readyState >= 2) settle(true);
+      }, LIVE_PLAYER_STABLE_BEFORE_NAVIGATION_MS);
+    };
+    const onPlaying = (event: Event) => {
+      if (event.target instanceof HTMLVideoElement) scheduleStableNavigation(event.target);
+    };
+    const onPlaybackInterrupted = (event: Event) => {
+      if (!(event.target instanceof HTMLVideoElement) || !isExpectedPlayer(event.target)) return;
+      window.clearTimeout(stablePlaybackTimer);
+      stablePlaybackTimer = 0;
+    };
+    const onAbort = () => settle(false);
+
+    const currentVideo = document.querySelector<HTMLVideoElement>("[data-global-player-host='true'] video");
+    if (
+      currentVideo &&
+      playerSignatureSource(currentVideo) === expectedSrc &&
+      !currentVideo.paused &&
+      !currentVideo.ended &&
+      currentVideo.readyState >= 2
+    ) {
+      scheduleStableNavigation(currentVideo);
+    }
+
+    document.addEventListener("playing", onPlaying, true);
+    document.addEventListener("waiting", onPlaybackInterrupted, true);
+    document.addEventListener("stalled", onPlaybackInterrupted, true);
+    document.addEventListener("pause", onPlaybackInterrupted, true);
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeoutId = window.setTimeout(() => settle(true), LIVE_PLAYER_PREWARM_TIMEOUT_MS);
+  });
+}
 
 function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
   return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
@@ -41,11 +134,25 @@ export default function BrowseClient() {
   const tabQuery = searchParams.get("tab");
   const guildQuery = useMemo(() => parseGuildQuery(guildQueryRaw), [guildQueryRaw]);
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
-  const { streams: liveStreams, isLoading: liveLoading } = useStreamAnnounces({ liveOnly: true, limit: 180 });
-  const { streams: allStreams, isLoading: archiveLoading } = useStreamAnnounces({ liveOnly: false, limit: 260 });
+  const [navigatingToStream, setNavigatingToStream] = useState(false);
+  const [playerPrewarm, setPlayerPrewarm] = useState<BrowsePlayerPrewarm | null>(null);
+  const pendingNavigationAbortRef = useRef<AbortController | null>(null);
+  const { clearQuickPlayStream } = useQuickPlayActions();
+  const { streams: liveStreams, isLoading: liveLoading } = useStreamAnnounces({
+    enabled: !navigatingToStream,
+    liveOnly: true,
+    limit: 180
+  });
+  const { streams: allStreams, isLoading: archiveLoading } = useStreamAnnounces({
+    enabled: !navigatingToStream,
+    liveOnly: false,
+    limit: 260
+  });
   const favoritesOnly = tabQuery === "following";
   const [curatedOnly, setCuratedOnly] = useState(false);
   const [liveOnly, setLiveOnly] = useState(false);
+  const [visibleVideoLimit, setVisibleVideoLimit] = useState(STREAM_HISTORY_BATCH_SIZE);
+  const [visibleOfflineLimit, setVisibleOfflineLimit] = useState(STREAM_HISTORY_BATCH_SIZE);
 
   const setBrowseTab = (tab: "browse" | "following") => {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -62,11 +169,74 @@ export default function BrowseClient() {
     if (guildQuery) setCuratedOnly(true);
   }, [guildQuery]);
 
-  const { guilds, isLoading: guildsLoading } = useGuilds({ limit: 80 });
+  useEffect(
+    () => () => {
+      pendingNavigationAbortRef.current?.abort();
+    },
+    []
+  );
+
+  const { guilds, isLoading: guildsLoading } = useGuilds({ enabled: !navigatingToStream, limit: 80 });
   const { guild: selectedGuild, isLoading: selectedGuildLoading } = useGuild({
-    pubkey: guildPubkeyHex ?? "",
-    guildId: guildQuery?.guildId ?? ""
+    pubkey: navigatingToStream ? "" : guildPubkeyHex ?? "",
+    guildId: navigatingToStream ? "" : guildQuery?.guildId ?? ""
   });
+
+  const beginWatchNavigation = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    setNavigatingToStream(true);
+  };
+
+  const beginLiveWatchNavigation = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    stream: Pick<StreamAnnounce, "pubkey" | "streamId" | "title" | "streaming" | "status" | "streamVisibility">,
+    watchHref: string
+  ) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const hlsUrl = stream.streaming?.trim();
+    const canPrewarm =
+      stream.status === "live" &&
+      stream.streamVisibility !== "private" &&
+      isLikelyLivePlayableMediaUrl(hlsUrl);
+    if (!hlsUrl || !canPrewarm) {
+      setNavigatingToStream(true);
+      return;
+    }
+
+    event.preventDefault();
+    pendingNavigationAbortRef.current?.abort();
+    const navigationAbort = new AbortController();
+    pendingNavigationAbortRef.current = navigationAbort;
+    const activeVideo = document.querySelector<HTMLVideoElement>("[data-global-player-host='true'] video");
+    const playbackReady = waitForPrimedPlayback(
+      hlsUrl,
+      activeVideo?.dataset.dstreamPlaybackSession,
+      navigationAbort.signal
+    );
+    const nextPlayerPrewarm: BrowsePlayerPrewarm = {
+      streamPubkey: stream.pubkey,
+      streamId: stream.streamId,
+      title: stream.title?.trim() || stream.streamId,
+      hlsUrl,
+      whepUrl:
+        deriveQuickPlayWhepUrl({ pubkey: stream.pubkey, streamId: stream.streamId }, hlsUrl) ?? null,
+      playbackStateKey: deriveQuickPlayPlaybackStateKey({
+        pubkey: stream.pubkey,
+        streamId: stream.streamId,
+        hlsUrl
+      })
+    };
+
+    flushSync(() => {
+      clearQuickPlayStream();
+      setNavigatingToStream(true);
+      setPlayerPrewarm(nextPlayerPrewarm);
+    });
+    void playbackReady.then((shouldNavigate) => {
+      if (!shouldNavigate || navigationAbort.signal.aborted) return;
+      router.push(watchHref);
+    });
+  };
 
   const curatedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -121,7 +291,27 @@ export default function BrowseClient() {
     return favoriteFiltered.filter((stream) => curatedKeys.has(makeStreamKey(stream.pubkey, stream.streamId)));
   }, [curatedKeys, curatedOnly, favoritesOnly, liveOnly, offlineStreams, social]);
 
+  const renderedVideoStreams = visibleVideoStreams.slice(0, visibleVideoLimit);
+  const renderedOfflineStreams = visibleOfflineStreams.slice(0, visibleOfflineLimit);
+
   const isLoading = liveLoading || archiveLoading;
+  const prewarmPlayerProps = useMemo(
+    () =>
+      playerPrewarm
+        ? {
+            src: playerPrewarm.hlsUrl,
+            whepSrc: playerPrewarm.whepUrl,
+            autoplayMuted: false,
+            isLiveStream: true,
+            showTimelineControls: false,
+            showAuxControls: false,
+            showNativeControls: false,
+            playbackStateKey: playerPrewarm.playbackStateKey,
+            overlayTitle: playerPrewarm.title
+          }
+        : null,
+    [playerPrewarm]
+  );
 
   const curatedLabel = !guildQuery
     ? "Curated only"
@@ -138,7 +328,7 @@ export default function BrowseClient() {
       return (
         <div className="text-xs text-neutral-500">
           Source:{" "}
-          <Link href={href} className="text-neutral-300 hover:text-white">
+          <Link href={href} prefetch={false} className="text-neutral-300 hover:text-white">
             {selectedGuild?.name ?? guildQuery.guildId}
           </Link>
           {selectedGuildLoading && <span className="text-neutral-600"> (loading…)</span>}
@@ -148,6 +338,29 @@ export default function BrowseClient() {
     if (guildsLoading) return <div className="text-xs text-neutral-600">Loading guilds…</div>;
     return <div className="text-xs text-neutral-500">Curated by {guilds.length} guild(s).</div>;
   }, [curatedOnly, guildQuery, guilds.length, guildsLoading, selectedGuild?.name, selectedGuildLoading]);
+
+  if (navigatingToStream) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-white">
+        <SimpleHeader />
+        <main className="flex min-h-[60vh] items-center justify-center px-3 py-5 sm:px-6">
+          <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-lg border border-neutral-800 bg-black sm:rounded-xl">
+            {prewarmPlayerProps ? (
+              <GlobalPlayerSlot id="browse-player-prewarm" playerProps={prewarmPlayerProps} />
+            ) : null}
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-black/75 px-4 py-3 text-sm text-neutral-200"
+              role="status"
+              aria-live="polite"
+            >
+              <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-blue-400" />
+              <span className="truncate">Starting {playerPrewarm?.title || "stream"}...</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
@@ -184,18 +397,21 @@ export default function BrowseClient() {
               <Link
                 className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
                 href="/guilds"
+                prefetch={false}
               >
                 Guilds
               </Link>
               <Link
                 className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300"
                 href="/video"
+                prefetch={false}
               >
                 Video
               </Link>
               <Link
                 className="hidden text-xs items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-neutral-900 hover:bg-neutral-800 border-neutral-800 text-neutral-300 sm:inline-flex"
                 href="/"
+                prefetch={false}
               >
                 Home
               </Link>
@@ -270,11 +486,13 @@ export default function BrowseClient() {
                       : shortenText(stream.pubkey, { head: 14, tail: 8 });
                     const favorite =
                       social.isFavoriteCreator(stream.pubkey) || social.isFavoriteStream(stream.pubkey, stream.streamId);
+                    const watchHref = buildWatchHref(pubkeyParam, stream.streamId, stream.streaming);
 
                     return (
                       <Link
-                        href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                        href={watchHref}
                         prefetch={false}
+                        onClick={(event) => beginLiveWatchNavigation(event, stream, watchHref)}
                         key={`live:${streamCanonicalId(stream)}`}
                         className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
@@ -360,8 +578,9 @@ export default function BrowseClient() {
                   No replay streams match current filters.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-                  {visibleVideoStreams.map((stream) => {
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                  {renderedVideoStreams.map((stream) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
                     const pubkeyParam = npub ?? stream.pubkey;
@@ -375,6 +594,8 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                        prefetch={false}
+                        onClick={beginWatchNavigation}
                         key={`video:${streamCanonicalId(stream)}:${stream.createdAt}`}
                         className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
@@ -431,7 +652,17 @@ export default function BrowseClient() {
                       </Link>
                     );
                   })}
-                </div>
+                  </div>
+                  {renderedVideoStreams.length < visibleVideoStreams.length && (
+                    <button
+                      type="button"
+                      onClick={() => setVisibleVideoLimit((current) => current + STREAM_HISTORY_BATCH_SIZE)}
+                      className="mt-4 inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                    >
+                      Show more replays
+                    </button>
+                  )}
+                </>
               )}
             </section>
 
@@ -442,8 +673,9 @@ export default function BrowseClient() {
                   No offline streams match current filters.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-                  {visibleOfflineStreams.map((stream) => {
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                  {renderedOfflineStreams.map((stream) => {
                     const alias = social.getAlias(stream.pubkey);
                     const npub = pubkeyHexToNpub(stream.pubkey);
                     const pubkeyParam = npub ?? stream.pubkey;
@@ -456,6 +688,8 @@ export default function BrowseClient() {
                     return (
                       <Link
                         href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                        prefetch={false}
+                        onClick={beginWatchNavigation}
                         key={`offline:${streamCanonicalId(stream)}:${stream.createdAt}`}
                         className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
@@ -509,7 +743,17 @@ export default function BrowseClient() {
                       </Link>
                     );
                   })}
-                </div>
+                  </div>
+                  {renderedOfflineStreams.length < visibleOfflineStreams.length && (
+                    <button
+                      type="button"
+                      onClick={() => setVisibleOfflineLimit((current) => current + STREAM_HISTORY_BATCH_SIZE)}
+                      className="mt-4 inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                    >
+                      Show more offline streams
+                    </button>
+                  )}
+                </>
               )}
             </section>
           </>

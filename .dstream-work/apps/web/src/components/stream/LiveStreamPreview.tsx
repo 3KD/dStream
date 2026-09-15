@@ -27,6 +27,8 @@ const CAPTURE_START_TIMEOUT_MS = 30_000;
 export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl, fallbackImage, enabled = true }: LiveStreamPreviewProps) {
   const [capturedFrame, setCapturedFrame] = useState<{ sourceUrl: string; dataUrl: string } | null>(null);
   const [failedFallbackImage, setFailedFallbackImage] = useState<string | null>(null);
+  const [captureRequested, setCaptureRequested] = useState(false);
+  const [captureArmed, setCaptureArmed] = useState(false);
 
   const hlsPreviewUrl = useMemo(() => {
     const explicit = streamingUrl?.trim();
@@ -39,7 +41,16 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
   const fallbackImageUrl = fallbackImage?.trim() || null;
   const fallbackImageFailed = Boolean(fallbackImageUrl && failedFallbackImage === fallbackImageUrl);
   const frameDataUrl = capturedFrame?.sourceUrl === hlsPreviewUrl ? capturedFrame.dataUrl : null;
-  const shouldCaptureFrame = enabled && (!fallbackImageUrl || fallbackImageFailed);
+  const shouldCaptureFrame = enabled && captureArmed && (!fallbackImageUrl || fallbackImageFailed);
+
+  useEffect(() => {
+    if (!captureRequested) {
+      setCaptureArmed(false);
+      return;
+    }
+    const timer = setTimeout(() => setCaptureArmed(true), 600);
+    return () => clearTimeout(timer);
+  }, [captureRequested]);
 
   useEffect(() => {
     if (!shouldCaptureFrame || !hlsPreviewUrl) return;
@@ -159,38 +170,48 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
     };
   }, [hlsPreviewUrl, shouldCaptureFrame]);
 
-  if (frameDataUrl) {
-    return (
+  const preview = frameDataUrl ? (
       <img
         src={frameDataUrl}
         alt={title}
         className="w-full h-full object-cover"
         loading="lazy"
-        data-live-preview-state="frame"
       />
-    );
-  }
-
-  if (fallbackImageUrl && !fallbackImageFailed) {
-    return (
+    ) : fallbackImageUrl && !fallbackImageFailed ? (
       <img
         src={fallbackImageUrl}
         alt={title}
         className="w-full h-full object-cover"
         loading="lazy"
-        data-live-preview-state="poster"
         onError={() => setFailedFallbackImage(fallbackImageUrl)}
       />
-    );
-  }
-
-  return (
+    ) : (
     <div
       className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2"
-      data-live-preview-state={shouldCaptureFrame ? "loading-frame" : "placeholder"}
     >
       <img src="/logo_trimmed.png" alt="" className="w-14 h-14 object-contain opacity-15 grayscale" />
       <span className="text-[11px] font-semibold tracking-wider text-neutral-700">dStream</span>
+    </div>
+  );
+
+  const previewState = frameDataUrl
+    ? "frame"
+    : fallbackImageUrl && !fallbackImageFailed
+      ? "poster"
+      : shouldCaptureFrame
+        ? "loading-frame"
+        : "placeholder";
+
+  return (
+    <div
+      className="h-full w-full"
+      data-live-preview-state={previewState}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse" || event.pointerType === "pen") setCaptureRequested(true);
+      }}
+      onPointerLeave={() => setCaptureRequested(false)}
+    >
+      {preview}
     </div>
   );
 }

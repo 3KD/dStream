@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Filter, Event as NostrEvent } from "nostr-tools";
 import {
   buildStreamModerationEvent,
@@ -86,6 +86,34 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
         limit: 1000
       }
     ];
+    let cancelled = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const pendingActions = new Map<string, StreamModerationRecord>();
+    const pendingRoles = new Map<string, RoleState>();
+    const flush = () => {
+      if (cancelled) return;
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      const actions = Array.from(pendingActions.entries());
+      const roles = Array.from(pendingRoles.entries());
+      pendingActions.clear();
+      pendingRoles.clear();
+      if (actions.length === 0 && roles.length === 0) return;
+      startTransition(() => {
+        if (actions.length > 0) {
+          setActionsByAuthorTarget((current) => ({ ...current, ...Object.fromEntries(actions) }));
+        }
+        if (roles.length > 0) {
+          setRoleByTarget((current) => ({ ...current, ...Object.fromEntries(roles) }));
+        }
+      });
+    };
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(flush, 100);
+    };
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
@@ -95,7 +123,8 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
           const prevCreatedAt = rolesSeenRef.current.get(key);
           if (prevCreatedAt && prevCreatedAt >= parsedRole.createdAt) return;
           rolesSeenRef.current.set(key, parsedRole.createdAt);
-          setRoleByTarget((prev) => ({ ...prev, [key]: { role: parsedRole.role, createdAt: parsedRole.createdAt } }));
+          pendingRoles.set(key, { role: parsedRole.role, createdAt: parsedRole.createdAt });
+          scheduleFlush();
           return;
         }
 
@@ -105,14 +134,23 @@ export function useStreamModeration(opts: UseStreamModerationOptions) {
         const prevCreatedAt = actionsSeenRef.current.get(key);
         if (prevCreatedAt && prevCreatedAt >= parsedAction.createdAt) return;
         actionsSeenRef.current.set(key, parsedAction.createdAt);
-        setActionsByAuthorTarget((prev) => ({ ...prev, [key]: parsedAction }));
+        pendingActions.set(key, parsedAction);
+        scheduleFlush();
       },
-      oneose: () => setIsLoading(false)
+      oneose: () => {
+        flush();
+        setIsLoading(false);
+      }
     });
 
-    const timeout = setTimeout(() => setIsLoading(false), 4500);
+    const timeout = setTimeout(() => {
+      flush();
+      setIsLoading(false);
+    }, 4500);
     return () => {
+      cancelled = true;
       clearTimeout(timeout);
+      if (flushTimer) clearTimeout(flushTimer);
       try {
         (sub as any).close?.();
       } catch {

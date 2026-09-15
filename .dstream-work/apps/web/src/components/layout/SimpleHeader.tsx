@@ -55,7 +55,7 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
     <header className="relative isolate z-[80] border-b border-neutral-800 bg-neutral-950/90 px-3 py-2 backdrop-blur-md sm:px-4 sm:py-2.5 lg:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link href="/" className="group flex min-w-0 shrink-0 items-center">
+          <Link href="/" prefetch={false} className="group flex min-w-0 shrink-0 items-center">
             <img
               src="/logo_trimmed.png"
               alt="dStream Logo"
@@ -69,12 +69,12 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
           <nav className="hidden md:flex landscape:flex flex-1 min-w-0 justify-start lg:justify-center overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex min-w-max items-center justify-start lg:justify-center gap-1.5 px-1">
               {NAV_ITEMS.map((item) => (
-                <Link key={item.href} href={item.href} className={navClassName}>
+                <Link key={item.href} href={item.href} prefetch={false} className={navClassName}>
                   {item.label}
                 </Link>
               ))}
               {showDevLinks && (
-                <Link href="/dev/visuals" className={`${navClassName} text-neutral-400`}>
+                <Link href="/dev/visuals" prefetch={false} className={`${navClassName} text-neutral-400`}>
                   Visuals
                 </Link>
               )}
@@ -128,12 +128,12 @@ export function SimpleHeader({ rightSlot }: SimpleHeaderProps) {
         <nav className="md:hidden landscape:hidden mt-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max items-center gap-1.5">
             {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} className={navClassName}>
+              <Link key={item.href} href={item.href} prefetch={false} className={navClassName}>
                 {item.label}
               </Link>
             ))}
             {showDevLinks && (
-              <Link href="/dev/visuals" className={`${navClassName} text-neutral-400`}>
+              <Link href="/dev/visuals" prefetch={false} className={`${navClassName} text-neutral-400`}>
                 Visuals
               </Link>
             )}

@@ -1,12 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type { Filter } from "nostr-tools";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import { makeATag, parseStreamManifestRootEvent } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 import { IntegritySession, type IntegritySnapshot } from "@/lib/integrity/session";
+
+const INTEGRITY_SNAPSHOT_INTERVAL_MS = 2_000;
+
+function snapshotsEqual(current: IntegritySnapshot | null, next: IntegritySnapshot): boolean {
+  return !!current &&
+    current.enabled === next.enabled &&
+    current.sha256Supported === next.sha256Supported &&
+    current.manifestsSeen === next.manifestsSeen &&
+    current.entriesKnown === next.entriesKnown &&
+    current.verifiedOk === next.verifiedOk &&
+    current.verifiedFail === next.verifiedFail &&
+    current.unverifiedSegments === next.unverifiedSegments &&
+    current.lastManifestAtMs === next.lastManifestAtMs &&
+    current.lastVerifiedAtMs === next.lastVerifiedAtMs &&
+    current.lastTamper === next.lastTamper;
+}
 
 export function useStreamIntegrity(opts: {
   streamPubkey: string;
@@ -33,9 +49,12 @@ export function useStreamIntegrity(opts: {
 
   useEffect(() => {
     if (!session) return;
-    const tick = () => setSnapshot(session.snapshot());
+    const tick = () => {
+      const next = session.snapshot();
+      startTransition(() => setSnapshot((current) => (snapshotsEqual(current, next) ? current : next)));
+    };
     tick();
-    const interval = setInterval(tick, 500);
+    const interval = setInterval(tick, INTEGRITY_SNAPSHOT_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [session]);
 

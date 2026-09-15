@@ -136,6 +136,12 @@ export function GlobalQuickPlayDock() {
   const isWatchRoute = pathname?.startsWith("/watch/") ?? false;
   const { quickPlayStream, clearQuickPlayStream } = useQuickPlay();
   const { clearRequest, playerHost, syncPortalPosition } = useGlobalPlayer();
+  const quickPlayStreamKey = quickPlayStream
+    ? `${quickPlayStream.streamPubkey.toLowerCase()}:${quickPlayStream.streamId}`
+    : null;
+  const [playingStreamKey, setPlayingStreamKey] = useState<string | null>(null);
+  const ancillaryQuickPlayStream =
+    !isWatchRoute && quickPlayStreamKey === playingStreamKey ? quickPlayStream : null;
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [position, setPosition] = useState({
@@ -152,12 +158,12 @@ export function GlobalQuickPlayDock() {
   const [touchDevice, setTouchDevice] = useState(false);
 
   const { viewerCount } = useStreamPresence({
-    streamPubkey: quickPlayStream?.streamPubkey ?? "",
-    streamId: quickPlayStream?.streamId ?? ""
+    streamPubkey: ancillaryQuickPlayStream?.streamPubkey ?? "",
+    streamId: ancillaryQuickPlayStream?.streamId ?? ""
   });
   const { announce } = useStreamAnnounce(
-    quickPlayStream?.streamPubkey ?? "",
-    quickPlayStream?.streamId ?? ""
+    ancillaryQuickPlayStream?.streamPubkey ?? "",
+    ancillaryQuickPlayStream?.streamId ?? ""
   );
   const effectiveViewerCount = Math.max(viewerCount, announce?.currentParticipants ?? 0);
 
@@ -409,6 +415,10 @@ export function GlobalQuickPlayDock() {
       };
 
       const onPlayState = () => setIsPlaying(!found.paused && !found.ended);
+      const onPlaying = () => {
+        onPlayState();
+        if (quickPlayStreamKey) setPlayingStreamKey(quickPlayStreamKey);
+      };
 
       found.addEventListener("volumechange", onVolumeChange);
       found.addEventListener("enterpictureinpicture", syncPip as any);
@@ -417,7 +427,7 @@ export function GlobalQuickPlayDock() {
       found.addEventListener("timeupdate", onTimeUpdate);
       found.addEventListener("progress", onTimeUpdate);
       found.addEventListener("play", onPlayState);
-      found.addEventListener("playing", onPlayState);
+      found.addEventListener("playing", onPlaying);
       found.addEventListener("pause", onPlayState);
       found.addEventListener("ended", onPlayState);
 
@@ -429,7 +439,7 @@ export function GlobalQuickPlayDock() {
         found.removeEventListener("timeupdate", onTimeUpdate);
         found.removeEventListener("progress", onTimeUpdate);
         found.removeEventListener("play", onPlayState);
-        found.removeEventListener("playing", onPlayState);
+        found.removeEventListener("playing", onPlaying);
         found.removeEventListener("pause", onPlayState);
         found.removeEventListener("ended", onPlayState);
       };
@@ -437,6 +447,9 @@ export function GlobalQuickPlayDock() {
       onVolumeChange();
       onTimeUpdate();
       onPlayState();
+      if (!found.paused && !found.ended && found.readyState >= 2 && quickPlayStreamKey) {
+        setPlayingStreamKey(quickPlayStreamKey);
+      }
       syncSourceMode();
       syncPip();
     };
@@ -455,7 +468,7 @@ export function GlobalQuickPlayDock() {
       observer.disconnect();
       detachVideo();
     };
-  }, [backgroundPlayPreferenceLoaded, hlsSrc, isWatchRoute, playerHost, quickPlayStream, ready]);
+  }, [backgroundPlayPreferenceLoaded, hlsSrc, isWatchRoute, playerHost, quickPlayStream, quickPlayStreamKey, ready]);
 
   useEffect(() => {
     pipActiveRef.current = pipActive;
@@ -781,6 +794,7 @@ export function GlobalQuickPlayDock() {
             {watchHref ? (
               <Link
                 href={watchHref}
+                prefetch={false}
                 onMouseDown={(event) => event.stopPropagation()}
                 className="min-w-0 flex-1 rounded-lg px-1 py-0.5 hover:bg-white/10 transition"
                 title="Open full stream page"
@@ -840,6 +854,7 @@ export function GlobalQuickPlayDock() {
             {tipHref ? (
               <Link
                 href={tipHref}
+                prefetch={false}
                 onMouseDown={(event) => event.stopPropagation()}
                 className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-emerald-400/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 transition"
                 title="Tip this streamer"
@@ -866,6 +881,7 @@ export function GlobalQuickPlayDock() {
             {watchHref ? (
               <Link
                 href={watchHref}
+                prefetch={false}
                 onMouseDown={(event) => event.stopPropagation()}
                 className="p-2 hover:bg-white/10 rounded-xl text-white/60 hover:text-white transition-all active:scale-95"
                 title="Open full stream page"

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 export interface QuickPlayStreamRef {
   streamPubkey: string;
@@ -16,7 +16,13 @@ interface QuickPlayContextValue {
   clearQuickPlayStream: () => void;
 }
 
+interface QuickPlayActionsContextValue {
+  setQuickPlayStream: (next: QuickPlayStreamRef) => void;
+  clearQuickPlayStream: () => void;
+}
+
 const QuickPlayContext = createContext<QuickPlayContextValue | null>(null);
+const QuickPlayActionsContext = createContext<QuickPlayActionsContextValue | null>(null);
 export const QUICK_PLAY_STORAGE_KEY = "dstream_quick_play_stream_v1";
 const STORAGE_KEY = QUICK_PLAY_STORAGE_KEY;
 
@@ -38,16 +44,19 @@ function normalizeStreamRef(value: QuickPlayStreamRef): QuickPlayStreamRef {
   };
 }
 
-export function QuickPlayProvider({ children }: { children: ReactNode }) {
-  const [quickPlayStream, setQuickPlayStreamState] = useState<QuickPlayStreamRef | null>(null);
+function clearPersistedQuickPlayStream() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
 
-  useEffect(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
+export function QuickPlayProvider({ children }: { children: ReactNode }) {
+  const [quickPlayStream, setQuickPlayStreamState] = useState<QuickPlayStreamRef | null>(() => {
+    clearPersistedQuickPlayStream();
+    return null;
+  });
 
   const setQuickPlayStream = useCallback((next: QuickPlayStreamRef) => {
     setQuickPlayStreamState(normalizeStreamRef(next));
@@ -55,11 +64,7 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
 
   const clearQuickPlayStream = useCallback(() => {
     setQuickPlayStreamState(null);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore storage failures
-    }
+    clearPersistedQuickPlayStream();
   }, []);
 
   const value = useMemo<QuickPlayContextValue>(
@@ -70,12 +75,26 @@ export function QuickPlayProvider({ children }: { children: ReactNode }) {
     }),
     [clearQuickPlayStream, quickPlayStream, setQuickPlayStream]
   );
+  const actions = useMemo<QuickPlayActionsContextValue>(
+    () => ({ setQuickPlayStream, clearQuickPlayStream }),
+    [clearQuickPlayStream, setQuickPlayStream]
+  );
 
-  return <QuickPlayContext.Provider value={value}>{children}</QuickPlayContext.Provider>;
+  return (
+    <QuickPlayActionsContext.Provider value={actions}>
+      <QuickPlayContext.Provider value={value}>{children}</QuickPlayContext.Provider>
+    </QuickPlayActionsContext.Provider>
+  );
 }
 
 export function useQuickPlay() {
   const context = useContext(QuickPlayContext);
   if (!context) throw new Error("useQuickPlay must be used within QuickPlayProvider");
+  return context;
+}
+
+export function useQuickPlayActions() {
+  const context = useContext(QuickPlayActionsContext);
+  if (!context) throw new Error("useQuickPlayActions must be used within QuickPlayProvider");
   return context;
 }

@@ -10,7 +10,7 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
   const [announce, setAnnounce] = useState<StreamAnnounce | null>(null);
   const [announceEvent, setAnnounceEvent] = useState<NostrEvent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const latestRef = useRef<number>(0);
+  const latestRef = useRef<{ createdAt: number; eventId: string } | null>(null);
 
   const relays = useMemo(() => getNostrRelays(), []);
 
@@ -19,20 +19,20 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
       setAnnounce(null);
       setAnnounceEvent(null);
       setIsLoading(false);
-      latestRef.current = 0;
+      latestRef.current = null;
       return;
     }
     setIsLoading(true);
     setAnnounce(null);
     setAnnounceEvent(null);
-    latestRef.current = 0;
+    latestRef.current = null;
 
     const filter: Filter = {
       kinds: [30311],
       authors: [pubkey],
       "#d": [streamId],
       since: Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60,
-      limit: 40
+      limit: 1
     };
 
     const sub = subscribeMany(relays, [filter], {
@@ -40,8 +40,16 @@ export function useStreamAnnounce(pubkey: string, streamId: string) {
         const parsed = parseStreamAnnounceEvent(event);
         if (!parsed) return;
         if (parsed.pubkey !== pubkey || parsed.streamId !== streamId) return;
-        if (parsed.createdAt < latestRef.current) return;
-        latestRef.current = parsed.createdAt;
+        const eventId = typeof event?.id === "string" ? event.id : "";
+        const latest = latestRef.current;
+        if (
+          latest &&
+          (parsed.createdAt < latest.createdAt ||
+            (parsed.createdAt === latest.createdAt && eventId <= latest.eventId))
+        ) {
+          return;
+        }
+        latestRef.current = { createdAt: parsed.createdAt, eventId };
         setAnnounce(parsed);
         setAnnounceEvent(event as NostrEvent);
       },

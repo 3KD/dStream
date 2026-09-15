@@ -22,6 +22,7 @@ const SAMPLE_MS = 5_000;
 const SOURCE_PATTERN = String(process.env.PLAYBACK_SOURCE_PATTERN || "").trim().toLowerCase();
 const EXPLICIT_SOURCE_URL = String(process.env.PLAYBACK_SOURCE_URL || "").trim();
 const EXPECTED_SOURCE_MODE = String(process.env.PLAYBACK_EXPECT_SOURCE_MODE || "").trim();
+const AUDIBLE_BROWSER_OUTPUT = /^(1|true|yes)$/i.test(String(process.env.PLAYBACK_AUDIBLE || "").trim());
 const REQUESTED_SCENARIOS = new Set(
   String(process.env.PLAYBACK_SCENARIOS || "chromium-desktop,chromium-mobile,firefox-desktop")
     .split(",")
@@ -45,20 +46,28 @@ function runDetails(run, sample) {
 }
 
 async function launchChromium() {
+  const launchOptions = {
+    headless: true,
+    args: AUDIBLE_BROWSER_OUTPUT ? [] : ["--mute-audio"]
+  };
   if (process.env.PLAYBACK_CHROMIUM_CHANNEL?.trim().toLowerCase() === "bundled") {
-    return chromium.launch({ headless: true });
+    return chromium.launch(launchOptions);
   }
   try {
-    return await chromium.launch({ channel: "chrome", headless: true });
+    return await chromium.launch({ ...launchOptions, channel: "chrome" });
   } catch {
-    return chromium.launch({ headless: true });
+    return chromium.launch(launchOptions);
   }
 }
 
 async function launchFirefox() {
   const executablePath = process.env.PLAYBACK_FIREFOX_EXECUTABLE?.trim();
-  if (executablePath) return firefox.launch({ executablePath, headless: true });
-  return firefox.launch({ headless: true });
+  const launchOptions = {
+    headless: true,
+    firefoxUserPrefs: AUDIBLE_BROWSER_OUTPUT ? {} : { "media.volume_scale": "0.0" }
+  };
+  if (executablePath) return firefox.launch({ ...launchOptions, executablePath });
+  return firefox.launch(launchOptions);
 }
 
 async function loadSources() {
@@ -310,8 +319,13 @@ async function openRun(context, scenario, stream, index) {
     }, marker);
     await startPlayback(page);
     const startup = await observeStartupStability(page, `${scenario}/${title}`);
+    const observedAt = startup.events.find((entry) => entry.event === "observed")?.at ?? null;
+    const firstPlayingAt = startup.events.find((entry) => entry.event === "playing")?.at ?? null;
+    const startupMs =
+      Number.isFinite(observedAt) && Number.isFinite(firstPlayingAt) ? Math.max(0, firstPlayingAt - observedAt) : null;
     console.log(
       `  startup ${scenario} / ${title}: mode=${startup.sourceMode}, buffer=${Number.isFinite(startup.startupBuffer) ? startup.startupBuffer.toFixed(1) : "n/a"}s, events=${startup.events.map((entry) => entry.event).join(",")}`
+        + `, first-playing=${startupMs === null ? "n/a" : `${startupMs}ms-after-video-attach`}`
     );
     if (background) {
       const toggle = page.getByTitle("Keep audio playing when the app is backgrounded");

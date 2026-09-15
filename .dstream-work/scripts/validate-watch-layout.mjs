@@ -14,6 +14,7 @@ const MAX_WAIT_MS = Number(process.env.WATCH_LAYOUT_MAX_WAIT_MS ?? "18000");
 const RETRY_MS = Number(process.env.WATCH_LAYOUT_RETRY_MS ?? "650");
 const COMPOSER_DRAFT = "unsent watch layout check";
 const SCENARIO_FILTER = process.env.WATCH_LAYOUT_SCENARIO?.trim() ?? "";
+const PORTRAIT_CHAT_INSET = 16;
 
 const scenarios = [
   {
@@ -181,13 +182,13 @@ async function validateEarlyPortraitAnchor(page, name) {
   check(!!initial.chatMobilePortrait, `${name}: early portrait chat panel missing`);
   check(initial.chatMobilePortraitPosition === "fixed", `${name}: early portrait chat is not viewport anchored`);
   check(
-    Math.abs(initial.chatMobilePortrait.bottom - initial.viewport.bottom) <= 3,
+    Math.abs(initial.chatMobilePortrait.bottom - (initial.viewport.bottom - PORTRAIT_CHAT_INSET)) <= 3,
     `${name}: early portrait chat bottom is detached`
   );
 
   const scrolled = await scrollToAndCollect(page, 40);
   check(
-    Math.abs(scrolled.chatMobilePortrait.bottom - scrolled.viewport.bottom) <= 3,
+    Math.abs(scrolled.chatMobilePortrait.bottom - (scrolled.viewport.bottom - PORTRAIT_CHAT_INSET)) <= 3,
     `${name}: an early swipe moves the portrait chat bottom`
   );
   const restored = await scrollToAndCollect(page, 0);
@@ -218,9 +219,9 @@ function validateBoundedChatGeometry(name, stage, layout, { portrait, expect = n
   check(!!layout.footer, `${name}: ${stage} site footer missing`);
   check(position === "fixed", `${name}: ${stage} chat is not viewport anchored`);
 
-  const topInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
-  const bottomInset = portrait ? 0 : expect === "desktop" ? 24 : 16;
-  const footerInset = portrait ? 16 : bottomInset;
+  const topInset = portrait ? PORTRAIT_CHAT_INSET : expect === "desktop" ? 24 : 16;
+  const bottomInset = portrait ? PORTRAIT_CHAT_INSET : expect === "desktop" ? 24 : 16;
+  const footerInset = bottomInset;
   const viewportBottomBoundary = layout.viewport.bottom - bottomInset;
   const expectedBottom = Math.min(viewportBottomBoundary, layout.footer.top - footerInset);
   const normalTop = Math.max(layout.viewport.top + topInset, anchor.top);
@@ -287,7 +288,10 @@ async function validatePortraitScroll(page, name) {
   for (const target of [40, 80, 120].filter((value) => value < chatDocumentTop - 12)) {
     const incremental = await scrollToAndCollect(page, target);
     validatePortraitAnchor(name, `scroll-${target}`, incremental, initial);
-    const expectedTop = Math.max(incremental.viewport.top, chatDocumentTop - incremental.scrollY);
+    const expectedTop = Math.max(
+      incremental.viewport.top + PORTRAIT_CHAT_INSET,
+      chatDocumentTop - incremental.scrollY
+    );
     check(
       Math.abs(incremental.chatMobilePortrait.top - expectedTop) <= 3,
       `${name}: scroll-${target} chat jumped instead of tracking the page`
@@ -301,14 +305,20 @@ async function validatePortraitScroll(page, name) {
 
   const pinned = await scrollToAndCollect(page, Math.ceil(chatDocumentTop + 32));
   validatePortraitAnchor(name, "pinned", pinned, initial);
-  check(pinned.chatMobilePortrait.top >= initial.viewport.top - 2, `${name}: pinned chat moved above the viewport`);
-  check(pinned.chatMobilePortrait.top <= initial.viewport.top + 2, `${name}: chat did not stop at the viewport top`);
+  check(
+    pinned.chatMobilePortrait.top >= initial.viewport.top + PORTRAIT_CHAT_INSET - 2,
+    `${name}: pinned chat moved above its top buffer`
+  );
+  check(
+    pinned.chatMobilePortrait.top <= initial.viewport.top + PORTRAIT_CHAT_INSET + 2,
+    `${name}: chat did not stop at its top buffer`
+  );
   check(pinned.mobileChatCoversTelemetry !== false, `${name}: stream details overlap the pinned chat`);
 
   const beyond = await scrollToAndCollect(page, Math.ceil(chatDocumentTop + 160));
   validatePortraitAnchor(name, "past-pin", beyond, initial);
   check(Math.abs(beyond.chatMobilePortrait.height - pinned.chatMobilePortrait.height) <= 3, `${name}: pinned chat height kept changing`);
-  if (beyond.chatMobilePortrait.bottom >= beyond.viewport.bottom - 3) {
+  if (beyond.chatMobilePortrait.bottom >= beyond.viewport.bottom - PORTRAIT_CHAT_INSET - 3) {
     check(Math.abs(beyond.chatMobilePortrait.top - pinned.chatMobilePortrait.top) <= 2, `${name}: chat top moved before the footer arrived`);
   } else {
     check(beyond.chatMobilePortrait.top < pinned.chatMobilePortrait.top - 3, `${name}: footer did not move the chat upward`);
@@ -399,7 +409,7 @@ async function validateAndroidPortraitViewportResize(page, name) {
   const compact = await collectLayout(page);
   check(!!compact.chatMobilePortrait && !!compact.composer, `${name}: chat disappeared after viewport resize`);
   check(
-    Math.abs(compact.chatMobilePortrait.bottom - compact.viewport.bottom) <= 3,
+    Math.abs(compact.chatMobilePortrait.bottom - (compact.viewport.bottom - PORTRAIT_CHAT_INSET)) <= 3,
     `${name}: Android viewport resize detached the chat bottom`
   );
   check(

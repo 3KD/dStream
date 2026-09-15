@@ -1,9 +1,47 @@
-import { SimplePool, type Filter } from "nostr-tools";
+import { SimplePool, verifiedSymbol, verifyEvent, type Event as NostrEvent, type Filter } from "nostr-tools";
 
 const RELAY_FAILURE_BASE_BACKOFF_MS = 30_000;
 const RELAY_FAILURE_MAX_BACKOFF_MS = 10 * 60_000;
 const RELAY_FAILURE_DEDUP_MS = 1_000;
 const RELAY_SUCCESS_RECONNECT_COOLDOWN_MS = 60_000;
+const EVENT_VERIFICATION_CACHE_MAX = 4_096;
+
+type EventVerifier = (event: NostrEvent) => boolean;
+
+export function createCachedEventVerifier(
+  baseVerify: EventVerifier = verifyEvent,
+  maxEntries = EVENT_VERIFICATION_CACHE_MAX
+): EventVerifier {
+  const cache = new Map<string, boolean>();
+  const capacity = Math.max(1, Math.trunc(maxEntries));
+
+  return (event) => {
+    const id = typeof event?.id === "string" ? event.id : "";
+    const signature = typeof event?.sig === "string" ? event.sig : "";
+    if (!/^[a-f0-9]{64}$/.test(id) || !/^[a-f0-9]{128}$/.test(signature)) {
+      return baseVerify(event);
+    }
+
+    const key = `${id}:${signature}`;
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      cache.delete(key);
+      cache.set(key, cached);
+      event[verifiedSymbol] = cached;
+      return cached;
+    }
+
+    const verified = baseVerify(event);
+    cache.set(key, verified);
+    if (cache.size > capacity) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
+    return verified;
+  };
+}
+
+const cachedVerifyEvent = createCachedEventVerifier();
 
 interface RelayHealth {
   failures: number;
@@ -86,6 +124,7 @@ function canConnectToRelay(url: string): boolean {
 export function getPool(): SimplePool {
   if (!nostrRuntime.pool) {
     nostrRuntime.pool = new SimplePool({
+      verifyEvent: cachedVerifyEvent,
       enableReconnect: false,
       onRelayConnectionFailure: recordRelayFailure,
       onRelayConnectionSuccess: recordRelaySuccess,

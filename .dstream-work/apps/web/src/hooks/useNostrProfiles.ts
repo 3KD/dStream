@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import type { Filter } from "nostr-tools";
 import { parseProfileEvent, type NostrProfileRecord } from "@/lib/profile";
 import { getNostrRelays } from "@/lib/config";
@@ -86,28 +86,53 @@ export function useNostrProfiles(pubkeysInput: string[]) {
       }
     ];
     const pubkeySet = new Set(pubkeys);
+    let cancelled = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const pending = new Map<string, NostrProfileRecord>();
+    const flush = () => {
+      if (cancelled || pending.size === 0) return;
+      const batch = Array.from(pending.values());
+      pending.clear();
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      startTransition(() => {
+        setProfilesByPubkey((current) => {
+          let next = current;
+          for (const parsed of batch) {
+            const existing = next[parsed.pubkey];
+            if (existing && existing.createdAt >= parsed.createdAt) continue;
+            if (next === current) next = { ...current };
+            next[parsed.pubkey] = {
+              ...parsed,
+              nip05Verified: parsed.profile.nip05 ? null : false
+            };
+          }
+          return next;
+        });
+      });
+    };
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(flush, 100);
+    };
 
     const sub = subscribeMany(relays, filters, {
       onevent: (event: any) => {
         const parsed = parseProfileEvent(event);
         if (!parsed) return;
         if (!pubkeySet.has(parsed.pubkey)) return;
-
-        setProfilesByPubkey((prev) => {
-          const current = prev[parsed.pubkey];
-          if (current && current.createdAt >= parsed.createdAt) return prev;
-          return {
-            ...prev,
-            [parsed.pubkey]: {
-              ...parsed,
-              nip05Verified: parsed.profile.nip05 ? null : false
-            }
-          };
-        });
-      }
+        const existing = pending.get(parsed.pubkey);
+        if (!existing || parsed.createdAt > existing.createdAt) pending.set(parsed.pubkey, parsed);
+        scheduleFlush();
+      },
+      oneose: flush
     });
 
     return () => {
+      cancelled = true;
+      if (flushTimer) clearTimeout(flushTimer);
       try {
         (sub as any).close?.();
       } catch {

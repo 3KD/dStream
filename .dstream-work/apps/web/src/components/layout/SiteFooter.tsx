@@ -46,7 +46,7 @@ export function SiteFooter() {
             </p>
             <div className="grid grid-cols-1 gap-1.5 mt-2">
               {protocolLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="block text-neutral-300 hover:text-white transition-colors">
+                <Link key={item.href} href={item.href} prefetch={false} className="block text-neutral-300 hover:text-white transition-colors">
                   {item.label}
                 </Link>
               ))}
@@ -60,7 +60,7 @@ export function SiteFooter() {
             </p>
             <div className="grid grid-cols-1 gap-1.5 mt-2">
               {buildLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="block text-neutral-300 hover:text-white transition-colors">
+                <Link key={item.href} href={item.href} prefetch={false} className="block text-neutral-300 hover:text-white transition-colors">
                   {item.label}
                 </Link>
               ))}
@@ -70,10 +70,10 @@ export function SiteFooter() {
           <div className="col-span-2 xl:col-span-2 space-y-3 text-sm">
             <p className="text-xs uppercase tracking-wider text-neutral-500">Support</p>
             <div className="flex flex-col gap-2">
-              <Link href="/support" className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-colors">
+              <Link href="/support" prefetch={false} className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-colors">
                 Support Hub
               </Link>
-              <Link href="/donate" className="inline-flex items-center gap-2 text-emerald-300 hover:text-emerald-200 transition-colors">
+              <Link href="/donate" prefetch={false} className="inline-flex items-center gap-2 text-emerald-300 hover:text-emerald-200 transition-colors">
                 <Heart className="w-4 h-4" />
                 Donate
               </Link>

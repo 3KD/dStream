@@ -7,10 +7,11 @@ import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
 
 interface UseGuildsOptions {
+  enabled?: boolean;
   limit?: number;
 }
 
-export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
+export function useGuilds({ enabled = true, limit = 50 }: UseGuildsOptions = {}) {
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const seen = useRef<Map<string, number>>(new Map());
@@ -21,6 +22,11 @@ export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
     setIsLoading(true);
     setGuilds([]);
     seen.current = new Map();
+
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
 
     const filter: Filter = {
       kinds: [NOSTR_KINDS.GUILD],
@@ -61,7 +67,7 @@ export function useGuilds({ limit = 50 }: UseGuildsOptions = {}) {
         // ignore
       }
     };
-  }, [relays, limit]);
+  }, [enabled, relays, limit]);
 
   return { guilds, isLoading };
 }
