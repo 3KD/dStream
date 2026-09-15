@@ -11,6 +11,7 @@ import {
   parseRotatingMasterPlaylist,
   resolveHlsPlaybackCompatibilityPolicy
 } from "@/lib/hls/rotatingMaster";
+import { buildProviderHlsRelayPath } from "@/lib/hls/providerRelay";
 import {
   readBackgroundPlayPreference,
   subscribeBackgroundPlayPreference,
@@ -1532,7 +1533,8 @@ export function Player({
     audioFallbackActivationRef.current = switchToDeclaredAudioFallback;
     audioFallbackRecoveryRef.current = reconnectDeclaredAudioFallback;
 
-    const startHls = (hlsSource: string, options: { skipNative?: boolean } = {}): boolean => {
+    const startHls = (sourceHlsUrl: string, options: { skipNative?: boolean } = {}): boolean => {
+      const hlsSource = buildProviderHlsRelayPath(sourceHlsUrl) ?? sourceHlsUrl;
       let mediaRecoveryAttempts = 0;
       let networkRecoveryAttempts = 0;
       let networkRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1676,7 +1678,7 @@ export function Player({
         liveSyncDurationSeconds
       });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
-      const rotatingMasterMode = isRotatingHlsProviderUrl(hlsSource);
+      const rotatingMasterMode = isRotatingHlsProviderUrl(sourceHlsUrl) || isRotatingHlsProviderUrl(normalizedSrc);
       const useMonotonicPlaylistGuard = !isFirefoxPlayback && !rotatingMasterMode;
       let correctedZapPlaylistTiming = false;
       let switchZapSourceToAudio: (reason: string) => boolean = () => false;
