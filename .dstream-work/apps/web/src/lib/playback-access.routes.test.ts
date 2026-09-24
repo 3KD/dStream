@@ -159,14 +159,14 @@ test("media routes: owner-only privacy blocks Incognito and authorizes owner HLS
       return new Response(null, { status: 204 });
     }
     if (url.endsWith(".m3u8")) {
-      return new Response("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nsegment0001.ts\n", {
+      return new Response("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nsegment0001.mp4\n", {
         status: 200,
         headers: { "content-type": "application/vnd.apple.mpegurl" }
       });
     }
     return new Response(new Uint8Array([0x47, 0x40, 0x00, 0x10]), {
       status: 200,
-      headers: { "content-type": "video/mp2t" }
+      headers: { "content-type": "video/mp4", "transfer-encoding": "chunked" }
     });
   }) as typeof fetch;
 
@@ -183,16 +183,18 @@ test("media routes: owner-only privacy blocks Incognito and authorizes owner HLS
       { params: Promise.resolve({ path: [originStreamId, "index.m3u8"] }) }
     );
     assert.equal(ownerManifest.status, 200);
-    assert.match(await ownerManifest.text(), /segment0001\.ts/);
+    assert.match(await ownerManifest.text(), /segment0001\.mp4/);
 
     const ownerSegment = await getHls(
-      new NextRequest(`http://dstream.test/api/hls/${originStreamId}/segment0001.ts`, {
+      new NextRequest(`http://dstream.test/api/hls/${originStreamId}/segment0001.mp4`, {
         headers: { cookie: playbackCookie(ownerPayload.token) }
       }),
-      { params: Promise.resolve({ path: [originStreamId, "segment0001.ts"] }) }
+      { params: Promise.resolve({ path: [originStreamId, "segment0001.mp4"] }) }
     );
     assert.equal(ownerSegment.status, 200);
-    assert.equal((await ownerSegment.arrayBuffer()).byteLength, 4);
+    assert.equal(ownerSegment.headers.get("content-length"), "4");
+    assert.equal(ownerSegment.headers.get("transfer-encoding"), null);
+    assert.deepEqual(new Uint8Array(await ownerSegment.arrayBuffer()), new Uint8Array([0x47, 0x40, 0x00, 0x10]));
 
     const anonymousWhep = await postWhep(
       new NextRequest(`http://dstream.test/api/whep/${originStreamId}/whep`, {
