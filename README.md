@@ -81,4 +81,4 @@ dStream is open-source and ownerless. Feel free to fork, contribute, or host you
 ---
 
 ### Join the Stream
-*Built for the creators of tomorrow.*
+*Built today for the creators of tomorrow.*
