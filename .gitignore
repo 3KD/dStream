@@ -26,6 +26,16 @@ Thumbs.db
 .env*
 !.env.example
 
+# Private keys and local development certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+**/certs/
+**/certificates/
+
 # Logs
 *.log
 npm-debug.log*
@@ -38,7 +48,6 @@ yarn-error.log*
 .claude/
 *.swp
 *.swo
-infra/stream/certs/
 
 # Generated test and debugging artifacts
 .playwright-cli/

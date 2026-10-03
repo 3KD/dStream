@@ -1,0 +1,12 @@
+# Retired CI-only session-secret fixtures. Current CI generates this value per run.
+edd1a0f26013b356af282bd09b0920db83358343:.dstream-work/.github/workflows/ci.yml:generic-api-key:43
+c2f5fa5b0ff51a462d9b53a7f2dd94322a2d805f:.github/workflows/ci.yml:generic-api-key:40
+53da8f03d08ce0b3fb4553490b21943d7f02fdde:_archive/dstream-work-20260301-200950/.github/workflows/ci.yml:generic-api-key:40
+
+# Retired manifest signing identity. Its public key does not match production.
+4d3f3cb9f060d56ed21d4a8ef25724f34d54a807:services/manifest/keys.json:generic-api-key:3
+
+# Localhost-only development TLS keys. Current keys are generated locally and ignored.
+14f2c47d4377ab7f43030ff61441349ddf716ee9:.dstream-work/apps/web/certificates/localhost-key.pem:private-key:1
+14f2c47d4377ab7f43030ff61441349ddf716ee9:.dstream-work/apps/web/certs/localhost-key.pem:private-key:1
+70b77c037f092de13d44db2598405b3c2b0c036e:infra/stream/certs/server.key:private-key:1

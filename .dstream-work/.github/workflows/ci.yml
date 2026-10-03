@@ -33,6 +33,16 @@ jobs:
       - name: Mobile Checks
         run: npm run check:mobile
 
+      - name: Generate ephemeral CI credentials
+        shell: bash
+        run: |
+          {
+            echo "DSTREAM_XMR_SESSION_SECRET=$(openssl rand -hex 32)"
+            echo "DSTREAM_PLAYBACK_ACCESS_SECRET=$(openssl rand -hex 32)"
+            echo "DSTREAM_XMR_WALLET_RPC_USER=ci"
+            echo "DSTREAM_XMR_WALLET_RPC_PASS=$(openssl rand -hex 32)"
+          } >> "$GITHUB_ENV"
+
       - name: Hardening Preflight
         env:
           NEXT_PUBLIC_NOSTR_RELAYS: wss://relay.damus.io,wss://nos.lol
@@ -40,7 +50,6 @@ jobs:
           DSTREAM_WHIP_PROXY_ORIGIN: http://localhost:8889
           DSTREAM_HLS_PROXY_ORIGIN: http://localhost:8888
           DSTREAM_XMR_WALLET_RPC_ORIGIN: http://localhost:18083
-          DSTREAM_XMR_SESSION_SECRET: ci-hardening-secret-0123456789abcdef
         run: npm run harden:check
 
       - name: Build
