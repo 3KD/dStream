@@ -2,6 +2,8 @@
 
 The mobile app lives at `apps/mobile` and follows ADR `0028`.
 
+**Current status:** source shell and release scaffolding only. The generated native projects are not tracked, and the repository does not by itself prove a signed or store-published mobile release.
+
 ## Model
 
 - iOS/Android app package is the client surface.
@@ -24,10 +26,12 @@ The mobile app lives at `apps/mobile` and follows ADR `0028`.
 - Device permission automation helpers:
   - `npm run test:mobile:permissions:ios`
   - `npm run test:mobile:permissions:android`
-- Signed build and store upload automation via Fastlane:
+- Fastlane configuration and upload commands are present for locally generated, signed native projects:
   - `npm run mobile:release:ios:testflight`
   - `npm run mobile:release:ios:appstore`
   - `npm run mobile:release:android:internal`
   - `npm run mobile:release:android:production`
 - Release verification checklist (`docs/MOBILE_RELEASE_CHECKLIST.md`).
 - Store deployment runbook (`docs/MOBILE_STORE_DEPLOY.md`).
+
+Before describing mobile broadcast or playback as released behavior, complete the real-device checklist on both platforms and record the resulting artifact/version evidence.

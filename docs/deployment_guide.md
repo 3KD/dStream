@@ -39,7 +39,7 @@ A successful command is not sufficient. Verify container health, public routes, 
 ```bash
 cd .dstream-work
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
-EXTERNAL_BASE_URL=https://your-domain npm run smoke:prod:runtime
+SSH_TARGET=user@your-host DSTREAM_DEPLOY_DOMAIN=your-domain npm run smoke:prod:runtime
 ```
 
 The complete, maintained procedure is [.dstream-work/docs/DEPLOYMENT.md](../.dstream-work/docs/DEPLOYMENT.md).

@@ -91,6 +91,7 @@ function validateFiles() {
 }
 
 function validateEnvForIos() {
+  requireFile("apps/mobile/ios/App/App.xcodeproj/project.pbxproj");
   requireEnv("IOS_APP_IDENTIFIER");
   requireEnv("APP_STORE_CONNECT_API_KEY_ID");
   requireEnv("APP_STORE_CONNECT_ISSUER_ID");
@@ -105,6 +106,9 @@ function validateEnvForIos() {
 }
 
 function validateEnvForAndroid() {
+  requireFile("apps/mobile/android/settings.gradle");
+  requireFile("apps/mobile/android/app/build.gradle");
+  requireFile("apps/mobile/android/gradlew");
   requireEnv("ANDROID_APPLICATION_ID");
   requireEnvFilePath("ANDROID_PLAY_JSON_KEY_PATH");
   requireEnvFilePath("ANDROID_KEYSTORE_PATH");
@@ -135,7 +139,11 @@ function main() {
     process.exit(1);
   }
 
-  console.log("mobile store release check: PASS");
+  console.log(
+    strict
+      ? "strict mobile store release check: PASS"
+      : "mobile store structure check: PASS (release readiness not evaluated)"
+  );
 }
 
 main();

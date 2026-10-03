@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-03
 
-This runbook closes the remaining production ops items:
+This runbook documents the production operations paths for:
 
 - SSH key auth (no password deploy dependency),
 - uptime + alert checks,

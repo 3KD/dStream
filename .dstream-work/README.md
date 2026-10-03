@@ -27,8 +27,8 @@ The optional transcoder profile requires a host sized for video encoding and is 
 
 - `apps/web`: Next.js UI and server API routes.
 - `packages/protocol`: canonical Nostr event builders, parsers, and tests.
-- `apps/mobile`: Capacitor shell for a user-selected dStream node.
-- `apps/desktop`: Electron shell.
+- `apps/mobile`: Capacitor shell source for a user-selected dStream node. Native projects are generated locally and no signed store artifact is claimed here.
+- `apps/desktop`: Electron shell source. `npm run build` packages only for the current host platform.
 - `services/manifest`: optional segment integrity service.
 - `services/transcoder`: optional rendition ladder.
 - `infra`: MediaMTX, Nostr relay, TURN, and deployment configuration.
@@ -72,12 +72,14 @@ npm run build
 
 Focused checks are available for streaming, payments, playback access, mobile shells, layouts, wallet interoperability, and production readiness. Run the smallest relevant set during development, then the full checks before release.
 
+The mobile shell checks validate committed web assets and configuration; they do not prove that a signed iOS or Android build has been generated, installed, or accepted by a store.
+
 Common production checks:
 
 ```bash
 npm run harden:deploy -- .env.production
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
-EXTERNAL_BASE_URL=https://your-domain npm run smoke:prod:runtime
+SSH_TARGET=user@your-host DSTREAM_DEPLOY_DOMAIN=your-domain npm run smoke:prod:runtime
 EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
 ```
 

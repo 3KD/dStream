@@ -88,7 +88,7 @@ Run from `.dstream-work` with a populated production file:
 ```bash
 npm run harden:deploy -- .env.production
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
-EXTERNAL_BASE_URL=https://your-domain npm run smoke:prod:runtime
+SSH_TARGET=user@your-host DSTREAM_DEPLOY_DOMAIN=your-domain npm run smoke:prod:runtime
 EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
 ```
 

@@ -1,14 +1,14 @@
 # Mobile Store Listing Copy (iOS + Android)
 
-Last updated: 2026-02-16
+Last updated: 2026-10-03
 
-Use these blocks directly for App Store Connect and Google Play listing forms.
+**Draft only:** Do not paste these blocks into App Store Connect or Google Play until the corresponding signed build has passed real-device acceptance and every capability below has been checked against that exact artifact.
 
 ## Brand positioning
 
 - Product name: `dStream`
-- Tagline: `World’s first decentralized streaming protocol.`
-- Core promise: `Non-custodial identity + streaming, user-owned nodes, relay-native discovery.`
+- Tagline: `Live streaming with portable Nostr identity.`
+- Core promise: `Portable identity, replaceable media infrastructure, and direct noncustodial payments.`
 
 ## App Store Connect (iOS)
 
@@ -22,7 +22,7 @@ Use these blocks directly for App Store Connect and Google Play listing forms.
 
 ### Promotional Text (≤ 170 chars)
 
-`Broadcast and watch live streams over a decentralized stack with non-custodial identity, relay-native discovery, and creator-first monetization rails.`
+`Watch and interact with live streams using portable Nostr identity, relay-based discovery, and direct noncustodial payment options.`
 
 ### Keywords (≤ 100 chars)
 
@@ -35,7 +35,7 @@ Use these blocks directly for App Store Connect and Google Play listing forms.
 Unlike traditional platforms, dStream does not require a single central host for identity and discovery. Stream metadata and social coordination are relay-native, and media delivery supports low-latency and fallback playback paths.
 
 What you can do:
-- Go live with camera and microphone from mobile.
+- Connect to a user-selected dStream node and relay set.
 - Watch live streams and jump into chat in real time.
 - Manage your profile, follows, inbox, and guild/community presence.
 - Use non-custodial wallet flows for supported payment rails.
@@ -67,7 +67,7 @@ Non-custodial by design:
 dStream uses relay-native identity/discovery and a replaceable media stack, so operators can run independently without mandatory central hosting.
 
 Core capabilities:
-- Start live broadcasts from mobile camera + microphone.
+- Connect to a user-selected dStream node and relay set.
 - Watch live streams with resilient playback modes.
 - Participate in real-time chat and social discovery.
 - Manage identity, profile, follows, inbox, and communities.
@@ -94,3 +94,5 @@ Important:
 ## Review notes (paste in both stores)
 
 `dStream is a decentralized/non-custodial streaming client. In-app reporting, mute/block controls, and moderation tooling are included. Policy pages are linked in-app and publicly accessible.`
+
+Before submission, add mobile broadcasting to the listing only if camera/microphone permission, preview, publish, backgrounding, and watch-back behavior have passed on the exact iOS and Android artifacts being submitted.

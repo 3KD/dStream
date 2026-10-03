@@ -1,8 +1,10 @@
 # Mobile Store Submission Sheet
 
-Last updated: 2026-02-16
+Last updated: 2026-10-03
 
 Use this as the release operator worksheet before pressing submit on iOS and Android.
+
+**Not submission-ready by itself:** Resolve every account, legal entity, privacy/data-safety, signing, package, and artifact field from the authoritative store account and signed build. This file contains proposed display values, not proof of ownership or approval.
 
 ## 1) Identity and package fields
 
@@ -94,6 +96,8 @@ Record:
   - use text block from `docs/MOBILE_STORE_LISTING_COPY.md`
 
 ## 8) Upload commands
+
+Running these commands transmits a signed artifact to an external store account. Verify the destination app record, bundle/application ID, account owner, release track, and artifact version immediately before execution.
 
 ### iOS
 

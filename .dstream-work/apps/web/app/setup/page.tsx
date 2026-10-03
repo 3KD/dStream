@@ -139,7 +139,7 @@ export default function SetupWizard() {
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none font-mono text-sm h-32 resize-none break-all"
                     />
                     <p className="text-xs text-neutral-500 mt-2">
-                      Leave blank if you do not want to configure De-Fi escrow and tipping features right now.
+                      Leave blank if this node will not publish a Monero payout destination.
                     </p>
                   </div>
                 </div>

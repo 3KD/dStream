@@ -11,7 +11,7 @@ BUILD_DIR = File.join(ROOT_DIR, "build")
 default_platform(:ios)
 
 def ensure_path_exists!(path, label)
-  UI.user_error!("Missing #{label}: #{path}. Run `npm --workspace mobile run sync` first.") unless File.exist?(path)
+  UI.user_error!("Missing #{label}: #{path}. Generate the native project with `npx cap add <platform>`, then run `npm --workspace mobile run sync`.") unless File.exist?(path)
 end
 
 def ensure_build_dir!

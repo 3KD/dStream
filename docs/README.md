@@ -19,8 +19,8 @@ The canonical deployed source is `.dstream-work`. The repository root also conta
 - [Operations runbook](../.dstream-work/docs/OPS_RUNBOOK.md)
 - [Production finalization](../.dstream-work/docs/PRODUCTION_FINALIZATION.md)
 - [Wallet certification](../.dstream-work/docs/WALLET_CERTIFICATION.md)
-- [Mobile app](../.dstream-work/docs/MOBILE_APP.md)
-- [Mobile release checklist](../.dstream-work/docs/MOBILE_RELEASE_CHECKLIST.md)
+- [Mobile shell status](../.dstream-work/docs/MOBILE_APP.md)
+- [Mobile release preparation](../.dstream-work/docs/MOBILE_RELEASE_CHECKLIST.md) (not evidence of a signed or store-approved artifact)
 
 ## Protocol Decisions
 

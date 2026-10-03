@@ -270,7 +270,7 @@ export function OperatorConsole({ mode = "all", chrome = "page" }: OperatorConso
     mode === "operations"
       ? "Stream state, announce status, chat, presence, and relay configuration."
       : mode === "monetization"
-        ? "Stakes, escrow v3 multisig workflows, and verified tip receipts."
+        ? "Wallet integrations, verified receipts, and experimental XMR operator tooling."
         : "Live stream state, announce status, presence, chat, and monetization controls.";
   const renderContent = () =>
     !identity ? (

@@ -1,10 +1,12 @@
 # App Store / Play UGC Compliance Matrix
 
-Last updated: 2026-02-16
+Last updated: 2026-10-03
 
 Purpose: map Apple + Google user-generated-content (UGC) moderation requirements to the current dStream implementation, with concrete close-out actions before store submission.
 
 This is product/engineering guidance, not legal advice.
+
+**Status boundary:** Source inspection shows the listed web moderation paths, but the mobile artifact and real-device reviewer journey have not been verified by this repository audit. Treat every item below as source-implemented, device-verified, or externally verified; do not collapse those states into a single check mark.
 
 ## Policy baseline (submission risk)
 
@@ -13,7 +15,7 @@ This is product/engineering guidance, not legal advice.
 
 ## Current implementation map
 
-### Implemented now (low risk)
+### Implemented in source
 
 1. **User blocking + muting (local controls)**
    - Status: ✅ Implemented
@@ -47,7 +49,7 @@ This is product/engineering guidance, not legal advice.
      - `packages/protocol/src/stream.ts` (`discoverable` announce tag)
      - `apps/web/src/hooks/useStreamAnnounces.ts` (hidden-from-discovery filtering on home/browse)
 
-### Remaining / partial (submission blockers)
+### Source present, external acceptance still required
 
 1. **In-app abuse reporting (stream/message/user)**
    - Status: ✅ Implemented

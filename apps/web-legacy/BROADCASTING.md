@@ -1,5 +1,7 @@
 # dStream Broadcasting Guide: Running a Sovereign Node
 
+> **Legacy document:** This file describes the archived pre-rebuild application. It is not the current broadcast or media architecture. See `../../ARCHITECTURE.md` and `../../PROTOCOL.md`.
+
 dStream is a decentralized broadcasting platform. Unlike Twitch or YouTube, there is no central server. **You are the broadcaster.** Your computer (or server) is the station.
 
 ## Architecture: "The Phonebook vs. The Call"

@@ -4,31 +4,31 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   ShieldCheck, Unlock, Users, EyeOff, Network,
   Globe, PenTool, Megaphone, Music, Camera,
-  Gamepad, Flag, type LucideIcon
+  Gamepad, type LucideIcon
 } from "lucide-react";
 
 export const WORDS = [
   "Decentralized",
   "Independent",
   "P2P",
-  "Zero Censorship",
-  "No Middle-Man",
-  "Private",
+  "Open Speech",
+  "Direct Pay",
+  "Privacy",
   "Global",
   "Influencer",
   "Gamer",
   "Music",
   "Journalism",
   "Activism",
-  "Unstoppable"
+  "Self-Hosted"
 ];
 
 const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: string }> = {
   Decentralized: { img: "/logo_trimmed.png", color: "text-purple-400" },
-  Unstoppable: { icon: ShieldCheck, color: "text-green-400" },
-  "Zero Censorship": { icon: Unlock, color: "text-yellow-400" },
-  "No Middle-Man": { icon: Users, color: "text-blue-400" },
-  Private: { icon: EyeOff, color: "text-red-400" },
+  "Self-Hosted": { icon: ShieldCheck, color: "text-green-400" },
+  "Open Speech": { icon: Unlock, color: "text-yellow-400" },
+  "Direct Pay": { icon: Users, color: "text-blue-400" },
+  Privacy: { icon: EyeOff, color: "text-red-400" },
   P2P: { icon: Network, color: "text-cyan-400" },
   Global: { icon: Globe, color: "text-emerald-400" },
   Journalism: { icon: PenTool, color: "text-orange-400" },
@@ -41,10 +41,10 @@ const WORD_ICONS: Record<string, { icon?: LucideIcon; img?: string; color: strin
 
 export const WORD_COLORS_HEX: Record<string, string> = {
   Decentralized: "#ffffff",
-  Unstoppable: "#4ade80",
-  "Zero Censorship": "#facc15",
-  "No Middle-Man": "#60a5fa",
-  Private: "#f87171",
+  "Self-Hosted": "#4ade80",
+  "Open Speech": "#facc15",
+  "Direct Pay": "#60a5fa",
+  Privacy: "#f87171",
   P2P: "#22d3ee",
   Global: "#34d399",
   Journalism: "#fb923c",
@@ -173,7 +173,7 @@ export function RotatingCube({ onWordChange }: RotatingCubeProps) {
       <span
         className="machined-text opacity-0 invisible pointer-events-none select-none grid"
         aria-hidden="true"
-        style={{ gridTemplateAreas: '"stack"' }}
+        style={{ display: "grid", gridTemplateAreas: '"stack"' }}
       >
         {WORDS.map((word) => {
           const cfg = WORD_ICONS[word] || {};

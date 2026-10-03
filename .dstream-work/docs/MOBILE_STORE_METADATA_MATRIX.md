@@ -1,8 +1,10 @@
 # Mobile Store Metadata Matrix (iOS + Android)
 
-Last updated: 2026-02-16
+Last updated: 2026-10-03
 
 Purpose: keep App Store Connect and Google Play metadata aligned with shipped behavior.
+
+**Submission worksheet, not authoritative answers:** Data collection/sharing declarations are legal and platform-facing representations. Rebuild them against the exact signed artifact, privacy policy, server logs, SDK inventory, relay traffic, and payment flows before submission. The examples below are prompts, not pre-approved values.
 
 ## 1) Content rating targets
 
@@ -11,9 +13,9 @@ Use conservative defaults unless your moderation policy requires stricter catego
 - iOS age rating: `17+` (recommended for open UGC live chat/video)
 - Google Play content rating: complete IARC questionnaire as UGC/social app
 
-## 2) iOS App Privacy (recommended baseline)
+## 2) iOS App Privacy evidence review
 
-Mark as collected only when the app actually transmits/stores it beyond device-local use.
+For each category, record whether the exact artifact transmits data to the selected node, Nostr relays, payment providers, or analytics/crash services. Do not equate noncustodial operation with no data collection.
 
 - Contact info: `No` (unless support/account email collection is added)
 - Financial info: `No custodial payment data`
@@ -28,12 +30,12 @@ Tracking:
 
 - `No` (do not enable tracking declaration unless ad/tracking SDKs are added)
 
-## 3) Google Play Data Safety (recommended baseline)
+## 3) Google Play Data Safety evidence review
 
-- Data shared: `No` (unless third-party sharing added)
-- Data collected: `Yes` for user-provided protocol content/identifiers used for core functionality
-- Data encrypted in transit: `Yes`
-- Data deletion request path: provide support URL/process if required by policy scope
+- Determine whether relay publication, node processing, wallet-provider handoff, and any bundled SDK count as collection or sharing under the current Play definitions.
+- Verify transport encryption for every production endpoint before answering the encryption question.
+- Verify the actual deletion/request process and its limits for relay-published data.
+- Preserve the evidence and date used for every answer.
 
 ## 4) Reviewer-facing moderation statement
 

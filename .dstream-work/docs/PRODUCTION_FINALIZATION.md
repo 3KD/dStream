@@ -1,82 +1,77 @@
-# Production Finalization Checklist
+# Production Release Acceptance
 
-This is the close-out checklist for calling dStream production complete.
+Last reconciled: 2026-10-03
 
-## 1) Secrets and endpoints (must be real)
+This checklist defines evidence required for a web production release. It does not declare mobile store readiness or prove every third-party relay, source stream, wallet, or network will remain available.
 
-- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` contains public STUN URLs only.
-- `DSTREAM_TURN_URLS` points at real TURN infrastructure and `TURN_SHARED_SECRET` is high entropy.
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`, `TURN_USERNAME`, and `TURN_PASSWORD` are absent; permanent TURN credentials must never be bundled into browser JavaScript.
-- `DSTREAM_XMR_WALLET_RPC_ORIGIN` points to a real wallet RPC service (not `xmr-mock`).
-- `DSTREAM_XMR_WALLET_RPC_USER` and `DSTREAM_XMR_WALLET_RPC_PASS` are set and match wallet-rpc.
-- `DSTREAM_XMR_DAEMON_ADDRESS` points at a reachable Monero daemon, and `DSTREAM_XMR_DAEMON_SSL` matches that endpoint.
-- If the node reuses an existing persisted wallet volume, `DSTREAM_XMR_WALLET_FILE_PASS` matches that wallet file.
-- `DSTREAM_XMR_SESSION_SECRET` is replaced with a high-entropy secret (not placeholder text).
-- Refund policy constants are explicitly set and production-safe:
-  - `DSTREAM_XMR_REFUND_MIN_SERVED_BYTES > 0`
-  - `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES > DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`
-  - `DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC` are tuned for your policy.
-- Relay list includes at least two reliable `wss://` relays.
+## Source and Documentation
 
-Run:
+- [ ] The release commit is pushed to the intended GitHub branch.
+- [ ] `README.md`, `FEATURES.md`, `PROTOCOL.md`, `CONFIG.md`, and `ARCHITECTURE.md` match the release behavior.
+- [ ] Historical planning documents are clearly labeled and do not override the public source of truth.
+- [ ] `Canonical Runtime CI` passes for the release commit.
+- [ ] `Secret Scan` passes for the release commit.
+
+## Local Gates
+
+From `.dstream-work`:
 
 ```bash
-cd /path/to/dStream/.dstream-work
+npm run typecheck
+npm test
+npm run lint
+npm run check:mobile
+npm run build
 ENV_FILE=.env.production npm run harden:deploy
 ```
 
-## 2) Deploy and runtime verification
+Record warnings separately. A successful exit code does not convert warnings or skipped external dependencies into verified behavior.
 
-Deploy:
+## Deploy and Runtime Gates
 
 ```bash
 cd /path/to/dStream
-DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh root@your-host
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh user@your-host
 ```
 
-If you run deploys from inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a wrapper around the repo-root script and pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace automatically.
-
-Verify (single gate command):
+Then run:
 
 ```bash
 cd /path/to/dStream/.dstream-work
-EXTERNAL_BASE_URL=https://dstream.stream SSH_TARGET=root@your-host npm run gate:prod -- .env.production
+EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
 ```
 
-## 3) Live media acceptance (manual)
+Record the deployed commit, container status, route results, and payment capability response.
 
-Use two devices/networks:
+## Live Media Acceptance
 
-1. Start broadcast from device A.
-2. Open watch page from device B (different network if possible).
-3. Validate:
-   - video starts and stays stable,
-   - no repeated WHEP timeout loops,
-   - chat send/receive works,
-   - stream appears on browse/home cards with preview updates.
+Use a real source and two clients, preferably on different networks:
 
-## 4) Operational hardening
+1. Start browser or OBS ingest and record the time until media detection.
+2. Confirm the signed kind `30311` announcement reaches multiple relays.
+3. Load a fresh Browse page and confirm the stream appears under Live Now.
+4. Open the direct watch route and record startup time and selected transport.
+5. Watch long enough to detect startup stalls, repeated fallback, segment loops, or live-edge drift.
+6. Test chat send/receive and background/lock behavior on the relevant mobile device when that behavior changed.
+7. End the stream and confirm discovery transitions to ended/offline without relying on a stale snapshot.
 
-Runbook: `docs/OPS_RUNBOOK.md`
+Automated tests and synthetic media do not replace this pass when playback behavior changed.
 
-Required:
+## Payments
 
-```bash
-cd /path/to/dStream/.dstream-work
-SSH_TARGET=root@your-host npm run ops:ssh:key
-SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
-SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
-SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:backup
-```
+- [ ] `/api/payments/capabilities` reports only deliberately exposed assets.
+- [ ] `/api/payments/health` reports ready for every required public capability.
+- [ ] XMR, BTC Lightning, and BTC on-chain settlement are tested with the production verifier path when any related code or configuration changed.
+- [ ] No wallet seed, private key, RPC password, provider key, or session secret appears in browser assets or Git history.
 
-## 5) Mobile release close-out
+## Operations
 
-Run and archive evidence from:
+- [ ] Key-based SSH access is verified.
+- [ ] Health checks and alert delivery are verified.
+- [ ] A current backup completes and names the captured persistent volumes.
+- [ ] Restore procedure and responsible operator are documented.
+- [ ] Disk headroom and container restart state are reviewed after deploy.
 
-```bash
-cd /path/to/dStream/.dstream-work
-npm run check:mobile
-npm run test:mobile:permissions
-```
+## Mobile Boundary
 
-Then complete `docs/MOBILE_RELEASE_CHECKLIST.md`.
+Mobile source-shell checks are part of repository CI, but mobile release acceptance is separate. Do not claim a signed or store-ready mobile release until generated native projects, signing, real-device tests, uploads, and store state are verified using [`MOBILE_RELEASE_CHECKLIST.md`](MOBILE_RELEASE_CHECKLIST.md).

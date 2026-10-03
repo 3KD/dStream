@@ -1,5 +1,7 @@
 # Access Entitlements Contract (Schema + API)
 
+> **Engineering contract:** This document describes implemented and planned access-control internals, including experimental paths. It is not a public feature matrix. See `../../FEATURES.md` for launch status.
+
 ## Goal
 
 Create one canonical backend model for **who can do what** across:

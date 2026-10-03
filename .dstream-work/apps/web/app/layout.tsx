@@ -8,7 +8,7 @@ const FAVICON_URL = "/logo_favicon_aligned.png?v=3";
 
 export const metadata: Metadata = {
   title: "dStream",
-  description: "World's first decentralized streaming protocol. Built for people of the modern de-fi economy.",
+  description: "Live streaming with portable Nostr identity, peer-assisted delivery, and direct noncustodial payments.",
   icons: {
     icon: FAVICON_URL
   }

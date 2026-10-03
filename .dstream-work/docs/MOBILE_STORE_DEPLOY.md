@@ -4,6 +4,8 @@ Last updated: 2026-10-03
 
 This runbook covers signed release builds and store upload for the Capacitor mobile app at `apps/mobile`.
 
+**Current repository status:** release scaffolding only. Generated `apps/mobile/ios` and `apps/mobile/android` projects are not tracked. No signed build, upload, review submission, or store approval is established by this document.
+
 Listing and submission docs:
 
 - `docs/MOBILE_STORE_LISTING_COPY.md`
@@ -24,7 +26,14 @@ Listing and submission docs:
 ```bash
 cd /path/to/dStream/.dstream-work
 npm run mobile:release:setup
+cd apps/mobile
+npx cap add ios
+npx cap add android
+cd ../..
+npm --workspace mobile run sync
 ```
+
+Generate only platforms supported by the current development host. `mobile:release:setup` installs the Ruby/Fastlane dependencies; it does not create native projects.
 
 Prepare release env file:
 
@@ -56,6 +65,8 @@ Strict secret/env check (Android):
 cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=android MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs
 ```
+
+Strict validation also requires the selected generated native project. A non-strict structure check is not release evidence.
 
 ## 4) Optional permission smoke (device/simulator)
 
@@ -118,3 +129,4 @@ The pipeline writes artifacts under:
 - iOS release lanes are in `apps/mobile/fastlane/Fastfile` (`ios testflight`, `ios appstore`).
 - Android release lanes are in `apps/mobile/fastlane/Fastfile` (`android internal`, `android production`).
 - Keep `apps/mobile/release.env` untracked; only commit `apps/mobile/release.env.example`.
+- Stop before any upload command unless the intended bundle/application record, signing owner, destination track, and current metadata have been verified in the authoritative store account.

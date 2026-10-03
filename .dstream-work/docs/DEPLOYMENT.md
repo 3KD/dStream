@@ -2,361 +2,129 @@
 
 Last reconciled: 2026-10-03
 
-dStream is designed as a decentralized *control plane* (Nostr) with a replaceable *media plane* (origin seed + optional peer assist).
+This guide covers the canonical `.dstream-work` runtime. It does not describe the legacy root application.
 
-## Mental model
+## Runtime Model
 
-- **Identity / discovery / chat / presence / signaling:** Nostr events published to relays.
-- **Media ingest (broadcast):** WHIP/WebRTC → an origin/seed (MediaMTX in dev).
-- **Media playback (watch):** WHEP/WebRTC (preferred when available) → the origin/seed, with HLS fallback and default-on P2P assist for HLS.
-- **No central registry:** “Live streams” are discovered by subscribing to announce events (kind `30311`) on configured relays.
-- **Directory previews (home/browse):** cards periodically sample current frames from proxied HLS paths; if sampling fails, clients fall back to announced `image` metadata.
+- Nostr relays carry identity, discovery, chat, presence, moderation, guild, report, and peer-signaling events.
+- MediaMTX provides the replaceable ingest/origin seed: browser WHIP or encoder RTMP/WHIP in, WHEP and HLS out.
+- Optional browser peer assist exchanges requested HLS bytes after peers connect. The origin remains the bootstrap and fallback path.
+- Payment destinations remain creator controlled. Server-side verifiers confirm settlement only for configured rails.
 
-The *canonical* stream identity is `(pubkeyHex, streamId)`. The user-facing route uses `npub…` for safety.
+## Requirements
 
-P2P default behavior:
+- Node.js 22 and npm for local validation.
+- Docker Engine with the Compose plugin on the deployment host.
+- SSH and rsync access to the deployment host.
+- A populated, untracked `.env.production` based on `.env.production.example`.
+- DNS and TLS routing for the public domain.
 
-- Watchers attempt relay-signaled P2P assist by default.
-- If a user has no connected Nostr identity, watch creates an in-memory ephemeral signal identity for P2P-only participation.
-- Stake-gated streams still require a real connected identity + confirmed stake before P2P assist is enabled.
+Read [`../../CONFIG.md`](../../CONFIG.md) before supplying values. Never put wallet seeds, private keys, RPC passwords, provider API keys, session secrets, or permanent TURN credentials in a `NEXT_PUBLIC_*` variable.
 
-## Environment variables
+## Local Stack
 
-See `.env.example`. Quick reference:
-
-**Client/public**
-- `NEXT_PUBLIC_NOSTR_RELAYS`: relay list (CSV or JSON array).
-- `NEXT_PUBLIC_DISCOVERY_OPERATOR_PUBKEYS`: optional 64-hex pubkey allowlist for operator-level hide/restore controls on official discovery surfaces.
-- `NEXT_PUBLIC_HLS_ORIGIN`: base URL for the announce “streaming hint”.
-- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS`: public STUN URLs only (CSV or JSON array). Never place credentials in a `NEXT_PUBLIC_*` variable.
-- `NEXT_PUBLIC_NIP05_POLICY`: `off|badge|require` policy for NIP-05 UI enforcement.
-- `NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`: optional platform support donation address shown on `/donate`.
-- `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`: optional platform BTC address shown on `/donate` and footer support chips.
-- `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`: optional Lightning destination (`bolt11`, `lnurl`, or `name@domain`) shown on `/donate`.
-- `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`: optional platform ETH address shown on `/donate` and footer support chips.
-- `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`: optional platform TRX address shown on `/donate` and footer support chips.
-- `NEXT_PUBLIC_SUPPORT_SOL_ADDRESS`: optional SOL address also used for SPL USDC/USDT donation links.
-- `NEXT_PUBLIC_SUPPORT_XRP_ADDRESS`: optional XRP Ledger donation address.
-- `NEXT_PUBLIC_SUPPORT_DOGE_ADDRESS`: optional Dogecoin donation address.
-- `NEXT_PUBLIC_SUPPORT_BCH_ADDRESS`: optional Bitcoin Cash donation address.
-- `NEXT_PUBLIC_SUPPORT_ADA_ADDRESS`: optional Cardano donation address.
-- `NEXT_PUBLIC_RTMP_INGEST_ORIGIN`: public RTMP server shown in Broadcast Studio for OBS and other encoders. Point it directly at the MediaMTX origin with a DNS-only hostname or origin IP; CDN-proxied hostnames generally do not forward RTMP.
-
-**TURN (bundled compose service)**
-- `DSTREAM_TURN_URLS`: server-side TURN URLs returned with short-lived credentials.
-- `DSTREAM_TURN_CREDENTIAL_TTL_SEC`: issued credential lifetime (default `600`, allowed `60..86400`).
-- `TURN_REALM`: TURN realm (default `dstream.stream`).
-- `TURN_SHARED_SECRET`: high-entropy server-only secret shared by coturn and the web credential endpoint.
-- `TURN_EXTERNAL_IP`: public server IP advertised by coturn.
-- `TURN_PORT`: TURN listening port (default `3478`).
-- `TURN_MIN_PORT` / `TURN_MAX_PORT`: relay allocation port range.
-- `TURN_USER_QUOTA` / `TURN_TOTAL_QUOTA`: coturn allocation limits.
-
-**Server-only (web reverse proxy)**
-- `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
-- `DSTREAM_WHEP_PROXY_ORIGIN`: where `/api/whep/*` proxies to (defaults to `DSTREAM_WHIP_PROXY_ORIGIN`).
-- `DSTREAM_HLS_PROXY_ORIGIN`: where `/api/hls/*` proxies to.
-- `DSTREAM_PLAYBACK_ACCESS_SECRET`: stable high-entropy secret used to sign private playback tokens; required in production.
-- `DSTREAM_PLAYBACK_POLICY_STORE_PATH`: durable signed-announcement policy store (default `/var/lib/dstream/playback-policies.json`).
-- `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`: comma-separated `asset:rail` keys that make `/api/payments/health` fail until every listed verifier is configured. The dstream.stream public scope requires `btc:lightning,btc:utxo,xmr:xmr`; backend-only rails are exercised separately by the real-chain smoke.
-- `scripts/ops-disk-cleanup.sh`: threshold-triggered cleanup for deploy/build artifacts, old journals, stopped containers, dangling images, and inactive Docker build cache. It never prunes Docker volumes or `/var/lib/dstream` settlement state.
-
-**Server-only (Monero verified tips)**
-- `DSTREAM_XMR_WALLET_RPC_ORIGIN`: Monero wallet RPC origin (expects `POST <origin>/json_rpc`).
-- `DSTREAM_XMR_WALLET_RPC_USER` / `DSTREAM_XMR_WALLET_RPC_PASS`: Basic auth (required in hardened production when wallet RPC is enabled).
-- `DSTREAM_XMR_DAEMON_ADDRESS`: remote Monero daemon used by the bundled `xmr-wallet-rpc` service.
-- `DSTREAM_XMR_DAEMON_SSL`: wallet-rpc daemon SSL mode (`enabled|disabled|autodetect`).
-- If you set `DSTREAM_XMR_DAEMON_SSL=enabled`, Monero wallet-rpc also requires a trusted certificate path/fingerprint (`--daemon-ssl-ca-certificates`, `--daemon-ssl-allowed-fingerprints`) or an onion/I2P endpoint. Plain public nodes on port `18081` generally need `disabled`.
-- The bundled `xmr-wallet-rpc` service starts with `--no-initial-sync` so the RPC port comes up immediately even when the wallet still needs to catch up against a remote daemon.
-- `DSTREAM_XMR_ACCOUNT_INDEX`: account index used for allocating subaddresses (default `0`).
-- `DSTREAM_XMR_CONFIRMATIONS_REQUIRED`: confirmations required for “confirmed” tips (default `10`).
-- `DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`: minimum served-bytes receipts required for stake refunds (default `0`).
-- `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES`: served-bytes target for 100% credit score (`creditPercentBps=10000`) in refund responses (default = `DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`).
-- `DSTREAM_XMR_REFUND_MAX_RECEIPTS`: max receipt events accepted per refund request (default `32`).
-- `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`: max receipt age window for refund eligibility (default `900`).
-- `DSTREAM_XMR_REFUND_MAX_SERVED_BYTES_PER_RECEIPT`: anti-abuse cap for a single receipt payload (default `536870912`).
-- `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`: minimum stake-session age before refund can settle (default `30`).
-- `DSTREAM_XMR_STAKE_SLASH_MIN_AGE_SEC`: minimum age since latest stake transfer before slash is allowed (default `3600`).
-- `DSTREAM_XMR_TIP_SESSION_TTL_SEC`: max age for tip session tokens in seconds (default `86400`).
-- `DSTREAM_XMR_STAKE_SESSION_TTL_SEC`: max age for no-funds stake sessions in seconds (default `3600`).
-- `DSTREAM_XMR_SESSION_SECRET`: HMAC secret for tip/stake session tokens (**required in production**).
-- `DSTREAM_XMR_ESCROW_SESSION_TTL_SEC`: escrow-v3 multisig session TTL in seconds (default `3600`).
-- `DSTREAM_XMR_WALLET_FILE_PASS`: wallet-file password used by real-wallet init flow.
-- In the base single-wallet production stack, `DSTREAM_XMR_WALLET_FILE_PASS` is also used to open an existing `/wallet/node_wallet` when its password differs from `DSTREAM_XMR_WALLET_RPC_PASS`.
-- `DSTREAM_XMR_RECEIVER_WALLET_NAME` / `DSTREAM_XMR_SENDER_WALLET_NAME`: wallet filenames for real-wallet stack bootstrap.
-- `DSTREAM_XMR_INIT_TIMEOUT_SECS`: wallet init wait timeout for `xmr-wallet-init` in real-wallet stack (default `300`).
-- `DSTREAM_XMR_INIT_WALLET_RETRY_SECS`: wallet open/create retry window after RPC becomes reachable (default `120`).
-
-**Server-only (multi-rail settlement)**
-- `DSTREAM_BTC_*`, `DSTREAM_DOGE_*`, `DSTREAM_BCH_*`: UTXO node origins, optional Basic auth, network, and confirmation thresholds. Arbitrary transaction lookup generally requires transaction indexing.
-- `DSTREAM_ETH_RPC_ORIGIN`, `DSTREAM_ETH_CHAIN_ID`, `DSTREAM_ETH_CONFIRMATIONS_REQUIRED`: Ethereum RPC used for ETH and allowlisted mainnet USDT/USDC/PEPE verification.
-- `DSTREAM_EVM_NETWORKS_JSON`: optional additional EVM networks with explicit RPC, chain id, aliases, confirmations, and token contract/decimal allowlists.
-- `DSTREAM_TRON_RPC_ORIGIN`, `DSTREAM_TRON_API_KEY`, `DSTREAM_TRON_CONFIRMATIONS_REQUIRED`, `DSTREAM_TRON_USDT_CONTRACT`: TRX/TRC-20 verification.
-- `DSTREAM_SOLANA_*`: Solana RPC, network, finality threshold, and SPL USDC/USDT mint/decimal allowlists.
-- `DSTREAM_XRPL_RPC_ORIGIN`, `DSTREAM_XRPL_NETWORK`: XRP Ledger JSON-RPC.
-- `DSTREAM_CARDANO_API_ORIGIN`, `DSTREAM_CARDANO_API_KIND`, `DSTREAM_CARDANO_API_KEY`, `DSTREAM_CARDANO_NETWORK`, `DSTREAM_CARDANO_CONFIRMATIONS_REQUIRED`: Cardano chain index. Set the API kind to `blockfrost` (optionally with a project key) or `koios`.
-- `npm run smoke:payments:extended:real`: verifies confirmed DOGE, BCH, EVM, TRON, Solana, XRP, and ADA transactions through the same adapters used by payment intents. It is a live-network smoke and requires every extended rail endpoint above.
-- `DSTREAM_PAYMENT_INTENT_STORE_PATH`, `DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH`: durable intent and replay stores. Keep both on persistent storage.
-- `DSTREAM_PAYMENT_RPC_TIMEOUT_MS`: outbound verifier timeout.
-
-An unset provider remains inactive and fails closed. Check the effective status at `GET /api/payments/capabilities` or Settings > Monetization > Wallet Integrations.
-
-**Server-only (origin ladder transcoder, opt-in)**
-- The transcoder is disabled by default. Set `COMPOSE_PROFILES=transcoding` only on a host with enough CPU for the configured software encodes.
-- `TRANSCODER_SOURCE_HLS_BASE`: source HLS base for reading live origin playlists (default `http://mediamtx:8880`).
-- `TRANSCODER_OUTPUT_RTMP_BASE`: RTMP publish base for derived renditions (default `rtmp://mediamtx:1935`).
-- `TRANSCODER_PROFILES`: comma-separated profile spec `id:width:height:videoBitrate:audioBitrate`.
-- `TRANSCODER_POLL_MS`: source scan interval (default `2500`).
-- `TRANSCODER_STALE_MS`: source inactivity cutoff before stopping transcodes (default `12000`).
-- `TRANSCODER_MAX_STREAMS`: max concurrent source streams transcoded (default `24`).
-
-In development, the defaults match `infra/stream`:
-- WHIP proxy → `http://localhost:8889`
-- WHEP proxy → `http://localhost:8889`
-- HLS proxy → `http://localhost:8888` (host port mapped to MediaMTX `:8880`)
-
-## Deployment patterns
-
-### Pattern A — Single host (simplest)
-
-Run the web app and an origin (MediaMTX or equivalent) on the same host/network.
-
-- Keep `DSTREAM_*_PROXY_ORIGIN` pointing at the origin from the web app’s perspective.
-- Set `NEXT_PUBLIC_HLS_ORIGIN` to the *publicly reachable* base URL of HLS if you want watchers to prefer direct origin playback via the announce hint.
-
-### Pattern B — Docker Compose (recommended for self-host)
-
-This repo includes a ready-to-run `docker-compose.yml` at the repo root that runs:
-- `web` (Next.js)
-- `mediamtx` (origin seed)
-- `relay` (local Nostr relay)
-- `manifest` (optional: integrity manifest signer; see ADR `0020`)
-- `hls-init` (one-shot volume permission fix for `/hls`)
-
-Start it:
+From `.dstream-work`:
 
 ```bash
-# Recommended (also generates a host-IP MediaMTX config for browsers that reject loopback ICE candidates)
+npm ci
 npm run stack:up
-
-# Optional: plain compose (may fail WHIP ICE on some setups; prefer stack:up)
-docker compose up -d --build
 ```
 
-Real-wallet variation (regtest daemon + sender/receiver wallet-rpc + wallet bootstrap):
+The stack includes the web application, MediaMTX, TURN, a local Nostr relay, and the optional manifest service. The transcoder is disabled unless the `transcoding` Compose profile is enabled on a host sized for encoding.
 
-```bash
-npm run stack:up:real-wallet
-```
+Local defaults are documented in [`../../CONFIG.md`](../../CONFIG.md). Use `npm run stack:down` to stop the base stack.
 
-If `xmr-wallet-init` exits during first cold start, inspect logs and increase init timeout:
+## Production Preflight
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.real-wallet.yml --env-file .env.production logs --tail 200 xmr-wallet-init xmr-wallet-rpc-receiver xmr-wallet-rpc-sender monerod-regtest
-# then raise DSTREAM_XMR_INIT_TIMEOUT_SECS (default 300) and retry
-```
-
-If logs report wallet password mismatch and this is a disposable regtest environment, purge old wallet volume data and redeploy:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.real-wallet.yml --env-file .env.production down
-docker volume rm $(docker volume ls -q | grep -E 'dstream.*xmr|dstream.*wallet' || true)
-```
-
-Production deploy note:
-
-- `infra/prod/deploy.sh` automatically adds `docker-compose.real-wallet.yml` when `.env.production` sets `DSTREAM_XMR_WALLET_RPC_ORIGIN` to `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
-- Set `DSTREAM_DEPLOY_REAL_WALLET=1` to force, or `DSTREAM_DEPLOY_REAL_WALLET=0` to disable.
-
-Then open:
-- Web app: `http://localhost:5656` (or set `DSTREAM_WEB_PORT` to change the host port)
-- Relay (for browsers): `ws://localhost:8081`
-
-### Monero verified tips (local dev)
-
-Root Compose does not start a mock wallet by default.
-
-- Preferred: run real-wallet stack (`npm run stack:up:real-wallet`) for actual Monero flows.
-- Optional dev-only mock: `docker compose --profile mock-wallet up -d xmr-mock`.
-
-- Health check: `GET /api/xmr/health`
-- Create tip session: `POST /api/xmr/tip/session`
-- Check tip status: `GET /api/xmr/tip/session/<token>`
-- Dev-only helpers (requires `DSTREAM_DEVTOOLS=1`):
-  - Reset mock state: `POST /api/dev/xmr/reset`
-  - Inject a transfer (simulated tip): `POST /api/dev/xmr/inject` with either `{ "session": "<token>", ... }` or `{ "address": "<subaddress>", ... }`
-
-For a full local real-wallet path without manual wallet interaction:
-
-- Bring up real stack: `npm run stack:up:real-wallet`
-- Run autonomous smoke: `npm run smoke:wallet:real`
-
-### Wallet interoperability verification
-
-To validate compatibility with external wallets (GUI/mobile/CLI), run:
-
-```bash
-npm run smoke:wallet
-npm run smoke:wallet:matrix
-npm run smoke:wallet:cap
-npm run smoke:escrow
-npm run smoke:escrow:v3
-```
-
-The script creates a unique tip subaddress and polls `/api/xmr/tip/session/<token>` until a transfer is detected (and confirmed by default).
-You can send from any wallet that supports standard Monero transfers to subaddresses.
-
-Capability smoke queries `GET /api/xmr/capabilities` and verifies wallet-method profiles:
-
-- `tip_v1`
-- `stake_v2`
-- `escrow_v3_multisig`
-
-Escrow-v3 smoke exercises coordinator/participant multisig session coordination routes end-to-end:
-
-- create session
-- participant prepare joins
-- coordinator make/exchange
-- multisig info import
-- multisig sign/submit
-
-Options:
-
-- `REQUIRE_CONFIRMED=0` to accept unconfirmed detection.
-- `EXPECT_MIN_ATOMIC=<digits>` to enforce a minimum expected amount.
-- `TIMEOUT_SECS=<seconds>` to extend polling.
-- `AUTO_INJECT=1` for local mock-only automation via `/api/dev/xmr/inject`.
-- `REQUIRE_PROFILE=tip_v1|stake_v2|escrow_v3_multisig|none` for `smoke:wallet:cap`.
-- `CAP_PROBE_MODE=active|passive` for `smoke:wallet:cap` (use `passive` with strict real-wallet daemons).
-- `ESCROW_ENABLE_MULTISIG_CLI=0|1` for `smoke:escrow:v3` real-wallet mode (`1` default).
-- `ESCROW_MONERO_CLI_IMAGE=<image>` to override helper image for `monero-wallet-cli` in `smoke:escrow:v3`.
-- `ESCROW_WALLET_VOLUME=<volume>` to override wallet volume mount for `smoke:escrow:v3`.
-
-`smoke:wallet:matrix` runs a sequential certification flow for:
-
-- `cake`
-- `feather`
-- `cli`
-
-Use wallet-specific shortcuts when needed:
-
-```bash
-npm run smoke:wallet:cake
-npm run smoke:wallet:feather
-npm run smoke:wallet:cli
-```
-
-For full evidence capture, use `docs/WALLET_CERTIFICATION.md`.
-
-### Production hardening preflight
-
-Before deployment, run:
-
-```bash
-EXTERNAL_BASE_URL=https://stream.example.com SSH_TARGET=root@your-host npm run gate:prod -- .env.production
-```
-
-Or run each gate separately:
-
-```bash
-ENV_FILE=.env.production npm run harden:deploy
-EXTERNAL_BASE_URL=https://stream.example.com npm run smoke:external:readiness
-SSH_TARGET=root@your-host npm run smoke:prod:runtime
-```
-
-This validates production-critical config, including:
-
-- relay URL safety (`wss://` only in deploy mode),
-- relay host safety (no loopback/private relay hosts in deploy mode),
-- placeholder host rejection in deploy mode (`*.example*`),
-- separate public STUN and server-only TURN URL configuration,
-- rejection of legacy credential-bearing `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`,
-- TURN shared-secret, credential-TTL, and external-IP sanity for bundled coturn,
-- public HLS origin safety (`https://` + non-local host in deploy mode),
-- proxy origin URL correctness,
-- production devtools disabled (`DSTREAM_DEVTOOLS=0`),
-- Monero session secret requirement,
-- Monero session secret placeholder rejection,
-- Monero wallet RPC credential quality checks in deploy mode (non-generic username + non-placeholder password),
-- mock wallet RPC rejection in deploy mode (`xmr-mock`),
-- Monero backend origin required in deploy mode,
-- explicit non-zero refund threshold policy in deploy mode (`DSTREAM_XMR_REFUND_MIN_SERVED_BYTES`, `DSTREAM_XMR_REFUND_FULL_SERVED_BYTES`),
-- refund policy bounds in deploy mode (`DSTREAM_XMR_REFUND_MAX_RECEIPTS`, `DSTREAM_XMR_REFUND_MAX_RECEIPT_AGE_SEC`, `DSTREAM_XMR_REFUND_MIN_SESSION_AGE_SEC`),
-- transcoder profile sanity checks.
-
-`infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use the repo-root script with `DSTREAM_DEPLOY_PROJECT_DIR` set explicitly when you have multiple local dStream checkouts:
-
-```bash
-cd /path/to/dStream
-DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh root@your-host
-```
-
-Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that sets that project dir automatically before delegating to the repo-root script. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.
-
-When local Docker is available, the deploy script prebuilds and streams the `web` and `manifest` images so the production host only has to load and restart them. Include `transcoder` explicitly in `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES` only when deploying the opt-in `transcoding` profile.
-
-To validate a specific env file without exporting it into your shell:
+Validate the exact production file before syncing anything:
 
 ```bash
 ENV_FILE=.env.production npm run harden:deploy
 ```
 
-To lint the committed template syntax before filling real secrets/hosts:
+The production template intentionally contains placeholders and is expected to fail deploy-mode validation until the operator replaces them.
+
+The preflight checks public relay/STUN/HLS values, server-only proxy and TURN values, credential quality, production devtool state, persistent payment configuration, required verifier readiness configuration, and optional transcoder settings. Some checks cover retained experimental XMR contribution/refund code; passing those checks does not make those paths public launch features.
+
+## Deploy
+
+From the repository root, pin the canonical project explicitly:
 
 ```bash
-ENV_FILE=.env.production.example npm run harden:check
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh user@your-host
 ```
 
-Note: deploy-mode checks are expected to fail on `.env.production.example` until placeholders are replaced.
+From `.dstream-work`, the wrapper pins that directory automatically:
 
-See also `docs/HARDENING.md` and `docs/OPS_RUNBOOK.md`.
+```bash
+./infra/prod/deploy.sh user@your-host
+```
 
-### Automatic ladder generation
+The deploy script:
 
-Root compose includes an opt-in `transcoding` profile that watches active origin streams and publishes derived renditions back into MediaMTX:
+1. Runs the production hardening preflight.
+2. Syncs the selected canonical project to `/opt/dstream` by default.
+3. Preserves excluded production backup files and edge-proxy state.
+4. Checks remote disk headroom.
+5. Builds or transfers the selected application images.
+6. Restarts the Compose services.
+7. Reconnects the Caddy edge proxy.
+8. Runs route health checks and the production runtime smoke.
 
-- `<originStreamId>__r720p`
-- `<originStreamId>__r480p`
-- `<originStreamId>__r360p`
+Do not set `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` for a production release.
 
-`/broadcast` can auto-publish these rendition hints in kind `30311` announces. `/watch` consumes them and builds a synthetic master playlist via `/api/hls-master`.
+Useful overrides:
 
-Enable it with `COMPOSE_PROFILES=transcoding` only on a dedicated encoding-capable host. Failed encodes use capped exponential restart delays and a cooldown circuit instead of restarting continuously.
+- `DSTREAM_DEPLOY_REMOTE_DIR`
+- `DSTREAM_DEPLOY_DOMAIN`
+- `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES`
+- `DSTREAM_DEPLOY_REAL_WALLET`
+- `DSTREAM_DEPLOY_MIN_FREE_GB`
 
-When the web app runs in a container, `localhost` inside that container is **not** the host. Set:
-- `DSTREAM_WHIP_PROXY_ORIGIN` to the origin service name + port (e.g. `http://mediamtx:8889`)
-- `DSTREAM_HLS_PROXY_ORIGIN` to the origin service name + port (e.g. `http://mediamtx:8880` if you expose internal port)
+The real-wallet overlay is selected automatically when the production wallet RPC origin points to the bundled receiver or sender service. Otherwise the base stack uses the configured external wallet RPC.
 
-Note: Next.js **public** env vars (`NEXT_PUBLIC_*`) are inlined into the client bundle at build time. If you change relays/origin/ICE servers, rebuild the image.
+## Payment Readiness
 
-Note: server-only proxy vars (`DSTREAM_*_PROXY_ORIGIN`) are read at runtime by the `/api/whip/*`, `/api/whep/*`, and `/api/hls/*` route handlers; changing them requires a container restart, not an image rebuild.
+An adapter in source code is not an active payment rail. After deployment, inspect:
 
-Tip: for Compose variable overrides, copy `.env.example` to `.env` and edit values before building.
+```text
+GET /api/payments/capabilities
+GET /api/payments/health
+```
 
-If you already have the dev server / local infra running on these ports, stop them first (port conflicts), or change `DSTREAM_WEB_PORT`.
+The public dstream.stream scope currently requires:
 
-### Firefox note (WHIP ICE + loopback)
+- `xmr:xmr`
+- `btc:lightning`
+- `btc:utxo`
 
-Some Firefox setups won’t accept loopback ICE candidates (`127.0.0.1`) from MediaMTX when running in Docker Desktop.
+Other adapters remain configuration-dependent and should not be exposed until their real RPC/indexer path has passed a live settlement smoke.
 
-- `npm run stack:up` handles this by generating `/tmp/dstream-mediamtx.yml` and starting Compose with `DSTREAM_MEDIAMTX_CONFIG=/tmp/dstream-mediamtx.yml`.
-- Manual alternative:
-  - `npm run mediamtx:gen`
-  - `DSTREAM_MEDIAMTX_CONFIG=/tmp/dstream-mediamtx.yml docker compose up -d --no-deps --force-recreate mediamtx`
+## Verification
 
-### Nostr relays
+Run the external and remote gates against the deployed host:
 
-- Dev uses a local relay at `ws://localhost:8081`.
-- Production should use multiple `wss://` relays for redundancy.
+```bash
+EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
+SSH_TARGET=user@your-host DSTREAM_DEPLOY_DOMAIN=your-domain npm run smoke:prod:runtime
+EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
+```
 
-### ICE servers (important off-LAN)
+These checks verify routes, public asset configuration, container/runtime health, media proxy health, and payment capability health. They do not replace a real broadcast acceptance pass.
 
-On real networks, WebRTC often needs STUN and sometimes TURN.
+Use two devices or browsers on different networks to verify:
 
-- Set `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` to at least one STUN URL.
-- Set `DSTREAM_TURN_URLS` and `TURN_SHARED_SECRET`; browsers obtain short-lived TURN credentials from `/api/webrtc/ice-servers`.
+1. Browser or OBS ingest is detected.
+2. The live announcement reaches more than one configured relay.
+3. A fresh Browse page lists the stream as live.
+4. The direct watch route starts and remains stable.
+5. Chat works in both directions.
+6. Ending the stream publishes `status=ended` and removes it from Live Now.
 
-## Notes / non-goals (v1)
+## Operations
 
-- No account system, no central registry, no DRM.
-- Presence is approximate by design (best-effort viewer pings).
+- Hardening: [`HARDENING.md`](HARDENING.md)
+- Health, backups, and restore: [`OPS_RUNBOOK.md`](OPS_RUNBOOK.md)
+- Release acceptance: [`PRODUCTION_FINALIZATION.md`](PRODUCTION_FINALIZATION.md)
+
+Next.js compiles `NEXT_PUBLIC_*` values into browser assets, so changing one requires a web image rebuild. Server-only proxy values are read at runtime and require a container restart.

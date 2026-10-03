@@ -1,8 +1,10 @@
 # Wallet Certification Matrix (Cake / Feather / CLI)
 
-Last updated: 2026-02-10
+Last updated: 2026-10-03
 
 This runbook certifies real wallet interoperability against dStream verified-tip flows.
+
+It does not give dStream access to Cake Wallet, Feather, or another user wallet, and it cannot discover wallet addresses or seeds. The operator supplies the receiving wallet RPC; the sender manually pays the generated address. A mock or local pass is not proof that a rail is active on dstream.stream; use `/api/payments/capabilities` for deployment status.
 
 ## Scope
 

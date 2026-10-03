@@ -40,6 +40,8 @@ A video purchase consumes a settled intent and creates an entitlement. Playback 
 
 Browser wallets sign or hand off transactions, but RPC credentials and API keys stay on the server. Public donation addresses are independent of verifier provider credentials.
 
+The adapters do not custody funds, create wallets, hold private keys, issue refunds, or operate chain nodes. A wallet handoff or client-supplied transaction identifier is not settlement proof; the configured backend independently verifies recipient, amount, network, success, finality, and replay state.
+
 ## Consequences
 
 - Operators must provision trusted production providers and pass the real-chain smoke before enabling additional public rails.

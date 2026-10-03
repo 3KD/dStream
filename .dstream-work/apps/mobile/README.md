@@ -5,13 +5,17 @@ This package is a Capacitor shell that ships dStream as a mobile app while prese
 - the phone runs the app UI,
 - a user-owned edge node (VPS/home server) runs ingest/origin services.
 
+## Status
+
+This repository contains the web shell, Capacitor configuration, checks, and release-script scaffolding. Generated `ios/` and `android/` projects are intentionally untracked. No signed build, real-device pass, TestFlight upload, Play upload, or store approval is established by this source tree alone.
+
 ## What this scaffold includes
 
 - First-run setup screen (`www/index.html`) for:
   - edge node URL
   - relay list
 - Launch flow to `<edge>/mobile/bootstrap` with relay override payload.
-- Capacitor project config (`capacitor.config.ts`) for both iOS and Android targets.
+- Capacitor config (`capacitor.config.ts`) for iOS and Android targets.
 - Native config persistence via Capacitor Preferences (with browser `localStorage` fallback).
 - Post-setup **Node & Relays** editor from the saved-config screen.
 
@@ -25,10 +29,14 @@ This package is a Capacitor shell that ships dStream as a mobile app while prese
 ```bash
 cd apps/mobile
 npm install
+npx cap add ios
+npx cap add android
 npm run sync
 npm run open:ios
 npm run open:android
 ```
+
+Generate only the platform available on the current development host. The generated native directories remain local unless the project deliberately changes that policy.
 
 Root-level validation:
 
@@ -52,6 +60,8 @@ See:
 
 - `docs/MOBILE_STORE_DEPLOY.md`
 - `docs/MOBILE_RELEASE_CHECKLIST.md`
+
+Release commands require generated native projects, valid signing material, store credentials, and successful real-device acceptance. The committed shell checks do not substitute for those gates.
 
 ## Runtime notes
 
