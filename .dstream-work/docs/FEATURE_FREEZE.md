@@ -1,5 +1,7 @@
 # Feature Freeze v3 (Definition of “Completed”)
 
+> **Historical planning record:** This freeze defined an earlier completion target. It is not the current public feature status. See `../../FEATURES.md`.
+
 Date: 2026-02-10
 
 This document freezes the feature set for the dStream rebuild so we can drive the project to a true “completed” state.

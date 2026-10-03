@@ -1,5 +1,7 @@
 # dStream Rebuild — Requirements Traceability Matrix (RTM)
 
+> **Historical audit record:** This matrix reflects an earlier completion review. Current support claims live in `../../FEATURES.md`; current wire behavior lives in `../../PROTOCOL.md`.
+
 Last updated: 2026-02-12
 
 This RTM exists so we don’t repeat “we thought it was done / we thought it was planned”.

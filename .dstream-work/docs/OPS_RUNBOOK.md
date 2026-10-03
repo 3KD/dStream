@@ -1,6 +1,6 @@
 # Operations Runbook
 
-Last updated: 2026-02-13
+Last updated: 2026-10-03
 
 This runbook closes the remaining production ops items:
 
@@ -13,14 +13,14 @@ This runbook closes the remaining production ops items:
 Install your public key on the server:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host npm run ops:ssh:key
 ```
 
 Optional hardening (disables password auth after key login is verified):
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 DSTREAM_DISABLE_PASSWORD_AUTH=1 DSTREAM_ALLOW_LOCKOUT_RISK=1 SSH_TARGET=root@your-host npm run ops:ssh:key
 ```
 
@@ -29,21 +29,21 @@ DSTREAM_DISABLE_PASSWORD_AUTH=1 DSTREAM_ALLOW_LOCKOUT_RISK=1 SSH_TARGET=root@you
 Ad-hoc health probe:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
 ```
 
 With webhook alerting:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck
 ```
 
 Install remote cron (every 5 minutes by default):
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
 ```
 
@@ -58,7 +58,7 @@ DSTREAM_HEALTHCHECK_SCHEDULE="*/2 * * * *" SSH_TARGET=root@your-host npm run ops
 Create a backup on the server:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:backup
 ```
 
@@ -80,7 +80,7 @@ Default backup captures:
 Restore from backup directory or archive:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 DSTREAM_RESTORE_FORCE=1 SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:restore -- /opt/dstream/backups/<timestamp-or-archive>
 ```
 
@@ -95,7 +95,7 @@ ssh root@your-host 'cd /opt/dstream && docker compose --env-file .env.production
 Run full gate before deploy or go-live:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 EXTERNAL_BASE_URL=https://dstream.stream SSH_TARGET=root@your-host npm run gate:prod -- .env.production
 ```
 

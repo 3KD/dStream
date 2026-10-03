@@ -283,7 +283,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Censorship Resistant</h3>
             <p className="text-neutral-300 leading-relaxed">
-              Identity is rooted in Nostr cryptography. No central authority can ban your keys or delete your followers.
+              Identity is rooted in Nostr cryptography, so your keys and profile are portable across compatible clients and relays.
             </p>
           </div>
 
@@ -299,7 +299,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Peer-Assisted Streaming</h3>
             <p className="text-neutral-300 leading-relaxed">
-              When enabled, viewers can automatically help support the broadcaster by securely relaying the video and audio feeds directly to other viewers, unlocking massive P2P scale.
+              When enabled, compatible viewers can exchange requested HLS bytes over WebRTC while the media origin remains available for bootstrap and fallback.
             </p>
           </div>
 
@@ -315,7 +315,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Crypto Powered</h3>
             <p className="text-neutral-300 leading-relaxed">
-              Monetize instantly using cryptocurrencies. By leveraging decentralized finance, payments bypass traditional middlemen directly to creators.
+              Publish creator-controlled cryptocurrency destinations and use configured settlement verifiers without giving dStream custody of wallet keys.
             </p>
           </div>
         </section>

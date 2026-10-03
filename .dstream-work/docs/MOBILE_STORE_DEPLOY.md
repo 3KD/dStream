@@ -1,6 +1,6 @@
 # Mobile Store Deployment (App Store + Google Play)
 
-Last updated: 2026-02-15
+Last updated: 2026-10-03
 
 This runbook covers signed release builds and store upload for the Capacitor mobile app at `apps/mobile`.
 
@@ -22,14 +22,14 @@ Listing and submission docs:
 ## 2) One-time setup
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 npm run mobile:release:setup
 ```
 
 Prepare release env file:
 
 ```bash
-cp /Users/erik/Projects/JRNY/.dstream-work/apps/mobile/release.env.example /Users/erik/Projects/JRNY/.dstream-work/apps/mobile/release.env
+cp apps/mobile/release.env.example apps/mobile/release.env
 ```
 
 Fill all required values in `apps/mobile/release.env`.
@@ -39,21 +39,21 @@ Fill all required values in `apps/mobile/release.env`.
 Structure check:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 npm run check:mobile:store
 ```
 
 Strict secret/env check (iOS):
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=ios MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs
 ```
 
 Strict secret/env check (Android):
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=android MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs
 ```
 
@@ -62,14 +62,14 @@ MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env MOBILE_RELEASE_TARGET=android MO
 iOS simulator permission reset/grant:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 IOS_SIM_UDID=booted IOS_BUNDLE_ID=stream.dstream npm run test:mobile:permissions:ios
 ```
 
 Android emulator/device permission reset/grant:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 ANDROID_PACKAGE_NAME=stream.dstream npm run test:mobile:permissions:android
 ```
 
@@ -80,28 +80,28 @@ All commands support `MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env`.
 ### iOS → TestFlight
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:ios:testflight
 ```
 
 ### iOS → App Store submission
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:ios:appstore
 ```
 
 ### Android → Internal testing track (Play Console)
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:android:internal
 ```
 
 ### Android → Production track (Play Console)
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 MOBILE_RELEASE_ENV_FILE=apps/mobile/release.env npm run mobile:release:android:production
 ```
 

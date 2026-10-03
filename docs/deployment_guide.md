@@ -1,80 +1,45 @@
-# dStream Production Deployment Guide (Current Stack)
+# dStream Deployment Guide
 
-This guide targets the current rebuild stack in `/dStream` (root `docker-compose.yml`), not the legacy `infra/prod/docker-compose.prod.yml` layout.
+The production application is the canonical stack in `.dstream-work`. Do not deploy the legacy root workspaces.
 
-## 1) Prerequisites
-
-- A Linux VPS with Docker + Docker Compose plugin installed.
-- DNS pointed to your server (for example `dstream.stream`).
-- A completed production env file:
-  - `../dStream/.env.production` (copy from `.env.production.example` and fill real values).
-
-## 2) Required production env values
-
-At minimum, set these in `../dStream/.env.production`:
-
-- `NEXT_PUBLIC_NOSTR_RELAYS` (2+ public `wss://` relays)
-- `NEXT_PUBLIC_HLS_ORIGIN` (`https://<your-domain>`)
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` (must include at least one `turn:`/`turns:` server)
-- `DSTREAM_DEVTOOLS=0`
-- `DSTREAM_XMR_SESSION_SECRET` (32+ chars)
-
-## 3) Deploy with push script
-
-From this repo:
+## Prepare
 
 ```bash
-./infra/prod/deploy.sh user@your-server
+cd .dstream-work
+cp .env.production.example .env.production
 ```
 
-Defaults:
+Replace every placeholder and keep the populated file out of Git. In particular:
 
-- Local project dir: `../dStream`
-- Remote dir: `/opt/dstream`
-- Compose stack: `docker-compose.yml`
+- public browser values may use `NEXT_PUBLIC_*`,
+- secrets and provider credentials must remain in server-only variables,
+- TURN uses `TURN_SHARED_SECRET` and short-lived credentials,
+- required public payment rails must be listed in `DSTREAM_REQUIRED_PAYMENT_CAPABILITIES`.
 
-Optional flags via env vars:
+Run the production gate described in [CONFIG.md](../CONFIG.md) before deployment.
+
+## Deploy
+
+From the repository root:
 
 ```bash
-# Deploy a different local checkout
-DSTREAM_DEPLOY_PROJECT_DIR=/abs/path/to/dstream ./infra/prod/deploy.sh user@your-server
-
-# Deploy to different remote directory
-DSTREAM_DEPLOY_REMOTE_DIR=/srv/dstream ./infra/prod/deploy.sh user@your-server
-
-# Include real-wallet compose overlay
-DSTREAM_DEPLOY_REAL_WALLET=1 ./infra/prod/deploy.sh user@your-server
-
-# Override network/domain/caddy container names (if needed)
-DSTREAM_DEPLOY_NETWORK=dstream_default DSTREAM_DEPLOY_DOMAIN=stream.example.com ./infra/prod/deploy.sh user@your-server
-
-# Disable self-healing/reachability checks
-DSTREAM_DEPLOY_SELF_HEAL=0 DSTREAM_DEPLOY_HEALTHCHECK=0 ./infra/prod/deploy.sh user@your-server
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh user@your-host
 ```
 
-By default, `deploy.sh` now:
-
-- Recreates `dStream_caddy` on the target host with `/opt/dstream/infra/prod/Caddyfile`.
-- Reattaches it to the app network (`dstream_default` by default).
-- Runs post-deploy probes for:
-  - `http://127.0.0.1:5656/settings`
-  - `https://<domain>/`, `/browse`, `/broadcast`, `/settings` (via local `--resolve`).
-
-## 4) Verify after deploy
+Or from `.dstream-work` use its wrapper:
 
 ```bash
-ssh user@your-server 'cd /opt/dstream && docker compose --env-file .env.production ps'
-ssh user@your-server 'cd /opt/dstream && docker compose --env-file .env.production logs --since 5m web'
+./infra/prod/deploy.sh user@your-host
 ```
 
-If the app is publicly reachable, run local gates against the domain:
+## Verify
+
+A successful command is not sufficient. Verify container health, public routes, payment health, and the behavior that prompted the release.
 
 ```bash
-cd ../dStream
-ENV_FILE=.env.production npm run harden:deploy
+cd .dstream-work
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
+EXTERNAL_BASE_URL=https://your-domain npm run smoke:prod:runtime
 ```
 
-## 5) Notes
-
-- The legacy files in `infra/prod/docker-compose.prod.yml` and `infra/prod/Caddyfile` are historical and do not define the current runtime stack.
+The complete, maintained procedure is [.dstream-work/docs/DEPLOYMENT.md](../.dstream-work/docs/DEPLOYMENT.md).

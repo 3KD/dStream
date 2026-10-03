@@ -1,15 +1,5 @@
-# dStream Mobile App (Planned)
+# Legacy Mobile Scaffold
 
-This directory is reserved for the Native Mobile Application (iOS/Android).
+This root-level mobile package was a planned pre-rebuild scaffold and is not the current mobile shell.
 
-## Tech Stack
-- **Framework**: React Native (via Expo)
-- **Player**: `expo-av` or `react-native-video` (HLS support)
-- **WebRTC**: `react-native-webrtc` (for P2P Mesh)
-- **Signaling**: Nostr NIP-04 (Same as Web)
-
-## Roadmap
-1. Initialize Expo project: `npx create-expo-app .`
-2. Port `useNostr` logic to React Native.
-3. Build "Watch" screen with HLS player.
-4. Build "Broadcast" screen with Camera/Mic access.
+The maintained Capacitor implementation is [`.dstream-work/apps/mobile`](../../.dstream-work/apps/mobile). Current mobile setup and release status are documented in [`.dstream-work/docs/MOBILE_APP.md`](../../.dstream-work/docs/MOBILE_APP.md) and the associated release checklist.

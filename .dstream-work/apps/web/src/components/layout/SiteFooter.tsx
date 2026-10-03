@@ -35,7 +35,7 @@ export function SiteFooter() {
               <span className="font-semibold tracking-tight">dStream Protocol</span>
             </div>
             <p className="text-sm text-neutral-400 leading-relaxed">
-              World’s first decentralized streaming protocol. Built for people of the modern de-fi economy.
+              Nostr identity, replaceable media infrastructure, viewer-assisted delivery, and direct cryptocurrency payments.
             </p>
           </div>
 
@@ -95,9 +95,9 @@ export function SiteFooter() {
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider border border-purple-500/30 mb-2">
                   <Terminal className="w-3 h-3" /> Node Runner
                 </div>
-                <h3 className="text-lg font-bold text-white leading-tight">&gt;_ Run your own decentralized dStream node!</h3>
+                <h3 className="text-lg font-bold text-white leading-tight">Run your own dStream node</h3>
                 <p className="text-xs text-neutral-300 leading-relaxed">
-                  dStream is unstoppable when users spin up their own localized Nodes. Download the pre-compiled architecture directly to your environment.
+                  Clone the source, configure your relays and media origin, and operate the canonical Docker stack on infrastructure you control.
                 </p>
               </div>
 
@@ -109,7 +109,7 @@ export function SiteFooter() {
                 >
                   <div className="flex items-center gap-2 text-sm font-medium text-neutral-200">
                     <Monitor className="w-4 h-4 text-neutral-400" />
-                    Desktop Nodes
+                    Desktop Releases
                   </div>
                   <div className="flex -space-x-1">
                     <span className="text-[10px] bg-neutral-800 px-1.5 py-0.5 rounded text-neutral-400 border border-neutral-700">macOS</span>
@@ -125,7 +125,7 @@ export function SiteFooter() {
                 >
                   <div className="flex items-center gap-2 text-sm font-medium text-neutral-200">
                     <Smartphone className="w-4 h-4 text-neutral-400" />
-                    Mobile Wrappers
+                    Mobile Releases
                   </div>
                   <div className="flex -space-x-1">
                     <span className="text-[10px] bg-neutral-800 px-1.5 py-0.5 rounded text-neutral-400 border border-neutral-700">iOS</span>

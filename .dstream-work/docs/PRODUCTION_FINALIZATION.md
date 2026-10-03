@@ -21,7 +21,7 @@ This is the close-out checklist for calling dStream production complete.
 Run:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 ENV_FILE=.env.production npm run harden:deploy
 ```
 
@@ -30,8 +30,8 @@ ENV_FILE=.env.production npm run harden:deploy
 Deploy:
 
 ```bash
-cd /Users/erik/Projects/JRNY
-DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
+cd /path/to/dStream
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh root@your-host
 ```
 
 If you run deploys from inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a wrapper around the repo-root script and pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace automatically.
@@ -39,7 +39,7 @@ If you run deploys from inside `.dstream-work`, `./infra/prod/deploy.sh root@you
 Verify (single gate command):
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 EXTERNAL_BASE_URL=https://dstream.stream SSH_TARGET=root@your-host npm run gate:prod -- .env.production
 ```
 
@@ -57,12 +57,12 @@ Use two devices/networks:
 
 ## 4) Operational hardening
 
-Runbook: `/Users/erik/Projects/JRNY/.dstream-work/docs/OPS_RUNBOOK.md`
+Runbook: `docs/OPS_RUNBOOK.md`
 
 Required:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host npm run ops:ssh:key
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
@@ -74,9 +74,9 @@ SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstream npm run ops:backup
 Run and archive evidence from:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 npm run check:mobile
 npm run test:mobile:permissions
 ```
 
-Then complete `/Users/erik/Projects/JRNY/.dstream-work/docs/MOBILE_RELEASE_CHECKLIST.md`.
+Then complete `docs/MOBILE_RELEASE_CHECKLIST.md`.

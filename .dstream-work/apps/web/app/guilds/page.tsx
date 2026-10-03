@@ -344,7 +344,7 @@ export default function GuildsPage() {
               What is a Guild?
             </h2>
             <p className="text-sm text-neutral-300 leading-relaxed">
-              Guilds are decentralized communities running on the dStream Nostr network. By joining or creating a Guild, node runners, creators, and viewers can pool resources. Guilds allow communities to elect chat moderators, curate featured streaming feeds, and securely share P2P infrastructure routing rules.
+              Guilds are Nostr-based communities for creators and viewers. They can publish membership and roles, curate featured streams, and coordinate moderation without creating a central dStream account database.
             </p>
           </div>
         </section>

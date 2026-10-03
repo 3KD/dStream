@@ -1,58 +1,39 @@
-# Build & Deployment Guide (Cross-Platform)
+# Build and Development Platforms
 
-dStream is built on **Docker**, making it compatible with Windows, Mac, and Linux.
+The canonical runtime lives in `.dstream-work` and uses Node.js 22, npm, Docker, and Docker Compose. The same source runs on macOS, Linux, and Windows through WSL2, but production deployment targets a Linux host.
 
-## 1. Windows (WSL2)
-**Recommendation**: Do NOT build directly on Windows PowerShell. Use **WSL2** (Windows Subsystem for Linux).
+## macOS
 
-1.  **Install WSL2**:
-    ```powershell
-    wsl --install
-    ```
-    (Restart computer).
-2.  **Install Docker Desktop for Windows**:
-    *   Enable "WSL2 Backend" in Docker Settings.
-3.  **Open Ubuntu Terminal**:
-    ```bash
-    git clone https://github.com/your-repo/dstream.git
-    cd dstream
-    ./infra/prod/deploy.sh
-    ```
+Install Node.js 22 and Docker Desktop, then:
 
-## 2. Linux (Ubuntu/Debian/Arch)
-This is the native environment. Works best.
-
-1.  **Install Docker & Compose**:
-    ```bash
-    sudo apt update && sudo apt install docker.io docker-compose-plugin
-    ```
-2.  **Run**:
-    ```bash
-    docker compose -f infra/stream/docker-compose.prod.yml up -d
-    ```
-
-## 3. Mac (macOS)
-**Development**:
 ```bash
-npm install
+cd .dstream-work
+npm ci
+cp .env.example .env.local
+npm run infra:up:test
 npm run dev
 ```
-**Production Test**:
-```bash
-docker compose -f infra/stream/docker-compose.prod.yml up -d
-```
-(Note: On M1/M2/M3 chips, ensure Docker Desktop is updated to handle `linux/amd64` emulation if needed, though dStream builds natively on ARM too).
 
-## 4. Mobile (iOS & Android)
-dStream is currently a **Progressive Web App (PWA)**.
+Use Xcode only when building the Capacitor iOS shell.
 
-### How to "Install" the App:
-*   **iOS**: Open Safari -> Share Button -> "Add to Home Screen".
-*   **Android**: Open Chrome -> Menu -> "Install App".
+## Linux
 
-### Native App Path (Future Roadmap):
-To maximize performance, we plan to wrap the application using **CapacitorJS**:
-1.  `npm install @capacitor/core @capacitor/cli`
-2.  `npx cap add ios`
-3.  `npx cap add android`
-This converts the web code into a genuine `.ipa` (iOS) and `.apk` (Android) for the App Stores.
+Install Node.js 22 and the Docker Compose plugin. Use the same local commands as macOS. Linux is the supported production host for the Compose stack and operator scripts.
+
+## Windows
+
+Use WSL2 with Docker Desktop's WSL integration. Clone the repository inside the WSL filesystem, then run the canonical commands from `.dstream-work`. Native PowerShell paths are not used by the deployment scripts.
+
+## Mobile Shells
+
+The maintained mobile shell is `.dstream-work/apps/mobile`, not the root legacy `apps/mobile` scaffold. Building iOS or Android source packages does not mean a signed store artifact has been submitted or published.
+
+See:
+
+- [Mobile app](../.dstream-work/docs/MOBILE_APP.md)
+- [Mobile store deployment](../.dstream-work/docs/MOBILE_STORE_DEPLOY.md)
+- [Mobile release checklist](../.dstream-work/docs/MOBILE_RELEASE_CHECKLIST.md)
+
+## Production
+
+Prepare `.dstream-work/.env.production`, run the hardening and production gates, then use the canonical deployment script. Full instructions are in [the deployment guide](../.dstream-work/docs/DEPLOYMENT.md).

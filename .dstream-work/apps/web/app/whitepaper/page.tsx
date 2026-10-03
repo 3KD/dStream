@@ -9,22 +9,22 @@ export default function WhitepaperPage() {
       <main className="max-w-5xl mx-auto px-6 py-10">
         <article className="max-w-4xl mx-auto space-y-10">
           <header className="space-y-4 border-b border-neutral-800 pb-8">
-            <p className="text-xs uppercase tracking-wider text-neutral-500">Whitepaper · Rebuild Edition</p>
+            <p className="text-xs uppercase tracking-wider text-neutral-500">Implementation Reference</p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight">dStream Protocol Whitepaper</h1>
             <p className="text-neutral-300">
               This document describes the architecture, economic rails, and security boundaries of the currently shipped dStream runtime.
             </p>
             <div className="text-xs text-neutral-500 flex flex-wrap gap-4">
-              <span>Date: February 14, 2026</span>
+              <span>Date: October 3, 2026</span>
               <span>Status: Live implementation reference</span>
-              <span>Scope: Production path (web + mobile shell + ops)</span>
+              <span>Scope: Canonical web runtime and protocol</span>
             </div>
           </header>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-bold">Abstract</h2>
             <p className="text-neutral-300 leading-relaxed">
-              dStream is a decentralized live-streaming protocol built on the Nostr network, ensuring creators can broadcast without fear of censorship or deplatforming. It leverages peer-to-peer (P2P) scaling, allowing viewers to contribute bandwidth to boost overall stream fidelity and performance. Free from corporate gatekeepers, dStream guarantees completely decentralized monetization—there is no middlemanning, and creators retain absolute ownership over their payouts, wallets, and community communications.
+              dStream separates creator identity and stream coordination from any single streaming platform. Nostr carries signed identity, discovery, and community events; a replaceable media origin handles ingest and seeds playback; optional peer assist lets compatible viewers exchange requested HLS bytes; and noncustodial payment rails send value to creator-controlled destinations. The system reduces dependence on a single operator, but it does not claim that relays, origins, wallets, or networks can never fail or censor traffic.
             </p>
           </section>
 
@@ -33,15 +33,15 @@ export default function WhitepaperPage() {
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-3 text-sm text-neutral-300">
               <p>
                 <span className="text-neutral-100 font-semibold">Control plane (Nostr):</span> stream announce (`kind 30311`), presence (`30312`),
-                moderation/roles (`30313`), chat (`1`), and private coordination (`4` / `20004`).
+                public chat (`1311`), moderation/roles (`30317` / `30318`), integrity manifests (`30313`), and NIP-04 private messages (`4`).
               </p>
               <p>
                 <span className="text-neutral-100 font-semibold">Media plane:</span> broadcaster publishes through WHIP; playback resolves through
                 WHEP first and HLS fallback.
               </p>
               <p>
-                <span className="text-neutral-100 font-semibold">Assist plane:</span> P2P assist can exchange HLS bytes over WebRTC datachannels
-                under host policy constraints.
+                <span className="text-neutral-100 font-semibold">Assist plane:</span> P2P assist can exchange HLS bytes over WebRTC data channels
+                under host policy and browser-connectivity constraints. The origin remains the bootstrap and fallback path.
               </p>
               <p>
                 <span className="text-neutral-100 font-semibold">Value plane:</span> Monero verification uses wallet-rpc sessions; additional assets
@@ -75,13 +75,13 @@ export default function WhitepaperPage() {
               <li>Broadcast page publishes a replaceable live announce event (`kind 30311`).</li>
               <li>Watch page resolves announce, builds preferred playback URL, and attempts WHEP.</li>
               <li>If WHEP is unavailable, playback fails over to HLS.</li>
-              <li>P2P assist path activates only when host mode allows and stake requirements are satisfied.</li>
+              <li>P2P assist activates only when host mode, browser connectivity, and peer availability allow it.</li>
             </ol>
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300">
               <div className="font-semibold text-neutral-100 mb-2">Host policy modes</div>
               <ul className="list-disc pl-5 space-y-1">
                 <li>
-                  <code>p2p_economy</code>: active rebroadcast set + queue thresholding; stake can gate assist role.
+                  <code>p2p_economy</code>: active peer-assist set with a broadcaster-selected queue threshold.
                 </li>
                 <li>
                   <code>host_only</code>: direct origin serving only; no rebroadcast queue incentives.
@@ -91,16 +91,15 @@ export default function WhitepaperPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-2xl font-bold">4. Economic Rails and Wallet Integration</h2>
+            <h2 className="text-2xl font-bold">4. Payment Rails and Wallet Integration</h2>
             <ul className="list-disc pl-5 text-sm text-neutral-300 space-y-2">
-              <li>Tip/session APIs support verified Monero transfer detection and confirmation status.</li>
-              <li>Stake/session APIs support required stake checks and refund settlement route.</li>
-              <li>Escrow-v3 APIs provide multisig coordination steps for participant/coordinator exchange.</li>
-              <li>Additional assets (ETH/BTC/USDT/XRP/USDC/SOL/TRX/DOGE/BCH/ADA/PEPE) are payout methods with URI helpers.</li>
+              <li>dstream.stream publicly exposes verified Monero, Bitcoin Lightning, and Bitcoin on-chain payments.</li>
+              <li>Payment intents bind recipient, amount, network, purpose, expiry, and one-time settlement reference before protected access is granted.</li>
+              <li>Additional verifier adapters cover ETH, USDT, XRP, USDC, SOL, TRX, DOGE, BCH, ADA, and PEPE when an operator configures and exposes them.</li>
               <li>Wallet preferences are configured per asset in Settings and surfaced on watch page.</li>
             </ul>
             <p className="text-sm text-amber-300/90">
-              Trust boundary: this implementation coordinates escrow policy in app/origin services; it is not a trustless generalized on-chain VM.
+              Availability is deployment-specific. An adapter in the repository is not an active rail until its verifier reports ready. Ledger privacy also varies by asset.
             </p>
           </section>
 
@@ -119,7 +118,7 @@ export default function WhitepaperPage() {
             <h2 className="text-2xl font-bold">6. API and Operations Profile</h2>
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-5 text-sm text-neutral-300 space-y-2">
               <p>
-                Runtime includes WHIP/WHEP/HLS proxy routes, payment catalog/validation endpoints, Monero verified tip/stake/escrow APIs,
+                Runtime includes WHIP/WHEP/HLS proxy routes, payment catalog, intent and validation endpoints, Monero verified tip APIs,
                 and operator scripts for hardening, runtime smoke checks, backup, and health monitoring.
               </p>
               <p>

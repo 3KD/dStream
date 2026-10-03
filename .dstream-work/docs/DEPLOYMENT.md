@@ -1,4 +1,6 @@
-# Deployment Notes (v1)
+# Deployment Guide
+
+Last reconciled: 2026-10-03
 
 dStream is designed as a decentralized *control plane* (Nostr) with a replaceable *media plane* (origin seed + optional peer assist).
 
@@ -285,8 +287,8 @@ This validates production-critical config, including:
 `infra/prod/deploy.sh` runs `harden:deploy` automatically before syncing/building. Use the repo-root script with `DSTREAM_DEPLOY_PROJECT_DIR` set explicitly when you have multiple local dStream checkouts:
 
 ```bash
-cd /Users/erik/Projects/JRNY
-DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
+cd /path/to/dStream
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh root@your-host
 ```
 
 Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that sets that project dir automatically before delegating to the repo-root script. Use `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1` only for temporary non-production deploys.

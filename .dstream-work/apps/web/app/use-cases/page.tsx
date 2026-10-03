@@ -12,7 +12,7 @@ const cases = [
     title: "Independent Journalists",
     subtitle: "Censorship-Resistant",
     detail:
-      "Broadcast on the Nostr network where your identity and content cannot be deplatformed, silenced, or restricted by corporate policies."
+      "Keep a portable Nostr identity and publish through multiple relays and independently operated media nodes instead of depending on one platform account."
   },
   {
     icon: Mic,
@@ -21,9 +21,9 @@ const cases = [
     chipClass: "bg-purple-900/30 text-purple-300",
     watermarkClass: "text-purple-500",
     title: "Performers and Creators",
-    subtitle: "100% Payout Ownership",
+    subtitle: "Creator-Controlled Payouts",
     detail:
-      "Keep everything you earn. Monetization is completely decentralized with direct crypto payments—no middlemen holding your funds or taking a cut."
+      "Publish creator-controlled wallet destinations and receive supported cryptocurrency payments without dStream taking custody of your funds."
   },
   {
     icon: Radio,
@@ -32,20 +32,20 @@ const cases = [
     chipClass: "bg-emerald-900/30 text-emerald-300",
     watermarkClass: "text-emerald-500",
     title: "Live Community Hosts",
-    subtitle: "Viewer-Powered Fidelity",
+    subtitle: "Viewer-Assisted Delivery",
     detail:
-      "As your audience grows, your stream quality gets stronger! dStream uses P2P networks so viewers help scale and boost stream fidelity for everyone."
+      "When compatible peers connect, viewers can exchange requested HLS bytes to reduce repeated origin delivery while preserving origin fallback."
   },
   {
     icon: Coins,
-    label: "Incentives",
+    label: "Payments",
     borderHover: "hover:border-amber-500/40",
     chipClass: "bg-amber-900/30 text-amber-300",
     watermarkClass: "text-amber-500",
-    title: "Incentive-Driven Networks",
-    subtitle: "Assist economics",
+    title: "Direct Payment Rails",
+    subtitle: "Noncustodial settlement",
     detail:
-      "Use host policy modes, rebroadcast queue thresholds, and stake-aware assist roles to align bandwidth contribution incentives."
+      "Offer Monero, Bitcoin Lightning, or Bitcoin on-chain payments on dstream.stream, with additional verifier adapters available to configured node operators."
   },
   {
     icon: Globe,
@@ -104,7 +104,7 @@ export default function UseCasesPage() {
           <p className="text-xs uppercase tracking-wider text-neutral-500">Use Cases</p>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight">Who dStream Benefits and How!</h1>
           <p className="text-neutral-300 max-w-3xl mx-auto">
-            dStream is built for streamers and viewers who want a censorship-resistant network, scalable P2P video fidelity, and completely decentralized monetization without middlemen taking a cut.
+            dStream is built for streamers and viewers who want portable Nostr identity, replaceable media infrastructure, optional peer-assisted delivery, and direct noncustodial payments.
           </p>
         </header>
 

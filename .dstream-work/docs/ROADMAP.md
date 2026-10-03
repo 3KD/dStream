@@ -1,5 +1,7 @@
 # dStream Rebuild — Roadmap to Completion (v2)
 
+> **Historical planning record:** This rebuild roadmap records completed and superseded phases. It is not a current backlog or launch-status document. See `../../FEATURES.md` and `STATUS.md`.
+
 This roadmap is designed to reach “completed” as defined in `docs/FEATURE_FREEZE.md`.
 
 For a requirement-by-requirement map (what → why → where → proof → phase), see `docs/TRACEABILITY_MATRIX.md`.

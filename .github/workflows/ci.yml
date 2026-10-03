@@ -1,22 +1,30 @@
-name: CI
+name: Canonical Runtime CI
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: .dstream-work
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: .dstream-work/package-lock.json
 
       - name: Install
         run: npm ci
@@ -24,13 +32,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint
-        run: npm run lint || true
-
       - name: Tests
         run: npm test
 
-      - name: Mobile Checks
+      - name: Lint
+        run: npm run lint
+
+      - name: Mobile shell checks
         run: npm run check:mobile
 
       - name: Generate ephemeral CI credentials
@@ -44,7 +52,7 @@ jobs:
             echo "TURN_SHARED_SECRET=$(openssl rand -hex 32)"
           } >> "$GITHUB_ENV"
 
-      - name: Hardening Preflight
+      - name: Hardening preflight
         env:
           NEXT_PUBLIC_NOSTR_RELAYS: wss://relay.damus.io,wss://nos.lol
           NEXT_PUBLIC_WEBRTC_STUN_SERVERS: stun:stun.cloudflare.com:3478

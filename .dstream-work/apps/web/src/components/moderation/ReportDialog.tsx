@@ -71,7 +71,7 @@ export function ReportDialog({
             </div>
             <h3 className="text-lg font-bold text-neutral-100">Report Submitted</h3>
             <p className="text-sm text-neutral-400 max-w-sm mx-auto">
-              Your report has been securely transmitted. Decentralized moderation operators and the stream owner have been notified. We have hidden this user&apos;s message from your view.
+              Your signed report was published to the configured relays. This message is now hidden from your local view; relay delivery and operator review are not guaranteed.
             </p>
             <div className="pt-4">
                <button

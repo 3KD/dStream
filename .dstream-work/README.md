@@ -1,200 +1,106 @@
-# dStream (Rebuild)
+# dStream Runtime
 
-This repository is a clean rebuild scaffold based on the ADRs in `docs/adr/`.
+This directory contains the canonical application deployed to [dstream.stream](https://dstream.stream). The repository root also contains a legacy implementation; do not use that tree for current development or deployment.
 
-## Quick start
+## Local Development
+
+Requirements: Node.js 22, npm, Docker, and Docker Compose.
 
 ```bash
-npm install
+npm ci
+cp .env.example .env.local
 npm run infra:up:test
 npm run dev
 ```
 
-Copy `.env.example` to `.env.local` if you want to override relays/origin/ICE servers.
-Set support addresses (`NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`, `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`, optional `NEXT_PUBLIC_SUPPORT_BTC_LIGHTNING`, `NEXT_PUBLIC_SUPPORT_ETH_ADDRESS`, `NEXT_PUBLIC_SUPPORT_TRX_ADDRESS`, `NEXT_PUBLIC_SUPPORT_SOL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_XRP_ADDRESS`, `NEXT_PUBLIC_SUPPORT_DOGE_ADDRESS`, `NEXT_PUBLIC_SUPPORT_BCH_ADDRESS`, and `NEXT_PUBLIC_SUPPORT_ADA_ADDRESS`) to expose platform donation rails on `/donate`.
+Open `http://localhost:5656`. The local relay and MediaMTX services use the ports documented in [../CONFIG.md](../CONFIG.md).
 
-All advertised payment assets now have native noncustodial settlement adapters: Monero wallet RPC, NIP-57 Lightning receipts, BTC/DOGE/BCH UTXO RPC, ETH/ERC-20 logs, TRX/TRC-20 calls, SOL/SPL balances, finalized XRP Ledger payments, and Cardano UTXOs. Payment intents bind a buyer, recipient, amount, network, scope, expiry, and one-time settlement reference before paid access is granted. Configure the server-only RPC/indexer variables from `.env.example`; an unset verifier fails closed and is reported as inactive by `/api/payments/capabilities`.
-
-## Docker (all-in-one)
+For the all-in-one Compose stack:
 
 ```bash
-# Recommended (also generates a Firefox-friendly MediaMTX config)
 npm run stack:up
-
-# Real wallet stack (regtest monerod + wallet-rpc sender/receiver + wallet init)
-npm run stack:up:real-wallet
-
-# Optional: plain compose (Safari/Chrome typically ok; Firefox may fail ICE without a non-loopback host)
-docker compose up -d --build
-
-# Optional adaptive ladder on a dedicated encoding-capable host
-COMPOSE_PROFILES=transcoding docker compose up -d --build transcoder
 ```
 
-Web: `http://localhost:5656` (or set `DSTREAM_WEB_PORT`)
+The optional transcoder profile requires a host sized for video encoding and is disabled by default.
 
-## Sanity checks
+## Current Runtime
+
+- `apps/web`: Next.js UI and server API routes.
+- `packages/protocol`: canonical Nostr event builders, parsers, and tests.
+- `apps/mobile`: Capacitor shell for a user-selected dStream node.
+- `apps/desktop`: Electron shell.
+- `services/manifest`: optional segment integrity service.
+- `services/transcoder`: optional rendition ladder.
+- `infra`: MediaMTX, Nostr relay, TURN, and deployment configuration.
+
+The media path is browser WHIP or external encoder RTMP/WHIP ingest, WHEP playback when available, and HLS fallback. Optional viewer assist exchanges requested HLS bytes over WebRTC data channels; the origin remains the bootstrap and fallback path.
+
+## Configuration
+
+Use `.env.example` for local development and `.env.production.example` as a production template. Never commit populated environment files.
+
+Important boundaries:
+
+- `NEXT_PUBLIC_*` values are visible in browser JavaScript.
+- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` may contain public STUN URLs only.
+- TURN credentials are generated from server-only `TURN_SHARED_SECRET` and expire.
+- Provider API keys, RPC credentials, wallet passwords, and session secrets remain server-only.
+- Public payment assets and backend verifier readiness are separate settings.
+
+See [../CONFIG.md](../CONFIG.md) for the maintained variable reference.
+
+## Payments
+
+The runtime implements verified adapters for Monero, Bitcoin Lightning, UTXO chains, EVM chains, TRON, Solana, XRP Ledger, and Cardano. An adapter is inactive until its required RPC/indexer is configured. A public deployment should expose only the assets it deliberately supports.
+
+dstream.stream currently requires these production capabilities:
+
+- `xmr:xmr`
+- `btc:lightning`
+- `btc:utxo`
+
+Inspect `/api/payments/capabilities` and `/api/payments/health` for runtime state. Do not infer active support from source code alone.
+
+## Checks
 
 ```bash
-npm run check
+npm run typecheck
+npm test
+npm run lint
+npm run build
 ```
 
-## Smoke test (automated)
+Focused checks are available for streaming, payments, playback access, mobile shells, layouts, wallet interoperability, and production readiness. Run the smallest relevant set during development, then the full checks before release.
 
-Works with either:
-
-- Dev mode: `npm run infra:up:test` + `npm run dev`
-- Docker mode: `docker compose up --build` (enables dev tools by default via `DSTREAM_DEVTOOLS=1`)
+Common production checks:
 
 ```bash
-npm run smoke:e2e
-npm run smoke:e2e:firefox
-npm run smoke:escrow
-npm run smoke:escrow:v3
-npm run smoke:integrity
-npm run smoke:integrity:firefox
-npm run smoke:wallet:cap
-npm run smoke:wallet:real
-ENV_FILE=.env.production.example npm run harden:deploy
-EXTERNAL_BASE_URL=http://127.0.0.1:5656 npm run smoke:external:readiness
+npm run harden:deploy -- .env.production
+EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
+EXTERNAL_BASE_URL=https://your-domain npm run smoke:prod:runtime
+EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
 ```
-
-This opens `/dev/e2e` and polls `/api/dev/log` for pass/fail markers (WHIP → HLS → announce → chat tx/rx → watch playback probe → presence → P2P).
-
-### Wallet interoperability smoke
-
-Use this to verify that tip detection works with wallets outside the local mock stack.
-
-```bash
-# Manual mode: creates a unique tip subaddress and polls for detection.
-npm run smoke:wallet
-
-# Matrix mode: runs Cake -> Feather -> CLI sequentially.
-npm run smoke:wallet:matrix
-
-# Wallet-specific shortcuts.
-npm run smoke:wallet:cake
-npm run smoke:wallet:feather
-npm run smoke:wallet:cli
-
-# Capability certification mode: checks wallet RPC method support profiles.
-npm run smoke:wallet:cap
-
-# Real-wallet autonomous mode (no manual wallet action).
-npm run smoke:wallet:real
-
-# Escrow-v3 multisig coordination flow (session + participant/coordinator actions).
-npm run smoke:escrow:v3
-
-# Optional dev shortcut (only when /api/dev/xmr/inject is enabled):
-AUTO_INJECT=1 npm run smoke:wallet
-AUTO_INJECT=1 npm run smoke:wallet:matrix
-```
-
-See `docs/WALLET_CERTIFICATION.md` for the Cake/Feather/CLI test protocol and evidence template.
-
-Useful options:
-
-- `BASE_URL` (default `http://127.0.0.1:5656`)
-- `REQUIRE_CONFIRMED=0` to accept unconfirmed detection
-- `EXPECT_MIN_ATOMIC=<digits>` to enforce a minimum observed amount
-- `TIMEOUT_SECS=<seconds>` to extend polling window
-- `REQUIRE_PROFILE=tip_v1|stake_v2|escrow_v3_multisig|none` for capability smoke
-- `CAP_PROBE_MODE=active|passive` for capability smoke (`active` default, `passive` for strict real-wallet daemons)
-- `ESCROW_ENABLE_MULTISIG_CLI=0|1` for `smoke:escrow:v3` real-wallet mode (`1` default; auto-enables multisig experimental flag)
-- `ESCROW_MONERO_CLI_IMAGE=<image>` to override the helper image used for `monero-wallet-cli` (default `dstream-work-web`)
-- `ESCROW_WALLET_VOLUME=<volume>` to override wallet volume mount used by `smoke:escrow:v3` (default `dstream-work_dstream_xmr_wallets`)
-
-### Integrity smoke
-
-```bash
-npm run smoke:integrity
-npm run smoke:integrity:firefox
-```
-
-This validates manifest verification + tamper signaling markers from `/dev/e2e`.
-
-## Dev-only pages
-
-- `/dev/e2e`: end-to-end runner used by `npm run smoke:e2e` (available in `npm run dev` or when `DSTREAM_DEVTOOLS=1`)
-- `/dev/visuals`: landing-page visuals kit (cube + word animation). See `docs/VISUALS.md`.
-
-## Key app pages
-
-- `/broadcast`, `/watch/:npub/:streamId`, `/browse`
-- `/settings` (social + payment defaults + identity key management)
-- `/profile` and `/profile/:npub` (kind `0` publish/view)
-- `/inbox`, `/guilds`, `/moderation`, `/analytics`
-- `/whitepaper`, `/docs`, `/use-cases`, `/donate`
 
 ## Deployment
 
-See `docs/DEPLOYMENT.md`, `.env.example`, and `.env.production.example`.
-
-Canonical production deploy:
+From this directory:
 
 ```bash
-cd /Users/erik/Projects/JRNY
-DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work ./infra/prod/deploy.sh root@your-host
+./infra/prod/deploy.sh user@your-host
 ```
 
-If you are already inside `.dstream-work`, `./infra/prod/deploy.sh root@your-host` is a thin wrapper that pins `DSTREAM_DEPLOY_PROJECT_DIR` to this workspace before calling the repo-root script.
-
-When local Docker is available, the deploy script now prebuilds and streams the `web`, `manifest`, and `transcoder` images from your machine so small production hosts do not spend RAM and disk on app builds. Set `DSTREAM_DEPLOY_LOCAL_BUILD_SERVICES=none` only if you intentionally want remote app builds.
-
-Before production deploys, run:
+From the repository root:
 
 ```bash
-EXTERNAL_BASE_URL=https://stream.example.com SSH_TARGET=root@your-host npm run gate:prod -- .env.production
+DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work" ./infra/prod/deploy.sh user@your-host
 ```
 
-See `docs/HARDENING.md` for the full production gate checklist.
-See `docs/PRODUCTION_FINALIZATION.md` for the final close-out checklist.
-See `docs/OPS_RUNBOOK.md` for SSH-key hardening, healthcheck cron, and backup/restore flows.
-See `docs/MOBILE_STORE_DEPLOY.md` for App Store / Play Store release automation.
+A deploy is not complete until the public routes, runtime health, asset version, and changed user-visible behavior have been verified. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/HARDENING.md](docs/HARDENING.md), and [docs/OPS_RUNBOOK.md](docs/OPS_RUNBOOK.md).
 
-## Structure
+## Documentation
 
-- `apps/web`: Next.js app (MVP UI)
-- `packages/protocol`: canonical Nostr event encode/decode + validation
-- `infra/stream`: local MediaMTX stack for WHIP/HLS development
-
-## Identifiers (important)
-
-- **User-facing pubkeys:** `npub…` (NIP-19 bech32). This is the same public key as hex, just encoded with a checksum for copy/paste safety.
-- **Internal pubkeys:** 64-char lower-case hex (canonical for Nostr event fields + tag scoping)
-- **Watch route:** `/watch/:npub/:streamId` (route also accepts hex for compatibility)
-- **Media origin path (WHIP/HLS):** derived from stream identity (ADR 0014)
-  - `originStreamId = "${pubkeyHex}--${streamId}"`
-  - WHIP: `/api/whip/${originStreamId}/whip`
-  - HLS: `/api/hls/${originStreamId}/index.m3u8`
-  - `streamId` must be URL-safe: `/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/`
-
-## Broadcast metadata (30311)
-
-`/broadcast` can publish optional caption and rendition metadata in the stream announce event:
-
-- Caption tag: `["caption", "<lang>", "<label>", "<url>", "<default-flag>"]`
-- Rendition tag: `["rendition", "<id>", "<url>", "<bandwidth>", "<width>", "<height>", "<codecs>"]`
-- Host policy tags:
-  - `["host_mode", "p2p_economy" | "host_only"]`
-  - `["rebroadcast_threshold", "<positive-int>"]` (active-set size `T` for FCFS rebroadcast queue)
-- Custom Emotes (NIP-30):
-  - `["emoji", "<shortcode>", "<url>", "<hash>", "<tier>"]` published as Kind 10030 (Tier can be `free` or `subscriber`)
-
-Playback behavior in `/watch/:npub/:streamId`:
-
-- If 2+ rendition tags are present, watch generates a synthetic HLS master via `/api/hls-master` and enables ladder selection in `Player`.
-- If caption tags are present, watch injects subtitle tracks into the video element (native caption controls).
-- If host mode is `host_only`, watch disables peer assist and surfaces host-policy reason in UI.
-- If host mode is `p2p_economy`, watch applies FCFS queueing from live presence and targets active-set peers up to threshold `T`.
-- Root Docker Compose provides an opt-in `transcoding` profile for derived rendition streams. Keep it disabled on small origin hosts; enable it only on a dedicated encoding-capable host.
-
-Stake refund anti-abuse policy:
-
-- Refund receipts must match session scope (`sessionId`, viewer pubkey, stream scope) and pass signature checks.
-- Duplicate or stale receipts are rejected; per-receipt served-bytes is capped.
-- Refund session must age past a minimum window before settlement.
-- Refund responses include `creditPercentBps` against a configurable full-credit served-bytes target.
-
-Home (`/`) and browse (`/browse`) stream cards use the announced poster when it loads, then capture one frame from the announced media URL when the poster is missing or fails.
+- [Public overview](../README.md)
+- [Feature status](../FEATURES.md)
+- [Protocol reference](../PROTOCOL.md)
+- [Architecture](../ARCHITECTURE.md)
+- [Runtime documentation index](docs/README.md)

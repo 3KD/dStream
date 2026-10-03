@@ -1,5 +1,7 @@
 # JRNY → dStream Parity Matrix (Full Vision Contract)
 
+> **Historical migration record:** This comparison explains the move away from the JRNY-era implementation. It is not the current feature or protocol source of truth. See `../../FEATURES.md` and `../../PROTOCOL.md`.
+
 Last updated: 2026-02-12
 
 This document exists to prevent “scope amnesia”.

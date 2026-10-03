@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ExternalLink, Shield, ShieldAlert, Key, Video, DollarSign, Signal } from "lucide-react";
+import { Key, Network, Video, WalletCards } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 
 export default function CreatorManualPage() {
@@ -8,10 +8,10 @@ export default function CreatorManualPage() {
       <SimpleHeader />
       <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
         <header className="space-y-4 text-center border-b border-neutral-800 pb-8">
-          <p className="text-xs uppercase tracking-wider text-neutral-500">Mastering dStream</p>
+          <p className="text-xs uppercase tracking-wider text-neutral-500">Creator Reference</p>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight">Creator Manual</h1>
           <p className="text-neutral-300 max-w-2xl mx-auto leading-relaxed">
-            dStream is not a traditional platform. You are not broadcasting to a central server that artificially limits your reach or skims a percentage of your revenue. You are launching a decentralized node.
+            Set up your identity, connect an encoder, publish a discoverable stream, and receive payments without giving dStream custody of your keys or funds.
           </p>
         </header>
 
@@ -20,106 +20,84 @@ export default function CreatorManualPage() {
             <div className="p-2 bg-purple-900/30 rounded-lg text-purple-400">
               <Key className="w-5 h-5" />
             </div>
-            <h2 className="text-2xl font-bold">1. Establishing Independence: Your Nostr Identity</h2>
+            <h2 className="text-2xl font-bold">1. Connect Your Nostr Identity</h2>
           </div>
-          <p className="text-neutral-300 leading-relaxed">
-            dStream relies on <strong>Nostr</strong> to route your Chat and authenticate your identity. You do not log in with a traditional email and password.
+          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
+            <li>Open <strong>Settings</strong> and connect a NIP-07 extension, import an existing key, or generate a local identity.</li>
+            <li>Back up the private key in a secure location. dStream cannot reset or recover it.</li>
+            <li>Never paste a private key or wallet seed into chat, a support form, a public environment variable, or a stream setting.</li>
+            <li>Complete your display name, image, and bio, then publish the profile to your configured Nostr relays.</li>
+          </ol>
+          <p className="text-sm text-neutral-400">
+            Your key is portable across compatible Nostr clients and relays. Individual relays can still reject or remove events, so configure more than one relay.
           </p>
-          
-          <div className="space-y-4 mt-4">
-            <h3 className="text-lg font-semibold text-neutral-200">Creating your Keys</h3>
-            <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
-              <li>Navigate to your <strong>Settings</strong> icon.</li>
-              <li>Select <strong>Generate Identity</strong>. This will produce a mathematical keypair.</li>
-              <li className="text-amber-300 font-semibold">
-                CRITICAL: Backup your Private Key. This is the only way to prove you own your account, your community reputation, and your channel handle. dStream does not have a &ldquo;Forgot Password&rdquo; button because the network is entirely decentralized.
-              </li>
-            </ol>
-            
-            <h3 className="text-lg font-semibold text-neutral-200 mt-6">Protecting Your Community</h3>
-            <p className="text-sm text-neutral-300">
-              Because there is no central corporation to ban bad actors, moderation is localized to your channel:
-            </p>
-            <ul className="list-disc pl-5 text-sm text-neutral-300 space-y-2">
-              <li>Click on a viewer&apos;s profile in Chat and click <strong>Mute</strong> to shield them from your view.</li>
-              <li>Click <strong>Ban</strong> to mathematically discard their messages from the relay entirely so no other viewers see them.</li>
-              <li>Use the <code>/w [Npub]</code> command in chat to securely decrypt and whisper private messages to moderators or trusted community members.</li>
-            </ul>
-          </div>
         </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-900/30 rounded-lg text-blue-400">
-              <Signal className="w-5 h-5" />
+              <Video className="w-5 h-5" />
             </div>
-            <h2 className="text-2xl font-bold">2. Going Live: The Broadcast Studio</h2>
+            <h2 className="text-2xl font-bold">2. Go Live</h2>
           </div>
-          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2 mt-4">
-            <li>Navigate to the <strong>Broadcast</strong> tab.</li>
-            <li>You have native access to push <strong>WebRTC</strong> directly out from your browser using your Macbook/PC microphone and webcam inputs.</li>
-            <li>Once active, the system automatically packages a secondary <strong>HLS (HTTP Live Streaming)</strong> index stream in the background. If a viewer connects on a poor cellular connection and cannot assist the P2P swarm via WebRTC, they will seamlessly fallback to your HLS origin track to ensure constant playback without buffering.</li>
+          <h3 className="text-lg font-semibold text-neutral-200">Browser Studio</h3>
+          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
+            <li>Open <strong>Broadcast</strong>, choose the browser source, and allow the camera, microphone, or screen permissions you need.</li>
+            <li>Confirm the preview, title, visibility, topics, chat policy, and payout methods.</li>
+            <li>Start the broadcast and wait for Media Signal and Announce status to confirm before sharing the watch link.</li>
+            <li>Use End Stream when finished so the latest kind 30311 announcement is published with <code>status=ended</code>.</li>
           </ol>
-          <div className="mt-4 p-4 rounded-xl border border-neutral-800 bg-neutral-950/50">
-            <h4 className="text-sm font-semibold text-neutral-200 mb-2">OBS Integration</h4>
-            <p className="text-xs text-neutral-400">
-              Starting in OBS v30, they natively support <strong>WHIP</strong>. You can completely bypass the browser studio by pasting your stream&apos;s WHIP Proxy Endpoint into your OBS <em>Server</em> field, and streaming straight to the swarm.
-            </p>
-          </div>
+          <h3 className="text-lg font-semibold text-neutral-200">OBS or Another Encoder</h3>
+          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
+            <li>Select the OBS / Encoder mode in Broadcast Studio.</li>
+            <li>Copy the displayed server and stream key into a Custom RTMP service in OBS. Compatible clients may use the displayed WHIP endpoint instead.</li>
+            <li>Start the encoder and wait for dStream to detect the media signal.</li>
+            <li>Keep Broadcast Studio open long enough to publish and refresh the public live announcement.</li>
+          </ol>
         </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-900/30 rounded-lg text-emerald-400">
-              <Video className="w-5 h-5" />
+              <Network className="w-5 h-5" />
             </div>
-            <h2 className="text-2xl font-bold">3. The Video Library: Uploads & Monetization</h2>
+            <h2 className="text-2xl font-bold">3. Discovery and Delivery</h2>
           </div>
-          <p className="text-neutral-300 text-sm leading-relaxed">
-            dStream acts as a full YouTube competitor. You do not have to just stream live; you can natively upload and distribute traditional Videos and packaged content.
-          </p>
-
-          <div className="space-y-4 mt-4">
-            <h3 className="text-lg font-semibold text-neutral-200">Using the Operator Console</h3>
-            <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
-              <li>Navigate to <strong>Settings -&gt; Operator Console -&gt; Video Library</strong>.</li>
-              <li>From the ingest tab, you can drag and drop raw MP4s onto your broadcast node.</li>
-              <li>You can curate Playlists, tag your videos natively for the global index, and arrange the playback sequences.</li>
-            </ol>
-
-            <h3 className="text-lg font-semibold text-neutral-200 mt-6">Activating the Paywall (Private Pricing Gaps)</h3>
-            <p className="text-sm text-neutral-300">You can directly monetize your raw uploads.</p>
-            <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
-              <li>In your <strong>Video Library</strong>, select a batch of files and mark them as <strong>Private / Published</strong>.</li>
-              <li>The UI will instantly warn you of a <em>Private Pricing Gap</em>.</li>
-              <li>Click the alert to automatically attach a <strong>Pricing Package</strong>. You can require viewers to cryptographically tip an exact amount of Monero (XMR) before the network hands them the decryption keys to unlock your video.</li>
-            </ol>
-          </div>
+          <ul className="list-disc pl-5 text-sm text-neutral-300 space-y-2">
+            <li>Public discovery comes from signed kind 30311 announcements on the configured Nostr relays.</li>
+            <li>The direct watch route is identified by your public key and stream ID, not by a central account record.</li>
+            <li>The media origin ingests and seeds every live stream. WHEP is used where viable and HLS provides compatibility and recovery.</li>
+            <li>Optional viewer assist can exchange requested HLS bytes over WebRTC. It can reduce origin load, but it does not increase the resolution or bitrate sent by your encoder.</li>
+            <li>If a direct watch link works but Browse does not, inspect relay acceptance and republish the current announcement before changing the media pipeline.</li>
+          </ul>
         </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-900/30 rounded-lg text-orange-400">
-              <DollarSign className="w-5 h-5" />
+              <WalletCards className="w-5 h-5" />
             </div>
-            <h2 className="text-2xl font-bold">4. Unstoppable Economics: Monero Tipping</h2>
+            <h2 className="text-2xl font-bold">4. Receive Payments</h2>
           </div>
-          <p className="text-neutral-300 text-sm leading-relaxed mt-2">
-            With dStream, there is no banking middle-man tracking your community&apos;s generosity.
-          </p>
-          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2 mt-4">
-            <li>Ensure your node&apos;s <code>xmr-wallet-rpc</code> is securely firing on your droplet, and your wallet address is bound in Settings.</li>
-            <li>Viewers who click the orange <strong>Drop Tip</strong> button in your live chat will pop open a Monero QR Code modal.</li>
-            <li>The server securely maps an ephemeral Subaddress physically to your active stream.</li>
-            <li>When a user scans the QR code and submits the drop, the network will ping the daemon. Once the mempool detects 0-confirmations, the UI shifts to <em>Pending</em>.</li>
-            <li>Complete verification explodes into a visual pop-up inside your chat for the entire audience to see. 100% of the value routes directly to your cold storage layer without a single central fee.</li>
+          <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2">
+            <li>Add creator-controlled payout destinations in <strong>Settings - Wallet Integrations</strong>.</li>
+            <li>Apply the payment methods you want to advertise from Broadcast Studio. Do not advertise an address you have not verified in its wallet.</li>
+            <li>dstream.stream currently exposes Monero, Bitcoin Lightning, and Bitcoin on-chain as verified public rails.</li>
+            <li>Viewers open a wallet action from the watch page. dStream does not hold the viewer&apos;s or creator&apos;s private keys.</li>
+            <li>Node operators, not ordinary creators, configure wallet RPC, chain RPC, indexer, and provider credentials on the server.</li>
           </ol>
+          <p className="text-sm text-neutral-400">
+            Privacy depends on the rail. Monero is private by default; Bitcoin and most other public ledgers expose transaction data.
+          </p>
         </section>
 
-        <div className="flex justify-center pt-8 border-t border-neutral-800">
-          <p className="text-lg font-mono text-neutral-400">Welcome to Uncensorable Media.</p>
-        </div>
-
+        <section className="border-t border-neutral-800 pt-8">
+          <div className="flex flex-wrap justify-center gap-3 text-sm">
+            <Link href="/broadcast" className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-500">Open Broadcast Studio</Link>
+            <Link href="/settings#wallet-integrations" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">Wallet Integrations</Link>
+            <Link href="/docs" className="px-4 py-2 rounded-full bg-neutral-800 border border-neutral-700 hover:border-neutral-500">Technical Docs</Link>
+          </div>
+        </section>
       </main>
     </div>
   );

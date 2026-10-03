@@ -16,7 +16,7 @@ const quickStart = [
     body: "Open `/broadcast`, start preview, publish over WHIP, and confirm announce relay acceptance."
   },
   {
-    title: "Verify Economics",
+    title: "Verify Payments",
     body: "Check rail status in Settings, execute a wallet payment, and verify its durable payment intent before granting paid access."
   }
 ];
@@ -32,7 +32,7 @@ const runtimePlanes = [
   },
   {
     name: "Assist Transport",
-    details: "WebRTC datachannel assist can offload HLS delivery when host policy and stake conditions allow."
+    details: "WebRTC data-channel assist can exchange requested HLS bytes when host policy and browser connectivity allow. The origin remains the bootstrap and fallback path."
   },
   {
     name: "Payments",
@@ -40,27 +40,18 @@ const runtimePlanes = [
   }
 ];
 
-const protocolLandscape = [
-  {
-    title: "dStream",
-    notes:
-      "Nostr identity/discovery + WHIP/WHEP/HLS media stack + optional WebRTC assist queue (`host_only` vs `p2p_economy`) + intent-bound multi-rail settlement."
-  },
-  {
-    title: "zap.stream",
-    notes:
-      "NIP-53-focused Nostr client with Lightning/Zap ecosystem alignment and a host/CDN-style media path centered around HLS/RTMP workflows."
-  }
-];
-
 const eventKinds = [
   { kind: "30311", label: "Stream announce", note: "Replaceable live metadata (`d`, `title`, `streaming`, host mode, discoverability, payment methods)." },
+  { kind: "1311", label: "Public stream chat", note: "Public text scoped by the stream `a` tag. Kind 1 is read only for compatibility." },
   { kind: "30312", label: "Presence", note: "Viewer heartbeat and participation estimates." },
-  { kind: "30313", label: "Moderation / roles", note: "Relay-scoped mute/block + moderator/subscriber role updates." },
+  { kind: "8108", label: "P2P signaling", note: "WebRTC offers, answers, ICE candidates, and session control." },
+  { kind: "30313", label: "Integrity manifest", note: "Signed rendition epochs and SHA-256 media-segment metadata." },
+  { kind: "30317 / 30318", label: "Moderation / roles", note: "Stream-scoped actions and broadcaster-assigned roles." },
+  { kind: "30315 / 30319 / 30320", label: "Guilds", note: "Guild metadata, membership, and owner-assigned roles." },
   { kind: "30321", label: "Discovery moderation", note: "Operator hide/restore actions for official app discovery surfaces only." },
-  { kind: "10030", label: "Custom Emotes", note: "Visual emote mapping packs per broadcaster via emoji-picker-react integration." },
-  { kind: "1", label: "Public chat", note: "Stream-associated public text events." },
-  { kind: "4 / 20004", label: "DM / whisper", note: "Private encrypted channels for broadcaster/viewer coordination." }
+  { kind: "10030", label: "Custom Emotes", note: "Broadcaster-specific emote mappings." },
+  { kind: "1984", label: "Report", note: "Signed NIP-56-compatible abuse report." },
+  { kind: "4", label: "DM / whisper", note: "NIP-04 encrypted private messages. The older kind 20004 draft is not used." }
 ];
 
 const apiSurface = [
@@ -68,9 +59,8 @@ const apiSurface = [
   { route: "/api/whep/:originStreamId/whep", role: "WHEP playback proxy", auth: "Public read; guarded by origin policy." },
   { route: "/api/hls/:originStreamId/*", role: "HLS passthrough", auth: "Public read with edge cache compatibility." },
   { route: "/api/xmr/tip/session(/:token)", role: "Verified tip lifecycle", auth: "Signed control requests." },
-  { route: "/api/xmr/stake/session(/:token)", role: "Stake gate + refund lifecycle", auth: "Signed control requests." },
-  { route: "/api/xmr/escrow/session/*", role: "Escrow-v3 multisig orchestration", auth: "Coordinator/participant scoped actions." },
   { route: "/api/payments/catalog", role: "Asset + wallet integration metadata", auth: "Public read." },
+  { route: "/api/payments/capabilities", role: "Configured verifier status", auth: "Public read; contains no provider credentials." },
   { route: "/api/payments/intents(/:intentId)", role: "Bound payment intent lifecycle", auth: "Signed buyer proof + one-time intent secret." },
   { route: "/api/payments/intents/:intentId/verify", role: "Rail receipt or transaction verification", auth: "Intent secret; provider configuration stays server-only." },
   { route: "/api/payments/validate", role: "Server-side payment method validator", auth: "Schema guard only." },
@@ -87,18 +77,18 @@ const productionGate = [
 const troubleshooting = [
   {
     error: "HLS / WebRTC 404 Failure",
-    reason: "The streamer's media pipeline has disconnected, or the P2P swarm cannot find their raw video track.",
-    action: "Refresh the page. If the issue persists, the Creator has ended the live stream or their Node lost connection."
+    reason: "The media origin has not produced the requested path, the broadcaster stopped, or the announcement points at an unavailable source.",
+    action: "Retry once. If the path remains unavailable, the broadcaster or node operator must restore the media origin or correct the announcement."
   },
   {
     error: "WebRTC Assist Latency",
-    reason: "Viewer's browser is attempting to pull P2P segments from other viewers but is failing network ICE checks.",
-    action: "System will automatically fallback to the central HLS node to preserve video playback."
+    reason: "The browser could not establish a peer data channel through the available ICE paths.",
+    action: "Playback continues from the stream's HLS origin when it is available; peer assist is optional."
   },
   {
     error: "Announce Relay Drop",
-    reason: "The broadcaster's video feed is actively running, but their Chat Relay disconnected from Nostr.",
-    action: "Broadcaster must trigger an 'Update Announce' on their control panel to physically reconnect their identity to the stream."
+    reason: "Media can remain active while one or more Nostr relays reject or miss the latest announcement.",
+    action: "Check relay acceptance in Broadcast Studio and republish the announcement if no configured relay has the current event."
   }
 ];
 
@@ -142,22 +132,6 @@ export default function DocsPage() {
               </article>
             ))}
           </div>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
-          <h2 className="text-2xl font-bold">Protocol Landscape</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {protocolLandscape.map((entry) => (
-              <article key={entry.title} className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4">
-                <div className="text-sm font-semibold text-neutral-100">{entry.title}</div>
-                <p className="text-sm text-neutral-300 mt-2 leading-relaxed">{entry.notes}</p>
-              </article>
-            ))}
-          </div>
-          <p className="text-xs text-neutral-500">
-            Detailed comparison notes are maintained in repository docs:
-            <code className="ml-1">docs/COMPETITIVE_DELTA.md</code>
-          </p>
         </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
@@ -306,9 +280,9 @@ export default function DocsPage() {
             Trust Boundaries
           </div>
           <ul className="list-disc pl-5 text-sm text-neutral-300 space-y-1.5">
-            <li>P2P assist reduces host load but does not remove origin bootstrap/fallback requirements.</li>
+            <li>P2P assist can reduce repeated origin delivery but does not remove origin bootstrap/fallback requirements or increase encoded quality.</li>
             <li>Wallet integration never stores private keys; key material stays in user-controlled wallet software.</li>
-            <li>Escrow-v3 is multisig workflow coordination, not a trustless smart-contract VM.</li>
+            <li>A payment adapter is not active until its server-side verifier is configured and reports ready.</li>
             <li>Canonical routing is `(pubkeyHex, streamId)`; UI keeps npub-first addressing for users.</li>
             <li>Content responsibility is node-local: independent operators are responsible for what they broadcast/relay; dStream does not control third-party content.</li>
           </ul>

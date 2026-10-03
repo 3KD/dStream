@@ -1,6 +1,6 @@
 # Production Hardening Checklist
 
-Last updated: 2026-02-13
+Last updated: 2026-10-03
 
 This checklist is the deployment gate for production-like environments.
 
@@ -46,7 +46,7 @@ The check validates:
 Deployment script gate:
 
 - `infra/prod/deploy.sh` now runs this preflight automatically before rsync/build.
-- Use the repo-root `infra/prod/deploy.sh` with `DSTREAM_DEPLOY_PROJECT_DIR=/Users/erik/Projects/JRNY/.dstream-work` when multiple local dStream checkouts exist.
+- Use the repo-root `infra/prod/deploy.sh` with `DSTREAM_DEPLOY_PROJECT_DIR="$PWD/.dstream-work"` when multiple local dStream checkouts exist.
 - Inside `.dstream-work`, `./infra/prod/deploy.sh` is a wrapper that pins the project dir to this workspace before delegating to the repo-root script.
 - deploy auto-enables the `docker-compose.real-wallet.yml` overlay when `.env.production` points wallet RPC origin at `xmr-wallet-rpc-receiver` or `xmr-wallet-rpc-sender`.
 - To bypass intentionally (for temporary/dev usage only): `DSTREAM_DEPLOY_SKIP_PREFLIGHT=1`.
@@ -110,7 +110,7 @@ If missing in production, tip/stake session signing fails fast instead of silent
 Operational hardening is now scriptable:
 
 ```bash
-cd /Users/erik/Projects/JRNY/.dstream-work
+cd /path/to/dStream/.dstream-work
 SSH_TARGET=root@your-host npm run ops:ssh:key
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream npm run ops:healthcheck
 SSH_TARGET=root@your-host DSTREAM_DEPLOY_DOMAIN=dstream.stream DSTREAM_ALERT_WEBHOOK_URL=https://hooks.example.com/... npm run ops:healthcheck:install
@@ -125,4 +125,4 @@ DSTREAM_RESTORE_FORCE=1 SSH_TARGET=root@your-host DSTREAM_REMOTE_DIR=/opt/dstrea
 
 Runbook:
 
-- `/Users/erik/Projects/JRNY/.dstream-work/docs/OPS_RUNBOOK.md`
+- `docs/OPS_RUNBOOK.md`

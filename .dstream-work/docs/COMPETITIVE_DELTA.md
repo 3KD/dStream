@@ -1,5 +1,7 @@
 # dStream vs zap.stream — Technical Delta
 
+> **Historical comparison:** This point-in-time comparison is retained for context and should not be treated as a current statement about either project.
+
 Last updated: 2026-02-19
 
 ## Scope
@@ -33,14 +35,14 @@ It is intentionally technical and implementation-oriented (not marketing copy).
 ### dStream repository evidence
 
 - Host mode + rebroadcast threshold in watch path logic:  
-  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/app/watch/[pubkey]/[streamId]/page.tsx`
+  `apps/web/app/watch/[pubkey]/[...streamId]/page.tsx`
 - Presence + queue participation model:  
-  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/src/hooks/useStreamPresence.ts`
-- Monero stake/tip/escrow API surfaces:  
-  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/app/api/xmr/`
-- Production hardening/runtime gate scripts:  
-  `/Users/erik/Projects/JRNY/.dstream-work/scripts/harden-check.mjs`  
-  `/Users/erik/Projects/JRNY/.dstream-work/scripts/gate-production.sh`
+  `apps/web/src/hooks/useStreamPresence.ts`
+- Monero payment API surfaces:
+  `apps/web/app/api/xmr/`
+- Production hardening/runtime gate scripts:
+  `scripts/harden-check.mjs`
+  `scripts/gate-production.sh`
 
 ## Feature Delta Matrix
 
@@ -67,4 +69,3 @@ It is intentionally technical and implementation-oriented (not marketing copy).
 
 - zap.stream evolves quickly; conclusions are “as inspected” on 2026-02-19.
 - This matrix compares surfaced behavior and repository evidence, not private infrastructure details.
-

@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This folder contains Architecture Decision Records for the next iteration of the project (the “rebuild” repo).
+This folder contains architecture decisions for the canonical `.dstream-work` runtime. ADRs record context and decisions at a point in time; `../../../PROTOCOL.md`, `../../../FEATURES.md`, and tested source code define current public behavior.
 
 ## Conventions
 
@@ -13,4 +13,3 @@ This folder contains Architecture Decision Records for the next iteration of the
 - **Proposed**: Under discussion
 - **Accepted**: Agreed and in effect
 - **Deprecated**: No longer applies (superseded by a newer ADR)
-
