@@ -149,6 +149,10 @@ function isPrivateIpv4Host(host) {
   if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
   if (octets[0] === 169 && octets[1] === 254) return true;
   if (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) return true;
+  if (octets[0] === 192 && octets[1] === 0 && octets[2] === 2) return true;
+  if (octets[0] === 198 && octets[1] === 51 && octets[2] === 100) return true;
+  if (octets[0] === 203 && octets[1] === 0 && octets[2] === 113) return true;
+  if (octets[0] === 0 || octets[0] >= 224) return true;
   return false;
 }
 
@@ -219,34 +223,61 @@ function checkProdRules(options = {}) {
     }
   }
 
-  const iceRaw = readEnv("NEXT_PUBLIC_WEBRTC_ICE_SERVERS");
-  const iceServers = parseIceServerUrls(iceRaw);
-  if (iceServers.length === 0) {
-    errors.push("NEXT_PUBLIC_WEBRTC_ICE_SERVERS must include at least one STUN/TURN server in production.");
+  const legacyIceRaw = readEnv("NEXT_PUBLIC_WEBRTC_ICE_SERVERS").trim();
+  if (legacyIceRaw) {
+    errors.push("NEXT_PUBLIC_WEBRTC_ICE_SERVERS is retired because it can expose permanent TURN credentials; use NEXT_PUBLIC_WEBRTC_STUN_SERVERS and DSTREAM_TURN_URLS.");
+  }
+
+  const stunRaw = readEnv("NEXT_PUBLIC_WEBRTC_STUN_SERVERS");
+  const stunServers = parseIceServerUrls(stunRaw);
+  if (stunServers.length === 0) {
+    errors.push("NEXT_PUBLIC_WEBRTC_STUN_SERVERS must include at least one STUN server in production.");
   } else {
-    const invalidIce = iceServers.filter((value) => !/^(stun:|turn:|turns:)/i.test(value));
-    if (invalidIce.length > 0) warnings.push(`Unexpected ICE server format: ${invalidIce.join(", ")}`);
-    const hasTurn = iceServers.some((value) => /^(turn:|turns:)/i.test(value));
-    if (!hasTurn) errors.push("At least one TURN server is required in NEXT_PUBLIC_WEBRTC_ICE_SERVERS for production.");
+    const invalidStun = stunServers.filter((value) => !/^stun:/i.test(value));
+    if (invalidStun.length > 0) errors.push(`NEXT_PUBLIC_WEBRTC_STUN_SERVERS accepts STUN URLs only: ${invalidStun.join(", ")}`);
+    if (/"?(?:username|credential)"?\s*:/i.test(String(stunRaw || ""))) {
+      errors.push("NEXT_PUBLIC_WEBRTC_STUN_SERVERS must not contain credentials.");
+    }
     if (strictExternal) {
-      const privateIce = iceServers.filter((value) => {
+      const privateStun = stunServers.filter((value) => {
         const host = extractIceHost(value);
         return host ? isPrivateHost(host) : false;
       });
-      if (privateIce.length > 0) {
-        errors.push(`Deploy mode forbids local/private ICE hosts: ${privateIce.join(", ")}`);
+      if (privateStun.length > 0) {
+        errors.push(`Deploy mode forbids local/private STUN hosts: ${privateStun.join(", ")}`);
       }
 
-      const exampleIce = iceServers.filter((value) => {
+      const exampleStun = stunServers.filter((value) => {
         const host = extractIceHost(value);
         return host ? isExampleHost(host) : false;
       });
-      if (exampleIce.length > 0) {
-        errors.push(`Deploy mode forbids placeholder ICE hosts: ${exampleIce.join(", ")}`);
+      if (exampleStun.length > 0) {
+        errors.push(`Deploy mode forbids placeholder STUN hosts: ${exampleStun.join(", ")}`);
       }
+    }
+  }
 
-      if (/replace-turn-password|changeme|example/i.test(String(iceRaw || ""))) {
-        errors.push("Deploy mode forbids placeholder TURN credentials in NEXT_PUBLIC_WEBRTC_ICE_SERVERS.");
+  const turnUrlsRaw = readEnv("DSTREAM_TURN_URLS");
+  const turnUrls = parseIceServerUrls(turnUrlsRaw);
+  if (turnUrls.length === 0) {
+    errors.push("DSTREAM_TURN_URLS must include at least one TURN server in production.");
+  } else {
+    const invalidTurn = turnUrls.filter((value) => !/^turns?:/i.test(value));
+    if (invalidTurn.length > 0) errors.push(`DSTREAM_TURN_URLS accepts TURN URLs only: ${invalidTurn.join(", ")}`);
+    if (strictExternal) {
+      const privateTurn = turnUrls.filter((value) => {
+        const host = extractIceHost(value);
+        return host ? isPrivateHost(host) : false;
+      });
+      if (privateTurn.length > 0) {
+        errors.push(`Deploy mode forbids local/private TURN hosts: ${privateTurn.join(", ")}`);
+      }
+      const exampleTurn = turnUrls.filter((value) => {
+        const host = extractIceHost(value);
+        return host ? isExampleHost(host) : false;
+      });
+      if (exampleTurn.length > 0) {
+        errors.push(`Deploy mode forbids placeholder TURN hosts: ${exampleTurn.join(", ")}`);
       }
     }
   }
@@ -594,20 +625,30 @@ function checkProdRules(options = {}) {
     if (devtools === "1") errors.push("Deploy mode requires DSTREAM_DEVTOOLS=0.");
   }
 
-  const turnPassword = readEnv("TURN_PASSWORD").trim();
+  const turnSharedSecret = readEnv("TURN_SHARED_SECRET").trim();
   const turnExternalIp = readEnv("TURN_EXTERNAL_IP").trim();
+  const turnTtlRaw = readEnv("DSTREAM_TURN_CREDENTIAL_TTL_SEC").trim() || "600";
+  const turnTtl = parseNonNegativeIntOrNull(turnTtlRaw);
+
+  if (!turnSharedSecret) {
+    errors.push("TURN_SHARED_SECRET is required for short-lived TURN credentials.");
+  } else if (/replace|changeme|example/i.test(turnSharedSecret)) {
+    errors.push("TURN_SHARED_SECRET appears to be a placeholder.");
+  } else if (turnSharedSecret.length < 32) {
+    errors.push("TURN_SHARED_SECRET must be at least 32 characters.");
+  }
+  if (turnTtl === null || turnTtl < 60 || turnTtl > 86_400) {
+    errors.push("DSTREAM_TURN_CREDENTIAL_TTL_SEC must be in range 60..86400.");
+  }
+  if (readEnv("TURN_USERNAME").trim() || readEnv("TURN_PASSWORD").trim()) {
+    errors.push("TURN_USERNAME and TURN_PASSWORD are retired; remove them and use TURN_SHARED_SECRET.");
+  }
+
   if (strictExternal) {
     if (!turnExternalIp) {
       errors.push("Deploy mode requires TURN_EXTERNAL_IP when using bundled TURN service.");
     } else if (isPrivateHost(turnExternalIp)) {
       errors.push("Deploy mode requires TURN_EXTERNAL_IP to be a public IP.");
-    }
-    if (!turnPassword) {
-      errors.push("Deploy mode requires TURN_PASSWORD when using bundled TURN service.");
-    } else if (/replace-turn-password|changeme|example/i.test(turnPassword)) {
-      errors.push("Deploy mode forbids placeholder TURN_PASSWORD.");
-    } else if (turnPassword.length < 12) {
-      errors.push("Deploy mode requires TURN_PASSWORD length >= 12.");
     }
   }
 

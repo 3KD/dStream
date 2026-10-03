@@ -1,4 +1,4 @@
-import { getWebRtcIceServers } from "./webrtc";
+import { getResolvedRtcConfig } from "./webrtc";
 
 export interface WhepStartResult {
   pc: RTCPeerConnection;
@@ -116,7 +116,7 @@ export class WhepClient {
   async start(opts?: { timeoutMs?: number }): Promise<WhepStartResult> {
     if (this.pc) await this.close();
 
-    const pc = new RTCPeerConnection({ iceServers: getWebRtcIceServers() });
+    const pc = new RTCPeerConnection(await getResolvedRtcConfig());
     this.pc = pc;
 
     // Receive-only. MediaMTX may expose only video, but requesting audio is harmless.
@@ -177,4 +177,3 @@ export class WhepClient {
     }
   }
 }
-

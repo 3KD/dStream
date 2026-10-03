@@ -54,11 +54,26 @@ remote_env="$(
   ssh "${TARGET}" "cd '${REMOTE_DIR}' && sed -n '1,260p' .env.production"
 )"
 
-if echo "${remote_env}" | grep -qiE 'NEXT_PUBLIC_WEBRTC_ICE_SERVERS=.*turn\.example\.com'; then
-  fail "remote .env.production still uses turn.example.com"
+if echo "${remote_env}" | grep -qE '^NEXT_PUBLIC_WEBRTC_ICE_SERVERS=.+'; then
+  fail "remote .env.production still uses credential-capable NEXT_PUBLIC_WEBRTC_ICE_SERVERS"
 fi
-if echo "${remote_env}" | grep -qiE 'TURN_PASSWORD=.*(replace-turn-password|changeme|example)'; then
-  fail "remote .env.production still uses a placeholder TURN password"
+if ! echo "${remote_env}" | grep -qE '^NEXT_PUBLIC_WEBRTC_STUN_SERVERS=stun:'; then
+  fail "remote .env.production is missing NEXT_PUBLIC_WEBRTC_STUN_SERVERS"
+fi
+if ! echo "${remote_env}" | grep -qE '^DSTREAM_TURN_URLS=turns?:'; then
+  fail "remote .env.production is missing DSTREAM_TURN_URLS"
+fi
+if echo "${remote_env}" | grep -qiE '^DSTREAM_TURN_URLS=.*(turn\.example\.com|localhost|127\.0\.0\.1)'; then
+  fail "remote .env.production uses a placeholder or local TURN URL"
+fi
+if ! echo "${remote_env}" | grep -qE '^TURN_SHARED_SECRET=.{32,}$'; then
+  fail "remote .env.production is missing a strong TURN shared secret"
+fi
+if echo "${remote_env}" | grep -qiE '^TURN_SHARED_SECRET=.*(replace|changeme|example)'; then
+  fail "remote .env.production still uses a placeholder TURN shared secret"
+fi
+if echo "${remote_env}" | grep -qE '^TURN_(USERNAME|PASSWORD)=.+'; then
+  fail "remote .env.production still uses retired static TURN credentials"
 fi
 if echo "${remote_env}" | grep -qiE '^TURN_EXTERNAL_IP=$'; then
   fail "remote .env.production has empty TURN_EXTERNAL_IP"
@@ -81,6 +96,19 @@ for path in / /browse /broadcast /settings /analytics /docs /donate /api/payment
     fail "public endpoint ${path} is unhealthy (${code})"
   fi
 done
+
+turn_response="$(curl -k -sS "https://${DOMAIN}/api/webrtc/ice-servers")"
+if ! TURN_RESPONSE="${turn_response}" node -e '
+  const body = JSON.parse(process.env.TURN_RESPONSE || "{}");
+  const server = Array.isArray(body.iceServers) ? body.iceServers[0] : null;
+  const urls = Array.isArray(server?.urls) ? server.urls : [server?.urls];
+  if (!server || !urls.some((url) => typeof url === "string" && /^turns?:/.test(url))) process.exit(1);
+  if (typeof server.username !== "string" || !/^\d+:[a-f0-9]+$/i.test(server.username)) process.exit(1);
+  if (typeof server.credential !== "string" || server.credential.length < 20) process.exit(1);
+  if (!Number.isFinite(body.expiresAt) || body.expiresAt <= Date.now() / 1000 + 30) process.exit(1);
+'; then
+  fail "short-lived TURN credential endpoint is unhealthy"
+fi
 
 echo
 echo "PASS: production runtime smoke checks complete"

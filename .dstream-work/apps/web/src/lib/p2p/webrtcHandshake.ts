@@ -2,7 +2,7 @@ import { type P2PSignalPayloadV1 } from "@dstream/protocol";
 import { SimplePool } from "nostr-tools";
 import { createLocalSignalIdentity } from "./localIdentity";
 import { createP2PSignalClient } from "./nostrSignal";
-import { getDefaultRtcConfig } from "../webrtc";
+import { getResolvedRtcConfig } from "../webrtc";
 
 function now() {
   return Date.now();
@@ -55,7 +55,7 @@ export async function runP2PDataChannelHandshake(opts: {
   const timeoutMs = opts.timeoutMs ?? 30000;
   const deadline = now() + timeoutMs;
   const log = (line: string) => opts.onLog?.(line);
-  const rtcConfig = opts.rtcConfig ?? getDefaultRtcConfig();
+  const rtcConfig = opts.rtcConfig ?? await getResolvedRtcConfig();
 
   const alice = createLocalSignalIdentity();
   const bob = createLocalSignalIdentity();

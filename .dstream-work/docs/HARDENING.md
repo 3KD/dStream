@@ -24,9 +24,10 @@ The check validates:
 
 - relay URL safety (`wss://` only in deploy mode),
 - relay host safety (no loopback/private relay hosts in deploy mode),
-- relay/ICE placeholder host safety (deploy mode rejects `*.example*`),
-- ICE server config (TURN required),
-- TURN service config sanity (`TURN_PASSWORD` non-placeholder + length>=12, `TURN_EXTERNAL_IP` public),
+- relay/STUN/TURN placeholder host safety (deploy mode rejects `*.example*`),
+- public STUN and server-only TURN URL separation,
+- rejection of legacy credential-bearing `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`,
+- TURN service config sanity (`TURN_SHARED_SECRET` non-placeholder + length>=32, credential TTL bounded, `TURN_EXTERNAL_IP` public),
 - public HLS hint safety (`NEXT_PUBLIC_HLS_ORIGIN` must be `https://` + non-local in deploy mode),
 - proxy origin URL validity,
 - production devtools state (`DSTREAM_DEVTOOLS=0`),

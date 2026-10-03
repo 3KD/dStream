@@ -41,12 +41,14 @@ jobs:
             echo "DSTREAM_PLAYBACK_ACCESS_SECRET=$(openssl rand -hex 32)"
             echo "DSTREAM_XMR_WALLET_RPC_USER=ci"
             echo "DSTREAM_XMR_WALLET_RPC_PASS=$(openssl rand -hex 32)"
+            echo "TURN_SHARED_SECRET=$(openssl rand -hex 32)"
           } >> "$GITHUB_ENV"
 
       - name: Hardening Preflight
         env:
           NEXT_PUBLIC_NOSTR_RELAYS: wss://relay.damus.io,wss://nos.lol
-          NEXT_PUBLIC_WEBRTC_ICE_SERVERS: stun:stun.cloudflare.com:3478,turn:turn.example.com:3478?transport=udp
+          NEXT_PUBLIC_WEBRTC_STUN_SERVERS: stun:stun.cloudflare.com:3478
+          DSTREAM_TURN_URLS: turn:turn.example.com:3478?transport=udp
           DSTREAM_WHIP_PROXY_ORIGIN: http://localhost:8889
           DSTREAM_HLS_PROXY_ORIGIN: http://localhost:8888
           DSTREAM_XMR_WALLET_RPC_ORIGIN: http://localhost:18083

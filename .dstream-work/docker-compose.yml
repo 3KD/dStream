@@ -10,8 +10,8 @@ services:
         NEXT_PUBLIC_NOSTR_RELAYS: "${NEXT_PUBLIC_NOSTR_RELAYS:-ws://localhost:8081}"
         NEXT_PUBLIC_HLS_ORIGIN: "${NEXT_PUBLIC_HLS_ORIGIN:-}"
         NEXT_PUBLIC_RTMP_INGEST_ORIGIN: "${NEXT_PUBLIC_RTMP_INGEST_ORIGIN:-}"
-        # Optional. Helps WebRTC (WHIP + P2P) on restrictive networks/NAT.
-        NEXT_PUBLIC_WEBRTC_ICE_SERVERS: "${NEXT_PUBLIC_WEBRTC_ICE_SERVERS:-stun:stun.cloudflare.com:3478}"
+        # Public STUN URLs only. TURN credentials are issued at runtime by the web service.
+        NEXT_PUBLIC_WEBRTC_STUN_SERVERS: "${NEXT_PUBLIC_WEBRTC_STUN_SERVERS:-stun:stun.cloudflare.com:3478}"
         NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS: "${NEXT_PUBLIC_DSTREAM_PAYMENT_ASSETS:-}"
         NEXT_PUBLIC_SUPPORT_XMR_ADDRESS: "${NEXT_PUBLIC_SUPPORT_XMR_ADDRESS:-}"
         NEXT_PUBLIC_SUPPORT_BTC_ADDRESS: "${NEXT_PUBLIC_SUPPORT_BTC_ADDRESS:-}"
@@ -27,6 +27,9 @@ services:
       # Next.js reverse proxy targets (server-only).
       DSTREAM_WHIP_PROXY_ORIGIN: "${DSTREAM_WHIP_PROXY_ORIGIN:-http://mediamtx:8889}"
       DSTREAM_HLS_PROXY_ORIGIN: "${DSTREAM_HLS_PROXY_ORIGIN:-http://mediamtx:8880}"
+      DSTREAM_TURN_URLS: "${DSTREAM_TURN_URLS:-turn:localhost:3478?transport=udp,turn:localhost:3478?transport=tcp}"
+      DSTREAM_TURN_CREDENTIAL_TTL_SEC: "${DSTREAM_TURN_CREDENTIAL_TTL_SEC:-600}"
+      TURN_SHARED_SECRET: "${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in the environment file}"
       DSTREAM_PLAYBACK_ACCESS_SECRET: "${DSTREAM_PLAYBACK_ACCESS_SECRET:-dev-playback-access-secret-0123456789abcdef}"
       DSTREAM_PLAYBACK_POLICY_STORE_PATH: "${DSTREAM_PLAYBACK_POLICY_STORE_PATH:-/var/lib/dstream/playback-policies.json}"
       # Read-only Video archive mount path exposed by API routes.
@@ -106,13 +109,15 @@ services:
       - -n
       - --log-file=stdout
       - --fingerprint
-      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in the environment file}
       - --realm=${TURN_REALM:-dstream.stream}
-      - --user=${TURN_USERNAME:-dstream-turn}:${TURN_PASSWORD:-replace-turn-password}
       - --listening-port=3478
       - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
       - --min-port=${TURN_MIN_PORT:-49160}
       - --max-port=${TURN_MAX_PORT:-49200}
+      - --user-quota=${TURN_USER_QUOTA:-100}
+      - --total-quota=${TURN_TOTAL_QUOTA:-300}
       - --no-cli
     ports:
       - "${TURN_PORT:-3478}:3478/tcp"

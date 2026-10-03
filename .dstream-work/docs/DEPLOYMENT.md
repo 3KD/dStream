@@ -26,7 +26,7 @@ See `.env.example`. Quick reference:
 - `NEXT_PUBLIC_NOSTR_RELAYS`: relay list (CSV or JSON array).
 - `NEXT_PUBLIC_DISCOVERY_OPERATOR_PUBKEYS`: optional 64-hex pubkey allowlist for operator-level hide/restore controls on official discovery surfaces.
 - `NEXT_PUBLIC_HLS_ORIGIN`: base URL for the announce “streaming hint”.
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`: ICE server URLs (CSV or JSON array). For authenticated TURN, use JSON objects with `urls`, `username`, `credential`.
+- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS`: public STUN URLs only (CSV or JSON array). Never place credentials in a `NEXT_PUBLIC_*` variable.
 - `NEXT_PUBLIC_NIP05_POLICY`: `off|badge|require` policy for NIP-05 UI enforcement.
 - `NEXT_PUBLIC_SUPPORT_XMR_ADDRESS`: optional platform support donation address shown on `/donate`.
 - `NEXT_PUBLIC_SUPPORT_BTC_ADDRESS`: optional platform BTC address shown on `/donate` and footer support chips.
@@ -41,12 +41,14 @@ See `.env.example`. Quick reference:
 - `NEXT_PUBLIC_RTMP_INGEST_ORIGIN`: public RTMP server shown in Broadcast Studio for OBS and other encoders. Point it directly at the MediaMTX origin with a DNS-only hostname or origin IP; CDN-proxied hostnames generally do not forward RTMP.
 
 **TURN (bundled compose service)**
+- `DSTREAM_TURN_URLS`: server-side TURN URLs returned with short-lived credentials.
+- `DSTREAM_TURN_CREDENTIAL_TTL_SEC`: issued credential lifetime (default `600`, allowed `60..86400`).
 - `TURN_REALM`: TURN realm (default `dstream.stream`).
-- `TURN_USERNAME`: static TURN username.
-- `TURN_PASSWORD`: static TURN password (must not be placeholder in deploy mode).
+- `TURN_SHARED_SECRET`: high-entropy server-only secret shared by coturn and the web credential endpoint.
 - `TURN_EXTERNAL_IP`: public server IP advertised by coturn.
 - `TURN_PORT`: TURN listening port (default `3478`).
 - `TURN_MIN_PORT` / `TURN_MAX_PORT`: relay allocation port range.
+- `TURN_USER_QUOTA` / `TURN_TOTAL_QUOTA`: coturn allocation limits.
 
 **Server-only (web reverse proxy)**
 - `DSTREAM_WHIP_PROXY_ORIGIN`: where `/api/whip/*` proxies to.
@@ -265,8 +267,9 @@ This validates production-critical config, including:
 - relay URL safety (`wss://` only in deploy mode),
 - relay host safety (no loopback/private relay hosts in deploy mode),
 - placeholder host rejection in deploy mode (`*.example*`),
-- ICE server configuration (STUN/TURN),
-- TURN password and external-IP sanity for bundled coturn (`TURN_PASSWORD` non-placeholder + length>=12, `TURN_EXTERNAL_IP`),
+- separate public STUN and server-only TURN URL configuration,
+- rejection of legacy credential-bearing `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`,
+- TURN shared-secret, credential-TTL, and external-IP sanity for bundled coturn,
 - public HLS origin safety (`https://` + non-local host in deploy mode),
 - proxy origin URL correctness,
 - production devtools disabled (`DSTREAM_DEVTOOLS=0`),
@@ -348,8 +351,8 @@ Some Firefox setups won’t accept loopback ICE candidates (`127.0.0.1`) from Me
 
 On real networks, WebRTC often needs STUN and sometimes TURN.
 
-- Set `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` to at least one STUN URL.
-- If you expect restrictive NATs/firewalls, add TURN as well.
+- Set `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` to at least one STUN URL.
+- Set `DSTREAM_TURN_URLS` and `TURN_SHARED_SECRET`; browsers obtain short-lived TURN credentials from `/api/webrtc/ice-servers`.
 
 ## Notes / non-goals (v1)
 

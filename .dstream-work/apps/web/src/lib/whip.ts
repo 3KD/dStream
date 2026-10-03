@@ -1,4 +1,4 @@
-import { getWebRtcIceServers } from "./webrtc";
+import { getResolvedRtcConfig } from "./webrtc";
 
 export type WhipPublishOptions = {
   videoMaxBitrateKbps?: number;
@@ -17,9 +17,7 @@ export class WhipClient {
   async publish(stream: MediaStream, options?: WhipPublishOptions): Promise<void> {
     if (this.pc) this.close();
 
-    this.pc = new RTCPeerConnection({
-      iceServers: getWebRtcIceServers()
-    });
+    this.pc = new RTCPeerConnection(await getResolvedRtcConfig());
     this.pc.addEventListener("connectionstatechange", () => {
       options?.onConnectionStateChange?.(this.pc?.connectionState ?? "closed");
     });

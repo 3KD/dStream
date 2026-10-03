@@ -3,7 +3,7 @@ import type { P2PSignalClient } from "./nostrSignal";
 import { createP2PSignalClient } from "./nostrSignal";
 import type { SignalIdentity } from "./localIdentity";
 import { SegmentCache } from "./segmentCache";
-import { getDefaultRtcConfig } from "../webrtc";
+import { getDefaultRtcConfig, getResolvedRtcConfig } from "../webrtc";
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
@@ -107,7 +107,8 @@ export class P2PSwarm {
   private readonly streamPubkey: string;
   private readonly streamId: string;
   private swarmId: string | null = null;
-  private readonly rtcConfig: RTCConfiguration;
+  private rtcConfig: RTCConfiguration;
+  private rtcConfigResolved: boolean;
   private readonly maxPeers: number;
   private readonly cache: SegmentCache;
   private readonly signal: P2PSignalClient;
@@ -144,6 +145,7 @@ export class P2PSwarm {
     this.streamPubkey = opts.streamPubkey;
     this.streamId = opts.streamId;
     this.rtcConfig = opts.rtcConfig ?? getDefaultRtcConfig();
+    this.rtcConfigResolved = Boolean(opts.rtcConfig);
     this.maxPeers = Math.max(1, Math.min(12, opts.maxPeers ?? 6));
     this.cache = new SegmentCache({ maxBytes: opts.cacheMaxBytes ?? 24 * 1024 * 1024 });
 
@@ -158,6 +160,11 @@ export class P2PSwarm {
   async start(): Promise<void> {
     if (this.closed) throw new Error("swarm closed");
     if (this.subClose) return;
+
+    if (!this.rtcConfigResolved) {
+      this.rtcConfig = await getResolvedRtcConfig();
+      this.rtcConfigResolved = true;
+    }
 
     this.swarmId = await deriveSwarmId({ streamPubkey: this.streamPubkey, streamId: this.streamId });
 

@@ -43,7 +43,8 @@ The web app exposes a server-side proxy route:
 
 WHEP uses the same ICE server configuration as P2P:
 
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` (comma-separated or JSON array)
+- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` for public STUN URLs
+- `/api/webrtc/ice-servers` for short-lived TURN credentials backed by server-only `TURN_SHARED_SECRET`
 
 ## Consequences
 
@@ -53,4 +54,3 @@ WHEP uses the same ICE server configuration as P2P:
   - attaches the remote media stream to a `<video>` element
 - We must add tests that:
   - cover negotiation/fallback logic (mocked origin is allowed)
-

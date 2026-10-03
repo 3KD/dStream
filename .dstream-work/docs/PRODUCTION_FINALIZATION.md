@@ -4,7 +4,9 @@ This is the close-out checklist for calling dStream production complete.
 
 ## 1) Secrets and endpoints (must be real)
 
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` uses real STUN/TURN infrastructure (no `turn.example.com`).
+- `NEXT_PUBLIC_WEBRTC_STUN_SERVERS` contains public STUN URLs only.
+- `DSTREAM_TURN_URLS` points at real TURN infrastructure and `TURN_SHARED_SECRET` is high entropy.
+- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`, `TURN_USERNAME`, and `TURN_PASSWORD` are absent; permanent TURN credentials must never be bundled into browser JavaScript.
 - `DSTREAM_XMR_WALLET_RPC_ORIGIN` points to a real wallet RPC service (not `xmr-mock`).
 - `DSTREAM_XMR_WALLET_RPC_USER` and `DSTREAM_XMR_WALLET_RPC_PASS` are set and match wallet-rpc.
 - `DSTREAM_XMR_DAEMON_ADDRESS` points at a reachable Monero daemon, and `DSTREAM_XMR_DAEMON_SSL` matches that endpoint.

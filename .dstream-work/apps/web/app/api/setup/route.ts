@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     // Generate highly secure entropy for the node
     const sessionSecret = crypto.randomBytes(32).toString('hex');
-    const turnPassword = crypto.randomBytes(16).toString('hex');
+    const turnSharedSecret = crypto.randomBytes(32).toString('hex');
     const walletRpcPass = crypto.randomBytes(16).toString('hex');
 
     // Attempt to locate .env.production.example (could be in various places depending on run mode)
@@ -41,12 +41,14 @@ export async function POST(req: Request) {
       // Fallback template if we can't find the file on disk (e.g. strict docker deploy)
       exampleContent = `
 # Generated Node Configuration
-NEXT_PUBLIC_WEBRTC_ICE_SERVERS=[{"urls":"stun:stun.cloudflare.com:3478"},{"urls":["turn:turn.__DOMAIN__:3478?transport=udp","turn:turn.__DOMAIN__:3478?transport=tcp"],"username":"dstream-turn","credential":"__TURN_PASSWORD__"}]
+NEXT_PUBLIC_WEBRTC_STUN_SERVERS=stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302
 NEXT_PUBLIC_HLS_ORIGIN=https://__DOMAIN__
 NEXT_PUBLIC_SUPPORT_XMR_ADDRESS=__XMR_ADDRESS__
 
+DSTREAM_TURN_URLS=turn:turn.__DOMAIN__:3478?transport=udp,turn:turn.__DOMAIN__:3478?transport=tcp
+DSTREAM_TURN_CREDENTIAL_TTL_SEC=600
 TURN_REALM=__DOMAIN__
-TURN_PASSWORD=__TURN_PASSWORD__
+TURN_SHARED_SECRET=__TURN_SHARED_SECRET__
 DSTREAM_XMR_WALLET_RPC_PASS=__WALLET_RPC_PASS__
 DSTREAM_XMR_SESSION_SECRET=__SESSION_SECRET__
 `;
@@ -56,7 +58,8 @@ DSTREAM_XMR_SESSION_SECRET=__SESSION_SECRET__
     let newEnvContent = exampleContent
       .replace(/replace-with-a-long-random-secret-before-production-deploy-0123456789/g, sessionSecret)
       .replace(/dev-session-secret-0123456789abcdef/g, sessionSecret)
-      .replace(/replace-turn-password/g, turnPassword)
+      .replace(/replace-with-a-random-turn-shared-secret/g, turnSharedSecret)
+      .replace(/__TURN_SHARED_SECRET__/g, turnSharedSecret)
       .replace(/replace-wallet-rpc-password/g, walletRpcPass);
 
     if (domain) {
