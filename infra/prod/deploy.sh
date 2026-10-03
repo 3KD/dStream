@@ -346,6 +346,7 @@ rsync -az --delete \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.turbo' \
+  --exclude '/apps/desktop/dist/' \
   --exclude '.caddy-data' \
   --exclude '.caddy-config' \
   --exclude 'infra/prod/Caddyfile' \
