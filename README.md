@@ -8,11 +8,11 @@ dStream is a decentralized streaming protocol that solves deplatforming, platfor
 
 ## Vision
 
-Platforms like Twitch and YouTube own your audience. They can de-platform you, shadow-ban you, and take a 50% cut of your revenue. **dStream is built different.**
+Platforms like Twitch and YouTube own your audience. They can de-platform you, shadow-ban you, take a 50% cut of your revenue, and require massive server infrastructure to operate. **dStream is different.**
 
-- **No Central Server:** Video segments are distributed via P2P relaying, dramatically reducing infrastructure costs.
-- **Permanent Metadata:** Your stream name, bio, and status are stored on the Nostr network.
-- **True Privacy:** Payments happen over Monero (XMR), ensuring no one knows who tipped whom.
+- **Direct and private transactions:** Payments happen via cryptocurrency, ensuring privacy when you choose it.
+- **Ownership of your unique keys:** Your stream name, bio, and status are stored on the Nostr network, but you own them exclusively through your unique keys.
+- **No central server:** Video segments are distributed via P2P relaying, dramatically reducing infrastructure costs because viewers help redistribute your stream. In theory, distribution can become more resilient as more viewers participate, while costing the streamer practically nothing.
 
 ---
 
