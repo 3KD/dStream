@@ -9,6 +9,7 @@ coverage/
 # Next.js
 .next/
 out/
+next_build.tar.gz
 
 # Production
 build/
@@ -34,6 +35,17 @@ yarn-error.log*
 # Workspace
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 infra/stream/certs/
+
+# Generated test and debugging artifacts
+.playwright-cli/
+.tmp/
+.tmp-*/
+output/
+_archive/
+_snapshots/
+debug_out.txt
+logs_dump.txt
