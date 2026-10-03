@@ -1,14 +1,14 @@
-# 🛰️ dStream
+# dStream
 
 > **Ownerless, Peer-to-Peer, Privacy-Centric Live Streaming.**
 
-dStream is a decentralized streaming protocol and application that puts power back into the hands of creators and viewers. By combining **P2P HLS delivery**, **Nostr-based metadata**, and **Monero-native monetization**, dStream eliminates the need for central authorities, platform fees, and censorship.
+dStream is a decentralized streaming protocol that solves deplatforming, platform fees, and reliance on platforms themselves by combining direct cryptocurrency monetization (100% private, with no middleman), a **P2P network**, and **Nostr identity** (your unique streamer keys).
 
 ---
 
-## 🚀 Vision
+## Vision
 
-Platforms like Twitch and YouTube own your audience. They can de-platform you, shadow-ban you, and take a 50% cut of your revenue. **dStream is different.**
+Platforms like Twitch and YouTube own your audience. They can de-platform you, shadow-ban you, and take a 50% cut of your revenue. **dStream is built different.**
 
 - **No Central Server:** Video segments are distributed via P2P relaying, dramatically reducing infrastructure costs.
 - **Permanent Metadata:** Your stream name, bio, and status are stored on the Nostr network.
@@ -16,17 +16,17 @@ Platforms like Twitch and YouTube own your audience. They can de-platform you, s
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-*   📺 **P2P HLS Streaming**: High-definition video delivery that scales with your audience.
-*   🛡️ **Decentralized Discovery**: Uses NIP-34 style Nostr events for stream announcements.
-*   💰 **Monero Staking & Tipping**: Support creators directly with XMR without any middleman.
-*   ⚡ **WHIP/WHEP Native**: Compatible with professional OBS setups and browser-based broadcasting.
-*   🤝 **Trustless Escrow**: Built-in anti-leeching mechanisms using cryptographic stakes.
+- **P2P HLS Streaming**: High-definition video delivery that scales with your audience.
+- **Decentralized Discovery**: Uses NIP-34 style Nostr events for stream announcements.
+- **Monero Staking & Tipping**: Support creators directly with XMR without any middleman.
+- **WHIP/WHEP Native**: Compatible with professional OBS setups and browser-based broadcasting.
+- **Trustless Escrow**: Built-in anti-leeching mechanisms using cryptographic stakes.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: Next.js 16, Tailwind CSS, Lucide Icons
 - **Video Stack**: MediaMTX, HLS.js, [P2P-Media-Loader](https://github.com/Novage/p2p-media-loader)
@@ -36,7 +36,7 @@ Platforms like Twitch and YouTube own your audience. They can de-platform you, s
 
 ---
 
-## 🚥 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 - [Docker & Docker Compose](https://www.docker.com/products/docker-desktop/)
@@ -59,7 +59,7 @@ docker-compose up -d
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 - `apps/web`: The Next.js frontend and main application logic.
 - `services/manifest`: Segment signing and verification service.
@@ -68,17 +68,17 @@ docker-compose up -d
 
 ---
 
-## 🛡️ Trustless Staking
+## Trustless Staking
 
 dStream implements a unique **Escrow/Staking** flow using Monero subaddresses. Viewers provide a small "anti-leech" stake to verify their humanity, which can be released or claimed based on stream integrity. No smart contracts required—just pure peer-to-peer verification.
 
 ---
 
-## 📜 License
+## License
 
 dStream is open-source and ownerless. Feel free to fork, contribute, or host your own node.
 
 ---
 
-### 📡 Join the Stream
+### Join the Stream
 *Built for the creators of tomorrow.*
