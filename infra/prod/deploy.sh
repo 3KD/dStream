@@ -343,6 +343,7 @@ echo "🔹 Syncing files..."
 rsync -az --delete \
   -e "${RSYNC_SSH_CMD}" \
   --exclude '.git' \
+  --exclude '.env.production.backup-*' \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.turbo' \
