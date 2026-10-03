@@ -68,12 +68,6 @@ docker-compose up -d
 
 ---
 
-## Trustless Staking
-
-dStream implements a unique **Escrow/Staking** flow using Monero subaddresses. Viewers provide a small "anti-leech" stake to verify their humanity, which can be released or claimed based on stream integrity. No smart contracts required—just pure peer-to-peer verification.
-
----
-
 ## License
 
 dStream is open-source and ownerless. Feel free to fork, contribute, or host your own node.
