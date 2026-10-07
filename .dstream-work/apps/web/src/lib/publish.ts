@@ -1,5 +1,5 @@
 import type { Event as NostrEvent } from "nostr-tools";
-import { getPool } from "@/lib/nostr";
+import { getPool, getReadyPool } from "@/lib/nostr";
 
 async function publishViaRelayWebSocket(relay: string, event: NostrEvent, timeoutMs = 4000): Promise<boolean> {
   if (typeof WebSocket === "undefined") return false;
@@ -75,7 +75,7 @@ export async function publishEvent(relays: string[], event: NostrEvent, options?
   const poolTimeoutMs = options?.poolTimeoutMs ?? 15000;
   const fallbackTimeoutMs = options?.fallbackTimeoutMs ?? 4000;
 
-  const pool = await getPool();
+  const pool = getReadyPool() ?? (await getPool());
   const pubs = pool.publish(relays, event);
   const acceptedPubs = pubs.map((publication) =>
     Promise.resolve(publication).then((reason) => {
@@ -118,7 +118,7 @@ export async function publishEventDetailed(
   if (relays.length === 0) throw new Error("No relays configured");
   const timeoutMs = opts?.timeoutMs ?? 5000;
 
-  const pool = await getPool();
+  const pool = getReadyPool() ?? (await getPool());
   const pubs = pool.publish(relays, event) as any[];
 
   const results = await Promise.all(

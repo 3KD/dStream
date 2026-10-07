@@ -1,6 +1,7 @@
 import { makeATag, NOSTR_KINDS } from "@dstream/protocol";
 import { getNostrRelays } from "./config";
 import { subscribeMany } from "./nostr";
+import { verifyNostrEvent } from "./nostrWasm";
 import { pubkeyParamToHex } from "./nostr-ids";
 import { STREAM_CHAT_RECENT_LIMIT, STREAM_CHAT_RECENT_LOOKBACK_SEC } from "./chatHistory";
 
@@ -12,6 +13,7 @@ interface BootstrapListener {
 export interface EagerChatBootstrap {
   streamPubkey: string;
   streamId: string;
+  source: "pool" | "pre-hydration";
   attach: (listener: BootstrapListener) => () => void;
   close: () => void;
 }
@@ -22,7 +24,16 @@ interface EagerChatBootstrapState extends EagerChatBootstrap {
 
 type DStreamChatBootstrapGlobal = typeof globalThis & {
   __dstreamEagerChatBootstrap?: EagerChatBootstrapState | null;
+  __dstreamPreHydrationChatBootstrap?: PreHydrationChatBootstrap | null;
 };
+
+export interface PreHydrationChatBootstrap {
+  version: 1;
+  streamPubkey: string;
+  streamId: string;
+  attach: (listener: BootstrapListener) => () => void;
+  close: () => void;
+}
 
 const bootstrapGlobal = globalThis as DStreamChatBootstrapGlobal;
 
@@ -85,6 +96,7 @@ function startEagerChatBootstrap(scope: { streamPubkey: string; streamId: string
 
   const state: EagerChatBootstrapState = {
     ...scope,
+    source: "pool",
     claimed: false,
     attach(listener) {
       if (closed) return () => {};
@@ -107,6 +119,81 @@ function startEagerChatBootstrap(scope: { streamPubkey: string; streamId: string
   return state;
 }
 
+export function createVerifiedPreHydrationChatBootstrap(
+  scope: { streamPubkey: string; streamId: string },
+  rawBootstrap: PreHydrationChatBootstrap,
+  verifyEvent: (event: unknown) => Promise<boolean> = verifyNostrEvent
+): EagerChatBootstrapState {
+  const bufferedEvents: unknown[] = [];
+  const seenEventIds = new Set<string>();
+  const listeners = new Set<BootstrapListener>();
+  let verificationQueue = Promise.resolve();
+  let rawEose = false;
+  let eose = false;
+  let closed = false;
+  let detachRaw: (() => void) | null = null;
+
+  const emitEoseWhenReady = () => {
+    if (closed || eose || !rawEose) return;
+    verificationQueue.then(() => {
+      if (closed || eose || !rawEose) return;
+      eose = true;
+      for (const listener of listeners) listener.oneose();
+    });
+  };
+
+  const state: EagerChatBootstrapState = {
+    ...scope,
+    source: "pre-hydration",
+    claimed: false,
+    attach(listener) {
+      if (closed) return () => {};
+      listeners.add(listener);
+      for (const event of bufferedEvents) listener.onevent(event);
+      if (eose) listener.oneose();
+      return () => listeners.delete(listener);
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      listeners.clear();
+      detachRaw?.();
+      rawBootstrap.close();
+      if (bootstrapGlobal.__dstreamEagerChatBootstrap === state) {
+        bootstrapGlobal.__dstreamEagerChatBootstrap = null;
+      }
+    }
+  };
+
+  detachRaw = rawBootstrap.attach({
+    onevent: (event) => {
+      verificationQueue = verificationQueue.then(async () => {
+        if (closed) return;
+        let verified = false;
+        try {
+          verified = await verifyEvent(event);
+        } catch {
+          return;
+        }
+        if (closed || !verified) return;
+        const id = typeof (event as { id?: unknown })?.id === "string" ? (event as { id: string }).id : "";
+        if (id && seenEventIds.has(id)) return;
+        if (id) seenEventIds.add(id);
+        bufferedEvents.push(event);
+        if (bufferedEvents.length > STREAM_CHAT_RECENT_LIMIT) bufferedEvents.shift();
+        for (const listener of listeners) listener.onevent(event);
+      });
+      emitEoseWhenReady();
+    },
+    oneose: () => {
+      rawEose = true;
+      emitEoseWhenReady();
+    }
+  });
+
+  return state;
+}
+
 function ensureEagerChatBootstrap(): EagerChatBootstrapState | null {
   const scope = readWatchScope();
   if (!scope) return null;
@@ -115,7 +202,14 @@ function ensureEagerChatBootstrap(): EagerChatBootstrapState | null {
     return current;
   }
   current?.close();
-  const next = startEagerChatBootstrap(scope);
+  const rawBootstrap = bootstrapGlobal.__dstreamPreHydrationChatBootstrap;
+  const next =
+    rawBootstrap &&
+    rawBootstrap.version === 1 &&
+    rawBootstrap.streamPubkey === scope.streamPubkey &&
+    rawBootstrap.streamId === scope.streamId
+      ? createVerifiedPreHydrationChatBootstrap(scope, rawBootstrap)
+      : startEagerChatBootstrap(scope);
   bootstrapGlobal.__dstreamEagerChatBootstrap = next;
   return next;
 }

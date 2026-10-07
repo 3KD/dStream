@@ -1,7 +1,6 @@
 "use client";
 
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { validateEvent, type Event as SignedNostrEvent } from "nostr-tools/core";
 import type { Filter } from "nostr-tools/filter";
 import {
@@ -25,11 +24,16 @@ import {
   updateChatDeliveryStatus,
   type ChatDeliveryStatus
 } from "@/lib/chatDelivery";
+import {
+  addOptimisticChatMessage,
+  clearOptimisticChatMessages
+} from "@/lib/chatOptimistic";
 
 export interface StreamChatFeedMessage extends StreamChatMessage {
   visibility: "public" | "whisper";
   whisperRecipients?: string[];
   deliveryStatus?: ChatDeliveryStatus;
+  optimisticId?: string;
 }
 
 const PUBLIC_CHAT_KINDS: [number, number] = [NOSTR_KINDS.STREAM_CHAT, 1];
@@ -152,6 +156,13 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
     seenIds.current.clear();
   }, [enabled, streamScopeKey]);
 
+  useEffect(
+    () => () => {
+      clearOptimisticChatMessages(streamScopeKey);
+    },
+    [streamScopeKey]
+  );
+
   useLayoutEffect(() => {
     if (!enabled || !streamPubkey || !streamId) return;
     if (chatATags.length === 0) return;
@@ -209,12 +220,16 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       onevent: handleEvent,
       oneose: handleEose
     });
-    const sub = eagerBootstrap
-      ? null
-      : subscribeMany(relays, [filter], {
-          onevent: handleEvent,
-          oneose: handleEose
-        });
+    const sub =
+      !eagerBootstrap || eagerBootstrap.source === "pre-hydration"
+        ? subscribeMany(relays, [filter], {
+            onevent: handleEvent,
+            oneose: () => {
+              handleEose();
+              if (eagerBootstrap?.source === "pre-hydration") eagerBootstrap.close();
+            }
+          })
+        : null;
 
     return () => {
       cancelled = true;
@@ -312,6 +327,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       }) as any;
       const optimistic: StreamChatFeedMessage = {
         id: localId,
+        optimisticId: localId,
         pubkey: identity.pubkey.toLowerCase(),
         streamPubkey,
         streamId,
@@ -321,8 +337,24 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
         visibility: "public",
         deliveryStatus: "sending"
       };
-      flushSync(() => {
-        setMessages((prev) => appendMessageWithLimit(prev, optimistic, limit));
+      addOptimisticChatMessage({
+        id: localId,
+        scopeKey: streamScopeKey,
+        content: text,
+        createdAt
+      });
+      const firstPaintReady = new Promise<void>((resolve) => {
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          resolve();
+        };
+        const fallbackTimer = window.setTimeout(finish, 100);
+        window.requestAnimationFrame(() => {
+          window.clearTimeout(fallbackTimer);
+          window.setTimeout(finish, 0);
+        });
       });
 
       const signAndPublish = async () => {
@@ -330,30 +362,58 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
         try {
           signed = await signEvent(unsigned);
         } catch {
-          setMessages((current) => updateChatDeliveryStatus(current, localId, "failed"));
+          await firstPaintReady;
+          setMessages((current) =>
+            appendMessageWithLimit(current, { ...optimistic, deliveryStatus: "failed" }, limit)
+          );
           return;
         }
 
         seenIds.current.add(signed.id);
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === localId
-              ? { ...message, id: signed.id, raw: signed as NostrEvent }
-              : message
-          )
-        );
+        let latestDeliveryStatus: ChatDeliveryStatus = "sending";
+        let committed = false;
+        let deliverySettled = false;
+        let paintReady = false;
+        let commitTimer: number | null = null;
+        const commitSignedMessage = () => {
+          if (committed) return;
+          committed = true;
+          if (commitTimer) window.clearTimeout(commitTimer);
+          setMessages((current) =>
+            appendMessageWithLimit(
+              current,
+              {
+                ...optimistic,
+                id: signed.id,
+                raw: signed as NostrEvent,
+                deliveryStatus: latestDeliveryStatus
+              },
+              limit
+            )
+          );
+        };
         startChatDelivery(
           () => publishEvent(relays, signed, { poolTimeoutMs: 3_000, fallbackTimeoutMs: 2_500 }),
           (deliveryStatus) => {
-            setMessages((current) => updateChatDeliveryStatus(current, signed.id, deliveryStatus));
+            latestDeliveryStatus = deliveryStatus;
+            deliverySettled = true;
+            if (!committed && paintReady) {
+              commitSignedMessage();
+            } else if (committed) {
+              setMessages((current) => updateChatDeliveryStatus(current, signed.id, deliveryStatus));
+            }
           }
         );
+        await firstPaintReady;
+        paintReady = true;
+        if (deliverySettled) commitSignedMessage();
+        else commitTimer = window.setTimeout(commitSignedMessage, 250);
       };
 
-      window.setTimeout(() => void signAndPublish(), 0);
+      void signAndPublish();
       return true;
     },
-    [identity, limit, relays, signEvent, streamId, streamPubkey]
+    [identity, limit, relays, signEvent, streamId, streamPubkey, streamScopeKey]
   );
 
   const sendWhisper = useCallback(

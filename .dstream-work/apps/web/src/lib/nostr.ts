@@ -142,6 +142,10 @@ export async function getPool(): Promise<AbstractSimplePool> {
   return nostrRuntime.poolPromise;
 }
 
+export function getReadyPool(): AbstractSimplePool | null {
+  return nostrRuntime.pool;
+}
+
 export async function createNostrPool(options?: { sharedRelayHealth?: boolean }): Promise<AbstractSimplePool> {
   const runtime = await loadNostrWasm();
   const sharedRelayHealth = options?.sharedRelayHealth ?? true;

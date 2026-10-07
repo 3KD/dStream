@@ -22,6 +22,7 @@ import { useEmotes } from "@/hooks/useEmotes";
 import { getNip05Policy } from "@/lib/config";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { OptimisticChatMessages } from "./OptimisticChatMessages";
 import { ReportDialog } from "@/components/moderation/ReportDialog";
 import { UnifiedTipDialog as TipDialog } from "./UnifiedTipDialog";
 import type { ReportReasonCode, ReportTargetType } from "@/lib/moderation/reportTypes";
@@ -156,6 +157,10 @@ export function ChatBox({
   const renderedMessages = useMemo(
     () => visibleMessages.slice(-visibleHistoryLimit),
     [visibleHistoryLimit, visibleMessages]
+  );
+  const committedOptimisticIds = useMemo(
+    () => new Set(messages.map((message) => message.optimisticId).filter((id): id is string => !!id)),
+    [messages]
   );
   const olderMessageCount = visibleMessages.length - renderedMessages.length;
   const hiddenCount = messages.length - visibleMessages.length;
@@ -469,7 +474,7 @@ export function ChatBox({
 
   const handleSendInput = useCallback(
     async (input: string) => {
-      setIsAutoScroll(true);
+      if (!isAutoScroll) setIsAutoScroll(true);
       if (scrollRef.current) {
         setTimeout(() => {
           if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -585,6 +590,7 @@ export function ChatBox({
       canModerate,
       canWhisper,
       chatPolicyBlockReason,
+      isAutoScroll,
       moderation,
       resolvedSlowModeSec,
       sendMessage,
@@ -670,22 +676,23 @@ export function ChatBox({
             setIsAutoScroll(isAtBottom);
           }}
         >
-          {visibleMessages.length === 0 ? (
-            <div ref={innerScrollRef} className="flex items-center justify-center h-full text-neutral-500 text-sm">No messages yet</div>
-          ) : (
-            <div ref={innerScrollRef} className="py-2">
-              {olderMessageCount > 0 ? (
-                <div className="px-3 pb-2">
-                  <button
-                    type="button"
-                    onClick={() => setVisibleHistoryLimit((current) => current + CHAT_RENDER_BATCH_SIZE)}
-                    className="w-full rounded-md border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-xs text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
-                  >
-                    Show {Math.min(CHAT_RENDER_BATCH_SIZE, olderMessageCount)} older messages
-                  </button>
-                </div>
-              ) : null}
-              {renderedMessages.map((m) => {
+          <div ref={innerScrollRef} className={visibleMessages.length === 0 ? "flex min-h-full flex-col" : "py-2"}>
+            {visibleMessages.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">No messages yet</div>
+            ) : (
+              <>
+                {olderMessageCount > 0 ? (
+                  <div className="px-3 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleHistoryLimit((current) => current + CHAT_RENDER_BATCH_SIZE)}
+                      className="w-full rounded-md border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-xs text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
+                    >
+                      Show {Math.min(CHAT_RENDER_BATCH_SIZE, olderMessageCount)} older messages
+                    </button>
+                  </div>
+                ) : null}
+                {renderedMessages.map((m) => {
                 const isWhisper = m.visibility === "whisper";
                 const recipients = (m.whisperRecipients ?? []).filter(Boolean);
                 const profileRecord = profilesByPubkey[m.pubkey];
@@ -741,9 +748,14 @@ export function ChatBox({
                     }}
                   />
                 );
-              })}
-            </div>
-          )}
+                })}
+              </>
+            )}
+            <OptimisticChatMessages
+              scopeKey={`${streamPubkey.trim().toLowerCase()}:${streamId}`}
+              committedIds={committedOptimisticIds}
+            />
+          </div>
         </div>
         {!isAutoScroll && (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 w-full px-4 flex justify-center pointer-events-none">

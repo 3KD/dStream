@@ -28,11 +28,12 @@ export function ChatInput({
   emotesDict?: Record<string, { url: string }>;
 }) {
   const [message, setMessage] = useState(draftMessage ?? "");
-  const [isSending, setIsSending] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
+  const sendingRef = useRef(false);
   const onActivateRef = useRef(onActivate);
   const appliedDraftVersionRef = useRef(draftVersion);
   const initialDraftMessageRef = useRef(draftMessage ?? "");
@@ -131,20 +132,46 @@ export function ChatInput({
   }, [draftMessage, draftVersion, updateMessage]);
 
   const submitMessage = async () => {
-    const text = message.trim();
-    if (!text || disabled || sendDisabled || isSending) return;
-    setIsSending(true);
-    updateMessage("");
-    setShowEmoji(false);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    const text = (textareaRef.current?.value ?? message).trim();
+    if (!text || disabled || sendDisabled || sendingRef.current) return;
+    sendingRef.current = true;
+    if (textareaRef.current) {
+      textareaRef.current.value = "";
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.disabled = true;
+    }
+    if (sendButtonRef.current) {
+      sendButtonRef.current.disabled = true;
+      sendButtonRef.current.textContent = "…";
+    }
+    if (draftStorageKey) {
+      try {
+        sessionStorage.removeItem(draftStorageKey);
+      } catch {
+        // Chat remains usable when storage is unavailable.
+      }
+    }
+    let restoreDraft = false;
     try {
       const ok = await onSend(text);
-      if (!ok) updateMessage(text);
+      if (!ok) {
+        restoreDraft = true;
+        updateMessage(text);
+      }
     } catch (error) {
+      restoreDraft = true;
       updateMessage(text);
       throw error;
     } finally {
-      setIsSending(false);
+      sendingRef.current = false;
+      if (!restoreDraft) setMessage(textareaRef.current?.value ?? "");
+      setShowEmoji(false);
+      if (textareaRef.current) textareaRef.current.disabled = !!disabled;
+      if (sendButtonRef.current) {
+        sendButtonRef.current.textContent = "Send";
+        sendButtonRef.current.disabled =
+          !(textareaRef.current?.value ?? "").trim() || !!disabled || !!sendDisabled || !isReady;
+      }
     }
   };
 
@@ -198,14 +225,14 @@ export function ChatInput({
             }
           }}
           placeholder={placeholder ?? "Send a message…"}
-          disabled={disabled || isSending}
+          disabled={disabled}
           rows={1}
           style={{ height: "38px" }}
           className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50 resize-none min-h-[38px] max-h-[150px] overflow-y-auto w-full leading-tight"
         />
         <button
           type="button"
-          disabled={disabled || isSending || !isReady}
+          disabled={disabled || !isReady}
           onClick={() => setShowEmoji((prev) => !prev)}
           className="px-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-400 hover:text-white transition-colors disabled:opacity-50 flex items-center justify-center p-0.5"
           title="Add Emoji"
@@ -213,11 +240,12 @@ export function ChatInput({
           <Smile className="w-5 h-5 pointer-events-none" />
         </button>
         <button
+          ref={sendButtonRef}
           type="submit"
-          disabled={!message.trim() || disabled || sendDisabled || isSending || !isReady}
+          disabled={!message.trim() || disabled || sendDisabled || !isReady}
           className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium"
         >
-          {isSending ? "…" : "Send"}
+          Send
         </button>
       </div>
     </form>

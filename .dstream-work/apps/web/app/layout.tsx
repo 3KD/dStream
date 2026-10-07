@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { GlobalQuickPlayDock } from "@/components/player/GlobalQuickPlayDock";
+import { EarlyWatchChatBootstrap } from "@/components/chat/EarlyWatchChatBootstrap";
 
 const FAVICON_URL = "/logo_favicon_aligned.png?v=3";
 
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href={FAVICON_URL} />
       </head>
       <body className="min-h-screen bg-neutral-950 text-white">
+        <EarlyWatchChatBootstrap />
         <Providers>
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">{children}</div>
