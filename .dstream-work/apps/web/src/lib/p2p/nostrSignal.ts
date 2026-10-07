@@ -6,7 +6,7 @@ import {
   parseP2PSignalEvent,
   type P2PSignalPayloadV1
 } from "@dstream/protocol";
-import { SimplePool } from "nostr-tools";
+import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 import { getPool } from "@/lib/nostr";
 import type { SignalIdentity } from "./localIdentity";
 
@@ -37,12 +37,12 @@ export function createP2PSignalClient(opts: {
   sinceSec?: number;
   label?: string;
   onLog?: (line: string) => void;
-  pool?: SimplePool;
+  pool?: AbstractSimplePool;
 }): P2PSignalClient {
   const { identity, relays, streamPubkey, streamId } = opts;
   const since = opts.sinceSec ?? Math.max(0, nowSec() - 5);
   const log = (line: string) => opts.onLog?.(`${opts.label ? `${opts.label}: ` : ""}${line}`);
-  const pool = opts.pool ?? getPool();
+  const poolPromise = opts.pool ? Promise.resolve(opts.pool) : getPool();
 
   log(`init kind=${NOSTR_KINDS.P2P_SIGNAL} since=${since}`);
 
@@ -67,6 +67,7 @@ export function createP2PSignalClient(opts: {
 
       const signed = await identity.signEvent(unsigned);
       const timeoutMs = 4000;
+      const pool = await poolPromise;
       const pubs = pool.publish(relays, signed) as any[];
       try {
         await Promise.race([
@@ -82,6 +83,8 @@ export function createP2PSignalClient(opts: {
 
     subscribe: (handler) => {
       let readyResolve: (() => void) | null = null;
+      let closed = false;
+      let sub: { close: (reason?: string) => void } | null = null;
       const ready = new Promise<void>((resolve) => {
         readyResolve = resolve;
       });
@@ -93,37 +96,61 @@ export function createP2PSignalClient(opts: {
         limit: 400
       };
       const requests = relays.map((url) => ({ url, filter }));
-      const sub: any = (pool as any).subscribeMap(requests, {
-        onevent: async (event: any) => {
-          const raw = event as any;
-          if (raw?.pubkey && raw?.id) log(`recv event from=${String(raw.pubkey).slice(0, 8)}… id=${String(raw.id).slice(0, 8)}…`);
-
-          const parsed = parseP2PSignalEvent(event as any, {
-            streamPubkey,
-            streamId,
-            recipientPubkey: identity.pubkey
-          });
-          if (!parsed) {
-            log("drop: parse failed");
+      void poolPromise
+        .then((pool) => {
+          if (closed) {
+            readyResolve?.();
             return;
           }
+          sub = pool.subscribeMap(requests, {
+            onevent: async (event: any) => {
+              const raw = event as any;
+              if (raw?.pubkey && raw?.id) log(`recv event from=${String(raw.pubkey).slice(0, 8)}… id=${String(raw.id).slice(0, 8)}…`);
 
-          try {
-            const decrypted = await identity.nip04.decrypt(parsed.pubkey, parsed.content);
-            const payload = decodeP2PSignalPayload(decrypted);
-            if (!payload) {
-              log("drop: payload decode failed");
-              return;
-            }
-            handler({ fromPubkey: parsed.pubkey, payload, eventId: parsed.id });
-          } catch {
-            log("drop: decrypt failed");
+              const parsed = parseP2PSignalEvent(event as any, {
+                streamPubkey,
+                streamId,
+                recipientPubkey: identity.pubkey
+              });
+              if (!parsed) {
+                log("drop: parse failed");
+                return;
+              }
+
+              try {
+                const decrypted = await identity.nip04.decrypt(parsed.pubkey, parsed.content);
+                const payload = decodeP2PSignalPayload(decrypted);
+                if (!payload) {
+                  log("drop: payload decode failed");
+                  return;
+                }
+                handler({ fromPubkey: parsed.pubkey, payload, eventId: parsed.id });
+              } catch {
+                log("drop: decrypt failed");
+              }
+            },
+            oneose: () => readyResolve?.()
+          });
+        })
+        .catch(() => {
+          if (!closed) {
+            log("subscription setup failed");
+            readyResolve?.();
           }
-        },
-        oneose: () => readyResolve?.()
-      });
+        });
 
-      return { close: () => sub?.close?.(), ready };
+      return {
+        close: () => {
+          closed = true;
+          try {
+            sub?.close();
+          } catch {
+            // ignore
+          }
+          readyResolve?.();
+        },
+        ready
+      };
     }
   };
 }

@@ -1,8 +1,23 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useLayoutEffect, useRef, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
+import { createContext, useContext, useState, ReactNode, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Player } from "@/components/Player";
+
+const Player = dynamic(
+  () => import("@/components/Player").then((module) => module.Player),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="flex h-full w-full items-center justify-center bg-black text-sm text-neutral-400"
+        role="status"
+      >
+        Loading stream...
+      </div>
+    )
+  }
+);
 
 interface GlobalPlayerContextValue {
   playerHost: HTMLDivElement | null;
@@ -165,7 +180,7 @@ export function GlobalPlayerSlot({ id, playerProps }: { id: string; playerProps:
     return () => unregisterPortal(id);
   }, [id, registerPortal, unregisterPortal]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     requestPortal(id, playerProps);
   }, [id, playerProps, requestPortal]);
 

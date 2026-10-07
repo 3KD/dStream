@@ -1,4 +1,6 @@
-import { finalizeEvent, generateSecretKey, getPublicKey, nip04, type Event as NostrToolsEvent } from "nostr-tools";
+import type { Event as NostrToolsEvent } from "nostr-tools/core";
+import { bytesToHex } from "@/lib/encoding";
+import { loadNostrWasm } from "@/lib/nostrWasm";
 
 export interface Nip04Cipher {
   encrypt: (recipientPubkey: string, plaintext: string) => Promise<string>;
@@ -11,25 +13,32 @@ export interface SignalIdentity {
   nip04: Nip04Cipher;
 }
 
-export function createLocalSignalIdentity(): SignalIdentity {
-  const secretKey = generateSecretKey();
-  const pubkey = getPublicKey(secretKey);
+export async function createLocalSignalIdentity(): Promise<SignalIdentity> {
+  const runtime = await loadNostrWasm();
+  const secretKey = runtime.generateSecretKey();
+  const pubkey = bytesToHex(runtime.getPublicKey(secretKey)).toLowerCase();
 
   return {
     pubkey,
     signEvent: async (unsigned) => {
-      const eventWithoutPubkey: any = {
+      const eventWithoutPubkey: Record<string, unknown> = {
         kind: unsigned.kind,
         created_at: unsigned.created_at,
         tags: unsigned.tags,
         content: unsigned.content
       };
-      return finalizeEvent(eventWithoutPubkey, secretKey);
+      runtime.finalizeEvent(eventWithoutPubkey, secretKey);
+      return eventWithoutPubkey as NostrToolsEvent;
     },
     nip04: {
-      encrypt: async (recipientPubkey, plaintext) => nip04.encrypt(secretKey, recipientPubkey, plaintext),
-      decrypt: async (senderPubkey, ciphertext) => nip04.decrypt(secretKey, senderPubkey, ciphertext)
+      encrypt: async (recipientPubkey, plaintext) => {
+        const { encrypt } = await import("nostr-tools/nip04");
+        return encrypt(secretKey, recipientPubkey, plaintext);
+      },
+      decrypt: async (senderPubkey, ciphertext) => {
+        const { decrypt } = await import("nostr-tools/nip04");
+        return decrypt(secretKey, senderPubkey, ciphertext);
+      }
     }
   };
 }
-

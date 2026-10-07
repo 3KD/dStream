@@ -1,11 +1,12 @@
 "use client";
 
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
-import { validateEvent, verifyEvent } from "nostr-tools";
+import { validateEvent } from "nostr-tools/core";
+import type { Filter } from "nostr-tools/filter";
 import { makeATag, parseStreamManifestRootEvent } from "@dstream/protocol";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
+import { verifyNostrEvent } from "@/lib/nostrWasm";
 import { IntegritySession, type IntegritySnapshot } from "@/lib/integrity/session";
 
 const INTEGRITY_SNAPSHOT_INTERVAL_MS = 2_000;
@@ -76,7 +77,7 @@ export function useStreamIntegrity(opts: {
           if (seenIdsRef.current.has(event.id)) return;
           seenIdsRef.current.add(event.id);
         }
-        if (!validateEvent(event) || !verifyEvent(event)) return;
+        if (!validateEvent(event)) return;
         const parsed = parseStreamManifestRootEvent(event);
         if (!parsed) return;
         session.ingestManifest(parsed);
@@ -106,7 +107,7 @@ export function useStreamIntegrity(opts: {
         const event = (await res.json().catch(() => null)) as any;
         if (!event || typeof event !== "object") return;
         if (typeof event.id === "string" && seenIdsRef.current.has(event.id)) return;
-        if (!validateEvent(event) || !verifyEvent(event)) return;
+        if (!validateEvent(event) || !(await verifyNostrEvent(event))) return;
         const parsed = parseStreamManifestRootEvent(event);
         if (!parsed) return;
         session.ingestManifest(parsed);

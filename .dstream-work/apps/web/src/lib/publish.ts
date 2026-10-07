@@ -75,7 +75,8 @@ export async function publishEvent(relays: string[], event: NostrEvent, options?
   const poolTimeoutMs = options?.poolTimeoutMs ?? 15000;
   const fallbackTimeoutMs = options?.fallbackTimeoutMs ?? 4000;
 
-  const pubs = getPool().publish(relays, event);
+  const pool = await getPool();
+  const pubs = pool.publish(relays, event);
   const acceptedPubs = pubs.map((publication) =>
     Promise.resolve(publication).then((reason) => {
       const message = String(reason ?? "");
@@ -117,7 +118,8 @@ export async function publishEventDetailed(
   if (relays.length === 0) throw new Error("No relays configured");
   const timeoutMs = opts?.timeoutMs ?? 5000;
 
-  const pubs = getPool().publish(relays, event) as any[];
+  const pool = await getPool();
+  const pubs = pool.publish(relays, event) as any[];
 
   const results = await Promise.all(
     relays.map(async (relay, i) => {

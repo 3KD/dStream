@@ -1,8 +1,8 @@
 import { type P2PSignalPayloadV1 } from "@dstream/protocol";
-import { SimplePool } from "nostr-tools";
 import { createLocalSignalIdentity } from "./localIdentity";
 import { createP2PSignalClient } from "./nostrSignal";
 import { getResolvedRtcConfig } from "../webrtc";
+import { createNostrPool } from "../nostr";
 
 function now() {
   return Date.now();
@@ -57,11 +57,11 @@ export async function runP2PDataChannelHandshake(opts: {
   const log = (line: string) => opts.onLog?.(line);
   const rtcConfig = opts.rtcConfig ?? await getResolvedRtcConfig();
 
-  const alice = createLocalSignalIdentity();
-  const bob = createLocalSignalIdentity();
+  const alice = await createLocalSignalIdentity();
+  const bob = await createLocalSignalIdentity();
   const sessionId = randomSessionId();
-  const alicePool = new SimplePool();
-  const bobPool = new SimplePool();
+  const alicePool = await createNostrPool({ sharedRelayHealth: false });
+  const bobPool = await createNostrPool({ sharedRelayHealth: false });
 
   log(`P2P: alice=${alice.pubkey.slice(0, 8)}… bob=${bob.pubkey.slice(0, 8)}… session=${sessionId.slice(0, 8)}…`);
 

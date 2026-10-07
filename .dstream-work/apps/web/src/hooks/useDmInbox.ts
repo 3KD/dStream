@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
-import { validateEvent, verifyEvent } from "nostr-tools";
+import { validateEvent } from "nostr-tools/core";
+import type { Filter } from "nostr-tools/filter";
 import { useIdentity } from "@/context/IdentityContext";
 import { getNostrRelays } from "@/lib/config";
 import { subscribeMany } from "@/lib/nostr";
@@ -108,7 +108,7 @@ export function useDmInbox(opts?: { sinceSec?: number; limit?: number }) {
         if (typeof event.pubkey !== "string" || typeof event.content !== "string") return;
         if (typeof event.created_at !== "number") return;
         if (typeof event.id === "string" && seenIdsRef.current.has(event.id)) return;
-        if (!validateEvent(event) || !verifyEvent(event)) return;
+        if (!validateEvent(event)) return;
 
         const peerPubkey = getDmPeerPubkey(event, identity.pubkey);
         const direction = getDmDirection(event, identity.pubkey);
@@ -215,4 +215,3 @@ export function useDmInbox(opts?: { sinceSec?: number; limit?: number }) {
     isSending
   };
 }
-

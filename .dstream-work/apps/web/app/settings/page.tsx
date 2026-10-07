@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { nip19 } from "nostr-tools";
+import { nsecEncode } from "nostr-tools/nip19";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useIdentity } from "@/context/IdentityContext";
 import { useSocial } from "@/context/SocialContext";
@@ -93,7 +93,7 @@ function parseIdentityStoreBackupSnapshot(raw: string | null | undefined): Ident
         const label = typeof value.label === "string" ? value.label : null;
         let nsec: string | null = null;
         try {
-          nsec = nip19.nsecEncode(hexToBytes(secretKeyHex));
+          nsec = nsecEncode(hexToBytes(secretKeyHex));
         } catch {
           nsec = null;
         }
@@ -231,7 +231,7 @@ export default function SettingsPage() {
   const activeSecretNsec = useMemo(() => {
     if (!activeSecretHex) return null;
     try {
-      return nip19.nsecEncode(hexToBytes(activeSecretHex));
+      return nsecEncode(hexToBytes(activeSecretHex));
     } catch {
       return null;
     }
@@ -600,18 +600,23 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     disabled={identityBusy !== null}
-                    onClick={() => {
+                    onClick={async () => {
                       setIdentityError(null);
                       setIdentityNotice(null);
                       setIdentityBusy("import");
-                      const res = importLocalSecret(importSecret, importLabel);
-                      if (!res.ok) setIdentityError(res.error);
-                      else {
-                        setImportSecret("");
-                        setImportLabel("");
-                        setIdentityNotice(`Imported ${formatPubkeyLabel(res.pubkey)}.`);
+                      try {
+                        const res = await importLocalSecret(importSecret, importLabel);
+                        if (!res.ok) setIdentityError(res.error);
+                        else {
+                          setImportSecret("");
+                          setImportLabel("");
+                          setIdentityNotice(`Imported ${formatPubkeyLabel(res.pubkey)}.`);
+                        }
+                      } catch (error: any) {
+                        setIdentityError(error?.message ?? "Failed to import local identity.");
+                      } finally {
+                        setIdentityBusy(null);
                       }
-                      setIdentityBusy(null);
                     }}
                     className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-sm disabled:opacity-50"
                   >

@@ -33,8 +33,10 @@ export function ChatInput({
   const [showEmoji, setShowEmoji] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const onActivateRef = useRef(onActivate);
   const appliedDraftVersionRef = useRef(draftVersion);
   const initialDraftMessageRef = useRef(draftMessage ?? "");
+  onActivateRef.current = onActivate;
 
   const updateMessage = useCallback(
     (nextMessage: string) => {
@@ -67,6 +69,9 @@ export function ChatInput({
       }
     }
     updateMessage(preHydrationMessage || storedMessage || initialDraftMessageRef.current);
+    if (preHydrationMessage || document.activeElement === textareaRef.current) {
+      onActivateRef.current?.();
+    }
   }, [draftStorageKey, updateMessage]);
 
   useEffect(() => {
@@ -193,7 +198,7 @@ export function ChatInput({
             }
           }}
           placeholder={placeholder ?? "Send a message…"}
-          disabled={disabled || isSending || !isReady}
+          disabled={disabled || isSending}
           rows={1}
           style={{ height: "38px" }}
           className="flex-1 bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none disabled:opacity-50 resize-none min-h-[38px] max-h-[150px] overflow-y-auto w-full leading-tight"

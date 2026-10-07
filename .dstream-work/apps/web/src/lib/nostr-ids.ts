@@ -1,4 +1,4 @@
-import { nip19 } from "nostr-tools";
+import { decode as decodeNip19, npubEncode } from "nostr-tools/nip19";
 
 function isHexPubkey(input: string): boolean {
   return /^[a-f0-9]{64}$/i.test(input);
@@ -12,7 +12,7 @@ export function pubkeyParamToHex(input: string): string | null {
 
   if (raw.startsWith("npub")) {
     try {
-      const decoded = nip19.decode(raw);
+      const decoded = decodeNip19(raw);
       if (decoded.type === "npub" && typeof decoded.data === "string" && isHexPubkey(decoded.data)) {
         return decoded.data.toLowerCase();
       }
@@ -28,9 +28,8 @@ export function pubkeyHexToNpub(hex: string): string | null {
   const raw = (hex ?? "").trim();
   if (!isHexPubkey(raw)) return null;
   try {
-    return nip19.npubEncode(raw.toLowerCase());
+    return npubEncode(raw.toLowerCase());
   } catch {
     return null;
   }
 }
-

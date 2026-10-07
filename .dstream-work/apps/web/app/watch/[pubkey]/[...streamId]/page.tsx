@@ -44,7 +44,7 @@ import {
 import type { ReportReasonCode } from "@/lib/moderation/reportTypes";
 import { formatXmrAtomic, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import type { P2PSwarm, P2PSwarmStats } from "@/lib/p2p/swarm";
-import { createLocalSignalIdentity, type SignalIdentity } from "@/lib/p2p/localIdentity";
+import type { SignalIdentity } from "@/lib/p2p/localIdentity";
 import { canEnableP2pAssist, isP2pStakeSatisfied, normalizeStakeRequiredAtomic } from "@/lib/p2p/stakeGate";
 import { buildP2PBytesReceiptEvent, type StreamPaymentMethod } from "@dstream/protocol";
 
@@ -402,6 +402,31 @@ export default function WatchPage() {
   );
 
   const ephemeralSignalIdentityRef = useRef<SignalIdentity | null>(null);
+  const [ephemeralSignalIdentity, setEphemeralSignalIdentity] = useState<SignalIdentity | null>(null);
+  useEffect(() => {
+    if (!liveDataEnabled || (identity && nip04) || stakeRequiredAtomic) return;
+    if (ephemeralSignalIdentityRef.current) {
+      setEphemeralSignalIdentity(ephemeralSignalIdentityRef.current);
+      return;
+    }
+
+    let cancelled = false;
+    void import("@/lib/p2p/localIdentity")
+      .then(({ createLocalSignalIdentity }) => createLocalSignalIdentity())
+      .then((nextIdentity) => {
+        if (cancelled) return;
+        ephemeralSignalIdentityRef.current = nextIdentity;
+        setEphemeralSignalIdentity(nextIdentity);
+      })
+      .catch(() => {
+        if (!cancelled) setEphemeralSignalIdentity(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identity, liveDataEnabled, nip04, stakeRequiredAtomic]);
+
   const signalIdentity = useMemo<SignalIdentity | null>(() => {
     if (!liveDataEnabled) return null;
     if (identity && nip04) {
@@ -412,15 +437,8 @@ export default function WatchPage() {
       };
     }
     if (stakeRequiredAtomic) return null;
-    if (!ephemeralSignalIdentityRef.current) {
-      try {
-        ephemeralSignalIdentityRef.current = createLocalSignalIdentity();
-      } catch {
-        ephemeralSignalIdentityRef.current = null;
-      }
-    }
-    return ephemeralSignalIdentityRef.current;
-  }, [identity, liveDataEnabled, nip04, signEvent, stakeRequiredAtomic]);
+    return ephemeralSignalIdentity;
+  }, [ephemeralSignalIdentity, identity, liveDataEnabled, nip04, signEvent, stakeRequiredAtomic]);
 
   const p2pAllowed = useMemo(
     () =>

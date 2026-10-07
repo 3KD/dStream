@@ -1,0 +1,2 @@
+export const STREAM_CHAT_RECENT_LOOKBACK_SEC = 24 * 60 * 60;
+export const STREAM_CHAT_RECENT_LIMIT = 100;
