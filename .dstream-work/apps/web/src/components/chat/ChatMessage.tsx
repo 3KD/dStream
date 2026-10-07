@@ -8,9 +8,10 @@ import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { BadgeCheck, CheckCircle2, EllipsisVertical, Flag, Gem, RadioTower, ShieldCheck } from "lucide-react";
 import type { StreamChatMessage, StreamModerationAction } from "@dstream/protocol";
 import type { ReactNode } from "react";
+import type { ChatDeliveryStatus } from "@/lib/chatDelivery";
 
 interface ChatMessageProps {
-  msg: StreamChatMessage;
+  msg: StreamChatMessage & { deliveryStatus?: ChatDeliveryStatus };
   emotesDict?: Record<string, { url: string; tier: "free" | "subscriber" }>;
   isBroadcaster: boolean;
   canModerate?: boolean;
@@ -193,6 +194,8 @@ function ChatMessageComponent({
             <span className="text-[10px] bg-purple-950/50 border border-purple-700/30 text-purple-200 px-1.5 py-0.5 rounded">WHISPER</span>
           )}
           <span className="text-[10px] text-neutral-500" suppressHydrationWarning>{time}</span>
+          {msg.deliveryStatus === "sending" && <span className="text-[10px] text-neutral-500">Sending...</span>}
+          {msg.deliveryStatus === "failed" && <span className="text-[10px] text-red-400">Not delivered</span>}
         </div>
         {isWhisper && whisperLabel && <div className="text-[11px] text-purple-200/80 mb-0.5">{whisperLabel}</div>}
         <p className={`text-sm break-words ${isWhisper ? "text-purple-100/90" : "text-neutral-300"}`}>

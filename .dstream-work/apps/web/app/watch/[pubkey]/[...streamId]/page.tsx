@@ -1886,6 +1886,7 @@ export default function WatchPage() {
       paymentMethods={paymentMethods}
       draftStorageKey={`dstream_watch_chat_draft_v1:${pubkey ?? ""}:${streamId}`}
       viewerCount={effectiveViewerCount}
+      chatEnabled
       liveDataEnabled={liveDataEnabled}
       onMessageCountChange={(count) => {
         if (!e2e || e2eSentRef.current.chat) return;

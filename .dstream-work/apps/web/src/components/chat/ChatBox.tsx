@@ -50,6 +50,7 @@ export function ChatBox({
   headerRightSlot,
   paymentMethods,
   draftStorageKey,
+  chatEnabled = true,
   liveDataEnabled = true,
   className
 }: {
@@ -65,6 +66,7 @@ export function ChatBox({
   headerRightSlot?: ReactNode;
   paymentMethods?: StreamPaymentMethod[];
   draftStorageKey?: string;
+  chatEnabled?: boolean;
   liveDataEnabled?: boolean;
   className?: string;
 }) {
@@ -73,7 +75,7 @@ export function ChatBox({
   const { messages, isConnected, sendMessage, sendWhisper, canSend, canWhisper } = useStreamChat({
     streamPubkey,
     streamId,
-    enabled: liveDataEnabled
+    enabled: chatEnabled
   });
   const globalEmotesMap = useEmotes(liveDataEnabled ? [streamPubkey, identity?.pubkey] : []);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -103,13 +105,13 @@ export function ChatBox({
   const lastChatNotificationSoundAtRef = useRef(0);
 
   const moderation = useStreamModeration({
-    streamPubkey: liveDataEnabled ? streamPubkey : "",
-    streamId: liveDataEnabled ? streamId : "",
+    streamPubkey: chatEnabled ? streamPubkey : "",
+    streamId: chatEnabled ? streamId : "",
     identityPubkey: identity?.pubkey ?? null,
     signEvent
   });
 
-  const selfProfile = useNostrProfile(liveDataEnabled ? identity?.pubkey ?? null : null);
+  const selfProfile = useNostrProfile(chatEnabled ? identity?.pubkey ?? null : null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(new Set());
   const isOwner = !!(identity && identity.pubkey === streamPubkey);
   const viewerPubkey = identity?.pubkey?.toLowerCase() ?? null;
@@ -606,7 +608,7 @@ export function ChatBox({
               {normalizedViewerCount}
             </span>
           ) : null}
-          {liveDataEnabled && !isConnected && moderation.isLoading && (
+          {chatEnabled && !isConnected && moderation.isLoading && (
             <span className="text-[10px] text-neutral-500">syncing moderation…</span>
           )}
         </div>

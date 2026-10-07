@@ -92,10 +92,10 @@ export async function publishEvent(relays: string[], event: NostrEvent, options?
     ]);
     return true;
   } catch {
-    for (const relay of relays.slice(0, 2)) {
-      if (await publishViaRelayWebSocket(relay, event, fallbackTimeoutMs)) return true;
-    }
-    return false;
+    const fallbackResults = await Promise.all(
+      relays.slice(0, 2).map((relay) => publishViaRelayWebSocket(relay, event, fallbackTimeoutMs))
+    );
+    return fallbackResults.some(Boolean);
   }
 }
 

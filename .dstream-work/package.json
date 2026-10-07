@@ -16,7 +16,7 @@
     "test:monero:refund": "node --test --import tsx apps/web/src/lib/monero/refundPolicy.test.ts",
     "test:social": "node --test --import tsx apps/web/src/lib/social/store.test.ts",
     "test:inbox": "node --test --import tsx apps/web/src/lib/inbox/dm.test.ts",
-    "test:chat": "node --test --import tsx apps/web/src/lib/chatCommands.test.ts apps/web/src/lib/chatNotificationSound.test.ts",
+    "test:chat": "node --test --import tsx apps/web/src/lib/chatCommands.test.ts apps/web/src/lib/chatDelivery.test.ts apps/web/src/lib/chatNotificationSound.test.ts",
     "test:profile": "node --test --import tsx apps/web/src/lib/profile.test.ts",
     "test:payments": "node --test --import tsx apps/web/src/lib/payments/payments.test.ts apps/web/src/lib/payments/paymentIntents.test.ts apps/web/src/lib/payments/server/readiness.test.ts apps/web/src/lib/payments/server/server.test.ts apps/web/src/lib/payments/server/allRails.test.ts",
     "test:vod": "node --test --import tsx apps/web/src/lib/videoPolicy.test.ts",
@@ -59,6 +59,7 @@
     "check:mobile:store": "node scripts/check-mobile-store-release.mjs",
     "check:broadcast:layout": "npx --yes --package playwright node scripts/validate-broadcast-layout.mjs",
     "check:watch:layout": "npx --yes --package playwright node scripts/validate-watch-layout.mjs",
+    "check:chat:latency": "npx --yes --package playwright node scripts/check-chat-latency.mjs",
     "check:mobile": "npm run check:mobile-shell && npm run check:mobile:golden",
     "mobile:release:setup": "bash scripts/mobile-release-setup.sh",
     "mobile:release:ios:testflight": "MOBILE_RELEASE_TARGET=ios MOBILE_RELEASE_STRICT=1 node scripts/check-mobile-store-release.mjs && bash scripts/mobile-release.sh ios testflight",
@@ -83,6 +84,7 @@
   },
   "devDependencies": {
     "glob": "^13.0.6",
+    "playwright": "^1.57.0",
     "tsx": "^4.20.5",
     "turbo": "^1.10.0",
     "typescript": "^5.9.3"

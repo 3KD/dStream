@@ -129,15 +129,15 @@ export function ChatInput({
     const text = message.trim();
     if (!text || disabled || sendDisabled || isSending) return;
     setIsSending(true);
+    updateMessage("");
+    setShowEmoji(false);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     try {
       const ok = await onSend(text);
-      if (ok) {
-        updateMessage("");
-        setShowEmoji(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-        }
-      }
+      if (!ok) updateMessage(text);
+    } catch (error) {
+      updateMessage(text);
+      throw error;
     } finally {
       setIsSending(false);
     }

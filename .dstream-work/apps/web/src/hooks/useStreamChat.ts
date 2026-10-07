@@ -1,7 +1,8 @@
 "use client";
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Filter } from "nostr-tools";
+import { flushSync } from "react-dom";
+import type { Event as SignedNostrEvent, Filter } from "nostr-tools";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import {
   buildStreamChatEvent,
@@ -18,10 +19,16 @@ import { getNostrRelays } from "@/lib/config";
 import { getDmPeerPubkey, getFirstTagValue } from "@/lib/inbox/dm";
 import { subscribeMany } from "@/lib/nostr";
 import { publishEvent } from "@/lib/publish";
+import {
+  startChatDelivery,
+  updateChatDeliveryStatus,
+  type ChatDeliveryStatus
+} from "@/lib/chatDelivery";
 
 export interface StreamChatFeedMessage extends StreamChatMessage {
   visibility: "public" | "whisper";
   whisperRecipients?: string[];
+  deliveryStatus?: ChatDeliveryStatus;
 }
 
 const STREAM_CHAT_HISTORY_LOOKBACK_SEC = 7 * 24 * 60 * 60;
@@ -130,7 +137,10 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
   const [messages, setMessages] = useState<StreamChatFeedMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [chatATags, setChatATags] = useState<string[]>([]);
+  const [relatedChatScope, setRelatedChatScope] = useState<{ scopeKey: string; aTags: string[] }>({
+    scopeKey: "",
+    aTags: []
+  });
   const seenIds = useRef<Set<string>>(new Set());
 
   const relays = useMemo(() => getNostrRelays(), []);
@@ -139,8 +149,18 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
   const enabled = scope.enabled ?? true;
   const limit = scope.limit ?? 200;
   const streamScopeKey = `${streamPubkey}:${streamId}`;
+  const currentATag = useMemo(
+    () => (enabled && streamPubkey && streamId ? makeATag(streamPubkey, streamId) : ""),
+    [enabled, streamId, streamPubkey]
+  );
+  const relatedChatATagsKey =
+    relatedChatScope.scopeKey === streamScopeKey ? relatedChatScope.aTags.join("|") : "";
+  const chatATags = useMemo(() => {
+    if (!currentATag) return [];
+    const related = relatedChatATagsKey ? relatedChatATagsKey.split("|") : [];
+    return [currentATag, ...related.filter((aTag) => aTag !== currentATag)];
+  }, [currentATag, relatedChatATagsKey]);
   const chatATagsSet = useMemo(() => new Set(chatATags), [chatATags]);
-  const chatATagsKey = useMemo(() => chatATags.join("|"), [chatATags]);
 
   useEffect(() => {
     setMessages([]);
@@ -148,15 +168,12 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
     seenIds.current.clear();
 
     if (!enabled || !streamPubkey || !streamId) {
-      setChatATags([]);
+      setRelatedChatScope({ scopeKey: streamScopeKey, aTags: [] });
       return;
     }
 
     const streamByCreatedAt = new Map<string, number>();
     streamByCreatedAt.set(streamId, nowSec());
-
-    const currentATag = makeATag(streamPubkey, streamId);
-    setChatATags([currentATag]);
 
     let done = false;
     let cancelled = false;
@@ -168,8 +185,13 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
         .sort((a, b) => b[1] - a[1])
         .map(([value]) => value)
         .slice(0, STREAM_CHAT_RELATED_STREAM_LIMIT);
-      const nextATags = streamIds.map((value) => makeATag(streamPubkey, value));
-      setChatATags((current) => (current.join("|") === nextATags.join("|") ? current : nextATags));
+      const nextATags = streamIds
+        .filter((value) => value !== streamId)
+        .map((value) => makeATag(streamPubkey, value));
+      setRelatedChatScope((current) => {
+        if (current.scopeKey === streamScopeKey && current.aTags.join("|") === nextATags.join("|")) return current;
+        return { scopeKey: streamScopeKey, aTags: nextATags };
+      });
     };
 
     const filter: Filter = {
@@ -239,7 +261,10 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
 
     const sub = subscribeMany(relays, [filter], {
       onevent: (event: any) => {
-        if (event?.id && seenIds.current.has(event.id)) return;
+        if (event?.id && seenIds.current.has(event.id)) {
+          setMessages((current) => updateChatDeliveryStatus(current, event.id, "sent"));
+          return;
+        }
         const parsed = parsePublicChatMessage(event, chatATagsSet, streamPubkey);
         if (!parsed) return;
         if (parsed.id) seenIds.current.add(parsed.id);
@@ -264,7 +289,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       }
       setIsConnected(false);
     };
-  }, [chatATagsKey, chatATagsSet, enabled, limit, relays, streamId, streamPubkey]);
+  }, [chatATags, chatATagsSet, enabled, limit, relays, streamId, streamPubkey]);
 
   useEffect(() => {
     if (!enabled || !streamPubkey || !streamId) return;
@@ -338,36 +363,60 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       if (!text) return false;
 
       setIsSending(true);
-      try {
-        const createdAt = Math.floor(Date.now() / 1000);
-        const unsigned = buildStreamChatEvent({
-          pubkey: identity.pubkey,
-          createdAt,
-          streamPubkey,
-          streamId,
-          content: text
-        }) as any;
+      const createdAt = Math.floor(Date.now() / 1000);
+      const localId = `local-chat:${identity.pubkey}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      const unsigned = buildStreamChatEvent({
+        pubkey: identity.pubkey,
+        createdAt,
+        streamPubkey,
+        streamId,
+        content: text
+      }) as any;
+      const optimistic: StreamChatFeedMessage = {
+        id: localId,
+        pubkey: identity.pubkey.toLowerCase(),
+        streamPubkey,
+        streamId,
+        content: text,
+        createdAt,
+        raw: { ...unsigned, id: localId, sig: "" } as NostrEvent,
+        visibility: "public",
+        deliveryStatus: "sending"
+      };
+      flushSync(() => {
+        setMessages((prev) => appendMessageWithLimit(prev, optimistic, limit));
+      });
 
-        const signed = await signEvent(unsigned);
-        const ok = await publishEvent(relays, signed);
-        if (ok) {
-          seenIds.current.add(signed.id);
-          const optimistic: StreamChatFeedMessage = {
-            id: signed.id,
-            pubkey: identity.pubkey.toLowerCase(),
-            streamPubkey,
-            streamId,
-            content: text,
-            createdAt,
-            raw: signed as NostrEvent,
-            visibility: "public"
-          };
-          setMessages((prev) => appendMessageWithLimit(prev, optimistic, limit));
+      const signAndPublish = async () => {
+        let signed: SignedNostrEvent;
+        try {
+          signed = await signEvent(unsigned);
+        } catch {
+          setMessages((current) => updateChatDeliveryStatus(current, localId, "failed"));
+          setIsSending(false);
+          return;
         }
-        return ok;
-      } finally {
+
+        seenIds.current.add(signed.id);
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === localId
+              ? { ...message, id: signed.id, raw: signed as NostrEvent }
+              : message
+          )
+        );
         setIsSending(false);
-      }
+
+        startChatDelivery(
+          () => publishEvent(relays, signed, { poolTimeoutMs: 3_000, fallbackTimeoutMs: 2_500 }),
+          (deliveryStatus) => {
+            setMessages((current) => updateChatDeliveryStatus(current, signed.id, deliveryStatus));
+          }
+        );
+      };
+
+      window.setTimeout(() => void signAndPublish(), 0);
+      return true;
     },
     [identity, limit, relays, signEvent, streamId, streamPubkey]
   );
