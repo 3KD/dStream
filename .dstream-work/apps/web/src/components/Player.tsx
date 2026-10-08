@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import { P2PFragmentLoader } from "@/lib/p2p/hlsFragmentLoader";
 import { MonotonicPlaylistLoader } from "@/lib/hls/monotonicPlaylistLoader";
 import {
+  ROTATING_MOBILE_AUTO_MAX_BITRATE,
   applyRotatingMasterSnapshot,
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
@@ -12,6 +13,7 @@ import {
   resolveHlsStartupBufferTarget,
   resolveHlsPlaybackCompatibilityPolicy,
   selectBufferedLiveStartupPosition,
+  selectRotatingAutoLevelCap,
   selectRotatingStartupLevel,
   shouldFallbackToAudioForMissingVideoFragment,
   shouldRefreshRotatingMasterOnHlsError
@@ -542,13 +544,23 @@ export function Player({
       completeSegmentLiveSyncCount,
       liveSyncDurationSeconds: classicExternalHls ? 8 : liveSyncDurationSeconds
     });
+    if (!effectiveBackgroundPlayEnabled && isMobilePlayback && rotatingHlsProviderMode) {
+      const autoLevelCap = selectRotatingAutoLevelCap(hls.levels, ROTATING_MOBILE_AUTO_MAX_BITRATE);
+      hls.autoLevelCapping = autoLevelCap;
+      if (autoLevelCap >= 0 && hls.manualLevel === -1) hls.nextLoadLevel = autoLevelCap;
+      const video = videoRef.current;
+      if (video && autoLevelCap >= 0) video.dataset.dstreamAutoLevelCap = String(autoLevelCap);
+      else if (video) delete video.dataset.dstreamAutoLevelCap;
+    }
   }, [
     bridgeLiveGaps,
     completeSegmentLiveSyncCount,
     effectiveBackgroundPlayEnabled,
     effectiveLowLatencyEnabled,
+    isMobilePlayback,
     liveSyncDurationSeconds,
-    preferCompleteSegments
+    preferCompleteSegments,
+    rotatingHlsProviderMode
   ]);
 
   useEffect(() => {
@@ -1873,7 +1885,15 @@ export function Player({
         startupLevelHoldActive = false;
         clearStartupLevelReleaseTimer();
         delete video.dataset.dstreamStartupLevelHold;
-        if (!effectiveBackgroundPlayEnabled) hls.autoLevelCapping = -1;
+        if (!effectiveBackgroundPlayEnabled) {
+          const autoLevelCap = isMobilePlayback
+            ? selectRotatingAutoLevelCap(hls.levels, ROTATING_MOBILE_AUTO_MAX_BITRATE)
+            : -1;
+          hls.autoLevelCapping = autoLevelCap;
+          if (autoLevelCap >= 0 && hls.manualLevel === -1) hls.nextLoadLevel = autoLevelCap;
+          if (autoLevelCap >= 0) video.dataset.dstreamAutoLevelCap = String(autoLevelCap);
+          else delete video.dataset.dstreamAutoLevelCap;
+        }
       };
       const checkStartupLevelRelease = () => {
         startupLevelReleaseTimer = null;

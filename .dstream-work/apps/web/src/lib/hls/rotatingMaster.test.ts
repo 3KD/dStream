@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ROTATING_MOBILE_AUTO_MAX_BITRATE,
   applyRotatingMasterSnapshot,
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
@@ -8,6 +9,7 @@ import {
   resolveHlsStartupBufferTarget,
   resolveHlsPlaybackCompatibilityPolicy,
   selectBufferedLiveStartupPosition,
+  selectRotatingAutoLevelCap,
   selectRotatingStartupLevel,
   shouldFallbackToAudioForMissingVideoFragment,
   shouldRefreshRotatingMasterOnHlsError,
@@ -132,6 +134,13 @@ test("selects the lowest bitrate only for rotating-provider startup", () => {
     1
   );
   assert.equal(selectRotatingStartupLevel([]), -1);
+});
+
+test("caps rotating-provider mobile auto quality below unstable high-bitrate renditions", () => {
+  const levels = [{ bitrate: 8_000_000 }, { bitrate: 1_500_000 }, { bitrate: 4_000_000 }];
+  assert.equal(selectRotatingAutoLevelCap(levels, ROTATING_MOBILE_AUTO_MAX_BITRATE), 1);
+  assert.equal(selectRotatingAutoLevelCap([{ bitrate: 24_883_200 }], ROTATING_MOBILE_AUTO_MAX_BITRATE), 0);
+  assert.equal(selectRotatingAutoLevelCap([], ROTATING_MOBILE_AUTO_MAX_BITRATE), -1);
 });
 
 test("only a missing main video fragment selects the stable audio rendition", () => {

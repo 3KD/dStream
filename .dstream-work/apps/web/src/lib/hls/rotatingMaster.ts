@@ -2,6 +2,8 @@ import { M3U8Parser } from "hls.js";
 
 const ROTATING_PROVIDER_ROOTS = ["zap.stream", "letsfo.com", "streamroad.money"] as const;
 
+export const ROTATING_MOBILE_AUTO_MAX_BITRATE = 2_500_000;
+
 export type RotatingMasterLevel = {
   url: string;
   bitrate: number;
@@ -131,6 +133,24 @@ export function selectRotatingStartupLevel(levels: readonly { bitrate?: number }
     if (!Number.isFinite(lowestBitrate)) return index;
     return (bitrate ?? Number.POSITIVE_INFINITY) < (lowestBitrate ?? Number.POSITIVE_INFINITY) ? index : lowest;
   }, 0);
+}
+
+export function selectRotatingAutoLevelCap(
+  levels: readonly { bitrate?: number }[],
+  maxBitrate: number
+): number {
+  if (levels.length === 0) return -1;
+
+  let bestLevel = -1;
+  let bestBitrate = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < levels.length; index++) {
+    const bitrate = levels[index]?.bitrate;
+    if (!Number.isFinite(bitrate) || (bitrate ?? 0) > maxBitrate || (bitrate ?? 0) <= bestBitrate) continue;
+    bestLevel = index;
+    bestBitrate = bitrate ?? bestBitrate;
+  }
+
+  return bestLevel >= 0 ? bestLevel : selectRotatingStartupLevel(levels);
 }
 
 export function shouldFallbackToAudioForMissingVideoFragment(options: {
