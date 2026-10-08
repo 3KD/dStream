@@ -39,7 +39,7 @@ function runDetails(run, sample) {
     .slice(-6)
     .map(
       (entry) =>
-        `${entry.at}s:t=${entry.currentTime.toFixed(1)},pdt=${entry.programDateTime ? new Date(entry.programDateTime).toISOString() : "n/a"},paused=${entry.paused},ended=${entry.ended},ready=${entry.readyState},buffer=${entry.bufferedAhead.toFixed(1)},frames=${entry.frames ?? "n/a"},session=${entry.session ?? "n/a"},level=${entry.hlsLevel ?? "n/a"},frag=${entry.hlsFragment ?? "n/a"},pinned=${entry.timelinePinned ?? "n/a"},recovery=${entry.recoveryReason ?? "none"}`
+        `${entry.at}s:t=${entry.currentTime.toFixed(1)},pdt=${entry.programDateTime ? new Date(entry.programDateTime).toISOString() : "n/a"},paused=${entry.paused},ended=${entry.ended},ready=${entry.readyState},buffer=${entry.bufferedAhead.toFixed(1)},frames=${entry.frames ?? "n/a"},session=${entry.session ?? "n/a"},level=${entry.hlsLevel ?? "n/a"},cap=${entry.autoLevelCap ?? "n/a"},frag=${entry.hlsFragment ?? "n/a"},pinned=${entry.timelinePinned ?? "n/a"},recovery=${entry.recoveryReason ?? "none"}`
     )
     .join(" | ");
   return `${run.routed ? "after" : "before"} route handoff; ${recent}`;
@@ -130,6 +130,7 @@ async function sampleVideo(page) {
       return Number.isFinite(value) && value > 0 ? value : null;
     })(),
     hlsLevel: video.dataset.dstreamHlsLevel ?? null,
+    autoLevelCap: video.dataset.dstreamAutoLevelCap ?? null,
     hlsFragment: video.dataset.dstreamHlsFragment ?? null,
     timelinePinned:
       video.ownerDocument.querySelector('[data-testid="playback-timeline"]')?.getAttribute("data-live-edge-pinned") ?? null,
@@ -820,6 +821,20 @@ async function main() {
           }
         } else if (next.timelinePinned === "false") {
           fail(`${run.scenario}/${run.title}: live timeline became unpinned without a viewer seek (${runDetails(run, next)})`);
+        }
+        const activeLevel = Number(next.hlsLevel);
+        const autoLevelCap = Number(next.autoLevelCap);
+        if (
+          next.hlsLevel !== null &&
+          next.autoLevelCap !== null &&
+          Number.isInteger(activeLevel) &&
+          Number.isInteger(autoLevelCap) &&
+          activeLevel > autoLevelCap
+        ) {
+          fail(
+            `${run.scenario}/${run.title}: active HLS level ${activeLevel} exceeded Auto cap ${autoLevelCap} ` +
+              `(${runDetails(run, next)})`
+          );
         }
         if (Date.now() - run.lastProgressAt > STALL_LIMIT_MS) {
           fail(

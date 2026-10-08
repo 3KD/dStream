@@ -546,6 +546,7 @@ export function Player({
     });
     if (!effectiveBackgroundPlayEnabled && isMobilePlayback && rotatingHlsProviderMode) {
       const autoLevelCap = selectRotatingAutoLevelCap(hls.levels, ROTATING_MOBILE_AUTO_MAX_BITRATE);
+      hls.capLevelToPlayerSize = false;
       hls.autoLevelCapping = autoLevelCap;
       if (autoLevelCap >= 0 && hls.manualLevel === -1) hls.nextLoadLevel = autoLevelCap;
       const video = videoRef.current;
@@ -1834,7 +1835,7 @@ export function Player({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
         startLevel: isMobilePlayback || rotatingMasterMode ? 0 : -1,
         enableWorker: true,
-        capLevelToPlayerSize: true,
+        capLevelToPlayerSize: !(isMobilePlayback && rotatingMasterMode),
         manifestLoadingTimeOut: 6_000,
         manifestLoadingMaxRetry: 6,
         manifestLoadingRetryDelay: 250,
@@ -1889,6 +1890,7 @@ export function Player({
           const autoLevelCap = isMobilePlayback
             ? selectRotatingAutoLevelCap(hls.levels, ROTATING_MOBILE_AUTO_MAX_BITRATE)
             : -1;
+          if (isMobilePlayback) hls.capLevelToPlayerSize = false;
           hls.autoLevelCapping = autoLevelCap;
           if (autoLevelCap >= 0 && hls.manualLevel === -1) hls.nextLoadLevel = autoLevelCap;
           if (autoLevelCap >= 0) video.dataset.dstreamAutoLevelCap = String(autoLevelCap);
