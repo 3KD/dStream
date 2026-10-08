@@ -197,6 +197,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
     };
 
     const handleEvent = (event: any) => {
+      if (cancelled) return;
       if (event?.id && seenIds.current.has(event.id)) {
         setMessages((current) => updateChatDeliveryStatus(current, event.id, "sent"));
         return;
@@ -210,6 +211,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       scheduleFlush();
     };
     const handleEose = () => {
+      if (cancelled) return;
       flush();
       setIsConnected(true);
     };
@@ -235,7 +237,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       cancelled = true;
       if (flushTimer) clearTimeout(flushTimer);
       detachBootstrap?.();
-      eagerBootstrap?.close();
+      eagerBootstrap?.release();
       try {
         (sub as any)?.close?.();
       } catch {
@@ -337,6 +339,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
         visibility: "public",
         deliveryStatus: "sending"
       };
+      const signedEventPromise = signEvent(unsigned);
       addOptimisticChatMessage({
         id: localId,
         scopeKey: streamScopeKey,
@@ -360,7 +363,7 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       const signAndPublish = async () => {
         let signed: SignedNostrEvent;
         try {
-          signed = await signEvent(unsigned);
+          signed = await signedEventPromise;
         } catch {
           await firstPaintReady;
           setMessages((current) =>

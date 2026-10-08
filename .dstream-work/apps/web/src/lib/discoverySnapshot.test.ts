@@ -83,6 +83,6 @@ test("a fresh snapshot can restore a listed stream to live", () => {
 test("snapshot refresh and authority use the payload query time", () => {
   assert.equal(shouldRefreshDiscoverySnapshot(NOW_SEC - 59, NOW_SEC), false);
   assert.equal(shouldRefreshDiscoverySnapshot(NOW_SEC - 60, NOW_SEC), true);
-  assert.equal(isDiscoverySnapshotAuthoritative(NOW_SEC - 120, NOW_SEC), true);
-  assert.equal(isDiscoverySnapshotAuthoritative(NOW_SEC - 121, NOW_SEC), false);
+  assert.equal(isDiscoverySnapshotAuthoritative(NOW_SEC - 59, NOW_SEC), true);
+  assert.equal(isDiscoverySnapshotAuthoritative(NOW_SEC - 60, NOW_SEC), false);
 });

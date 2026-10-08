@@ -76,6 +76,85 @@ export function isRotatingHlsProviderUrl(value: string): boolean {
   }
 }
 
+export function resolveHlsStartupBufferTarget(options: {
+  defaultTargetSeconds: number;
+  rotatingProvider: boolean;
+  thirdParty: boolean;
+  classicExternal: boolean;
+  backgroundPlayback: boolean;
+  targetDurationSeconds: number | null;
+}): number {
+  const defaultTarget = Math.max(0, options.defaultTargetSeconds);
+  const targetDuration =
+    options.targetDurationSeconds !== null && Number.isFinite(options.targetDurationSeconds)
+      ? Math.max(0, options.targetDurationSeconds)
+      : null;
+  if (options.rotatingProvider) {
+    const foregroundReserve = Math.min(8, Math.max(6, targetDuration === null ? 6 : targetDuration * 3));
+    return Math.max(defaultTarget, options.backgroundPlayback ? Math.min(8, foregroundReserve + 2) : foregroundReserve);
+  }
+  if (!options.thirdParty) return defaultTarget;
+  if (options.classicExternal) {
+    const foregroundReserve = Math.min(10, Math.max(8, targetDuration === null ? 8 : targetDuration * 2));
+    return Math.max(defaultTarget, options.backgroundPlayback ? Math.min(12, foregroundReserve + 2) : foregroundReserve);
+  }
+
+  const foregroundReserve = Math.min(6, Math.max(3, targetDuration ?? 4));
+  return Math.max(defaultTarget, options.backgroundPlayback ? Math.min(8, foregroundReserve + 2) : foregroundReserve);
+}
+
+export function selectBufferedLiveStartupPosition(options: {
+  currentTime: number;
+  rangeStart: number;
+  rangeEnd: number;
+  targetBufferSeconds: number;
+}): number | null {
+  const { currentTime, rangeStart, rangeEnd, targetBufferSeconds } = options;
+  if (![currentTime, rangeStart, rangeEnd, targetBufferSeconds].every(Number.isFinite)) return null;
+  const duration = rangeEnd - rangeStart;
+  if (duration <= 0.25 || targetBufferSeconds <= 0) return null;
+
+  const currentIsBuffered = currentTime >= rangeStart - 0.05 && currentTime <= rangeEnd + 0.05;
+  const currentBufferAhead = currentIsBuffered ? Math.max(0, rangeEnd - currentTime) : 0;
+  if (currentBufferAhead >= targetBufferSeconds) return null;
+
+  const earliestPlayable = rangeStart + Math.min(0.1, duration / 4);
+  return Math.max(earliestPlayable, rangeEnd - targetBufferSeconds);
+}
+
+export function selectRotatingStartupLevel(levels: readonly { bitrate?: number }[]): number {
+  if (levels.length === 0) return -1;
+  return levels.reduce((lowest, level, index) => {
+    const lowestBitrate = levels[lowest]?.bitrate;
+    const bitrate = level.bitrate;
+    if (!Number.isFinite(bitrate)) return lowest;
+    if (!Number.isFinite(lowestBitrate)) return index;
+    return (bitrate ?? Number.POSITIVE_INFINITY) < (lowestBitrate ?? Number.POSITIVE_INFINITY) ? index : lowest;
+  }, 0);
+}
+
+export function shouldFallbackToAudioForMissingVideoFragment(options: {
+  fatal: boolean;
+  details: string;
+  status: number | null;
+  fragmentType: string | null;
+}): boolean {
+  return (
+    !options.fatal &&
+    options.details === "fragLoadError" &&
+    options.status === 404 &&
+    options.fragmentType === "main"
+  );
+}
+
+export function shouldRefreshRotatingMasterOnHlsError(options: {
+  fatal: boolean;
+  details: string;
+}): boolean {
+  if (options.fatal) return true;
+  return ["levelLoadError", "audioTrackLoadError", "fragLoadError"].includes(options.details);
+}
+
 export type HlsPlaybackCompatibilityPolicy = {
   stableMode: boolean;
   bridgeLiveGaps: boolean;
@@ -90,21 +169,25 @@ export function resolveHlsPlaybackCompatibilityPolicy(options: {
   isFirefox: boolean;
   lowLatencyEnabled: boolean;
 }): HlsPlaybackCompatibilityPolicy {
-  const stableMode = options.isFirefox;
-  const preferCompleteSegments = isRotatingHlsProviderUrl(options.sourceUrl);
-  const streamroadProvider = (() => {
+  const provider = (() => {
     try {
-      return hasProviderRoot(new URL(options.sourceUrl).hostname.toLowerCase(), "streamroad.money");
+      const hostname = new URL(options.sourceUrl).hostname.toLowerCase();
+      if (hasProviderRoot(hostname, "streamroad.money")) return "streamroad";
+      if (hasProviderRoot(hostname, "zap.stream") || hasProviderRoot(hostname, "letsfo.com")) return "rotating";
     } catch {
-      return false;
+      // Fall through to a generic source.
     }
+    return "generic";
   })();
+  const rotatingProvider = provider === "rotating";
+  const stableMode = options.isFirefox;
+  const preferCompleteSegments = provider === "streamroad" || rotatingProvider;
   return {
     stableMode,
     bridgeLiveGaps: stableMode,
     lowLatencyEnabled: options.lowLatencyEnabled && !stableMode && !preferCompleteSegments,
     preferCompleteSegments,
-    completeSegmentLiveSyncCount: preferCompleteSegments ? (streamroadProvider ? 3 : 2) : null,
+    completeSegmentLiveSyncCount: preferCompleteSegments ? 3 : null,
     liveSyncDurationSeconds: null
   };
 }

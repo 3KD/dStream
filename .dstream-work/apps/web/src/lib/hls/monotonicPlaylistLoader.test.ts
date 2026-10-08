@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  detectHlsPlaylistMode,
   inspectPlaylistWindow,
   isStalePlaylistWindow,
   MonotonicPlaylistLoader,
   sanitizePlaylistTiming
 } from "./monotonicPlaylistLoader";
+
+test("distinguishes master, low-latency, and classic media playlists", () => {
+  assert.equal(detectHlsPlaylistMode("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvideo.m3u8"), "master");
+  assert.equal(
+    detectHlsPlaylistMode("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-PART-INF:PART-TARGET=0.5\n#EXT-X-PART:DURATION=0.5,URI=\"1.m4s\""),
+    "low-latency"
+  );
+  assert.equal(
+    detectHlsPlaylistMode("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:4,\nsegment.ts"),
+    "classic"
+  );
+  assert.equal(detectHlsPlaylistMode("not a playlist"), null);
+});
 
 function playlist(sequence: number, dates: string[]): string {
   return [

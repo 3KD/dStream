@@ -15,6 +15,17 @@ export type PlaylistWindow = {
 const windowsByConfig = new WeakMap<object, Map<string, PlaylistWindow>>();
 const STALE_RETRY_LIMIT = 3;
 
+export type HlsPlaylistMode = "master" | "low-latency" | "classic";
+
+export function detectHlsPlaylistMode(playlist: string): HlsPlaylistMode | null {
+  if (!/^#EXTM3U\s*$/m.test(playlist)) return null;
+  if (/^#EXT-X-STREAM-INF\s*:/m.test(playlist)) return "master";
+  const mediaPlaylist = /^#EXT-X-MEDIA-SEQUENCE\s*:/m.test(playlist) || /^#EXTINF\s*:/m.test(playlist);
+  if (!mediaPlaylist) return null;
+  if (/^#EXT-X-(?:PART|PART-INF)\s*:/m.test(playlist)) return "low-latency";
+  return "classic";
+}
+
 function emptyStats(): LoaderStats {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
   return {
@@ -167,6 +178,10 @@ export class MonotonicPlaylistLoader implements Loader<PlaylistLoaderContext> {
           if (this.aborted || this.httpLoader !== httpLoader) return;
           this.stats = stats;
           const responseData = typeof response.data === "string" ? sanitizePlaylistTiming(response.data) : response.data;
+          if (typeof responseData === "string") {
+            const playlistMode = detectHlsPlaylistMode(responseData);
+            if (playlistMode) this.config.dstreamOnPlaylistModeDetected?.(playlistMode, context.url);
+          }
           if (responseData !== response.data) {
             this.config.dstreamPlaylistTimingCorrected = true;
             this.config.dstreamOnPlaylistTimingCorrected?.(context.url);

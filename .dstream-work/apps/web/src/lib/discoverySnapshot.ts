@@ -1,7 +1,7 @@
 import { makeStreamKey, type StreamAnnounce } from "@dstream/protocol";
 
 export const DISCOVERY_SNAPSHOT_REFRESH_AFTER_SEC = 60;
-export const DISCOVERY_SNAPSHOT_AUTHORITY_MAX_AGE_SEC = 120;
+export const DISCOVERY_SNAPSHOT_AUTHORITY_MAX_AGE_SEC = DISCOVERY_SNAPSHOT_REFRESH_AFTER_SEC - 1;
 
 const MAX_FUTURE_CLOCK_SKEW_SEC = 30;
 

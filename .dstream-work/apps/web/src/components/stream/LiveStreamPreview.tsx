@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Hls from "hls.js";
 import { makeOriginStreamId } from "@/lib/origin";
 import { inferMediaUrlKind } from "@/lib/mediaUrl";
+import { StreamImage } from "./StreamImage";
 
 interface LiveStreamPreviewProps {
   streamPubkey: string;
@@ -178,11 +179,11 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
         loading="lazy"
       />
     ) : fallbackImageUrl && !fallbackImageFailed ? (
-      <img
+      <StreamImage
         src={fallbackImageUrl}
         alt={title}
         className="w-full h-full object-cover"
-        loading="lazy"
+        sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
         onError={() => setFailedFallbackImage(fallbackImageUrl)}
       />
     ) : (
@@ -204,7 +205,7 @@ export function LiveStreamPreview({ streamPubkey, streamId, title, streamingUrl,
 
   return (
     <div
-      className="h-full w-full"
+      className="relative h-full w-full"
       data-live-preview-state={previewState}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse" || event.pointerType === "pen") setCaptureRequested(true);

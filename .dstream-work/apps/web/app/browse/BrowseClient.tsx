@@ -6,36 +6,22 @@ import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
 import { useGuild } from "@/hooks/useGuild";
 import { useGuilds } from "@/hooks/useGuilds";
-import { makeStreamKey, type StreamAnnounce } from "@dstream/protocol";
+import { makeStreamKey } from "@dstream/protocol";
 import { LoaderCircle, Star } from "lucide-react";
 import { useSocial } from "@/context/SocialContext";
 import { useQuickPlayActions } from "@/context/QuickPlayContext";
-import { GlobalPlayerSlot } from "@/context/GlobalPlayerContext";
+import { preloadGlobalPlayer } from "@/context/GlobalPlayerContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { canonicalStreamKey } from "@/hooks/useStreamAnnounces";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
+import { StreamImage } from "@/components/stream/StreamImage";
 
 import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
-import { isLikelyLivePlayableMediaUrl, resolvePreferredRadioAudioUrl } from "@/lib/mediaUrl";
-import { deriveQuickPlayPlaybackStateKey, deriveQuickPlayWhepUrl } from "@/lib/quickplay";
 
 const STREAM_HISTORY_BATCH_SIZE = 12;
-const LIVE_PLAYER_START_TIMEOUT_MS = 10_000;
-
-interface BrowsePlayerPrewarm {
-  streamPubkey: string;
-  streamId: string;
-  title: string;
-  watchHref: string;
-  hlsUrl: string;
-  whepUrl: string | null;
-  audioFallbackUrl: string | null;
-  preferAudioFallback: boolean;
-  playbackStateKey: string;
-}
 
 function streamCanonicalId(s: { pubkey: string; streamId: string; streaming?: string | null }) {
   return `${s.pubkey.toLowerCase()}::${canonicalStreamKey(s as any)}`;
@@ -61,8 +47,6 @@ export default function BrowseClient() {
   const guildQuery = useMemo(() => parseGuildQuery(guildQueryRaw), [guildQueryRaw]);
   const guildPubkeyHex = useMemo(() => (guildQuery ? pubkeyParamToHex(guildQuery.pubkeyParam) : null), [guildQuery]);
   const [navigatingToStream, setNavigatingToStream] = useState(false);
-  const [playerPrewarm, setPlayerPrewarm] = useState<BrowsePlayerPrewarm | null>(null);
-  const [prewarmNavigationStarted, setPrewarmNavigationStarted] = useState(false);
   const { clearQuickPlayStream } = useQuickPlayActions();
   const { streams: liveStreams, isLoading: liveLoading } = useStreamAnnounces({
     enabled: !navigatingToStream,
@@ -103,64 +87,14 @@ export default function BrowseClient() {
 
   const beginWatchNavigation = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    preloadGlobalPlayer();
+    clearQuickPlayStream();
     setNavigatingToStream(true);
   };
 
-  const finishLiveWatchNavigation = useCallback(() => {
-    if (!playerPrewarm || prewarmNavigationStarted) return;
-    setPrewarmNavigationStarted(true);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => router.push(playerPrewarm.watchHref));
-    });
-  }, [playerPrewarm, prewarmNavigationStarted, router]);
-
-  useEffect(() => {
-    if (!playerPrewarm || prewarmNavigationStarted) return;
-    const timeout = window.setTimeout(finishLiveWatchNavigation, LIVE_PLAYER_START_TIMEOUT_MS);
-    return () => window.clearTimeout(timeout);
-  }, [finishLiveWatchNavigation, playerPrewarm, prewarmNavigationStarted]);
-
-  const beginLiveWatchNavigation = (
-    event: ReactMouseEvent<HTMLAnchorElement>,
-    stream: Pick<
-      StreamAnnounce,
-      "pubkey" | "streamId" | "title" | "streaming" | "status" | "streamVisibility" | "referenceUrls" | "topics"
-    >,
-    watchHref: string
-  ) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const hlsUrl = stream.streaming?.trim();
-    const canPrewarm =
-      stream.status === "live" &&
-      stream.streamVisibility !== "private" &&
-      isLikelyLivePlayableMediaUrl(hlsUrl);
-    if (!hlsUrl || !canPrewarm) {
-      clearQuickPlayStream();
-      setNavigatingToStream(true);
-      return;
-    }
-
-    event.preventDefault();
-    const preferredRadioAudioUrl = resolvePreferredRadioAudioUrl(stream.referenceUrls, stream.topics);
-    setPrewarmNavigationStarted(false);
-    clearQuickPlayStream();
-    setNavigatingToStream(true);
-    setPlayerPrewarm({
-      streamPubkey: stream.pubkey,
-      streamId: stream.streamId,
-      title: stream.title?.trim() || stream.streamId,
-      watchHref,
-      hlsUrl,
-      whepUrl:
-        deriveQuickPlayWhepUrl({ pubkey: stream.pubkey, streamId: stream.streamId }, hlsUrl) ?? null,
-      audioFallbackUrl: preferredRadioAudioUrl,
-      preferAudioFallback: !!preferredRadioAudioUrl,
-      playbackStateKey: deriveQuickPlayPlaybackStateKey({
-        pubkey: stream.pubkey,
-        streamId: stream.streamId,
-        hlsUrl
-      })
-    });
+  const prepareWatchNavigation = (watchHref: string) => {
+    preloadGlobalPlayer();
+    router.prefetch(watchHref);
   };
 
   const curatedKeys = useMemo(() => {
@@ -220,26 +154,6 @@ export default function BrowseClient() {
   const renderedOfflineStreams = visibleOfflineStreams.slice(0, visibleOfflineLimit);
 
   const isLoading = liveLoading || archiveLoading;
-  const prewarmPlayerProps = useMemo(
-    () =>
-      playerPrewarm
-        ? {
-            src: playerPrewarm.hlsUrl,
-            whepSrc: playerPrewarm.whepUrl,
-            audioFallbackSrc: playerPrewarm.audioFallbackUrl,
-            preferAudioFallback: playerPrewarm.preferAudioFallback,
-            autoplayMuted: false,
-            isLiveStream: true,
-            showTimelineControls: false,
-            showAuxControls: false,
-            showNativeControls: false,
-            playbackStateKey: playerPrewarm.playbackStateKey,
-            overlayTitle: playerPrewarm.title,
-            onPlaying: finishLiveWatchNavigation
-          }
-        : null,
-    [finishLiveWatchNavigation, playerPrewarm]
-  );
   const curatedLabel = !guildQuery
     ? "Curated only"
     : selectedGuild?.name
@@ -272,16 +186,13 @@ export default function BrowseClient() {
         <SimpleHeader />
         <main className="flex min-h-[60vh] items-center justify-center px-3 py-5 sm:px-6">
           <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-lg border border-neutral-800 bg-black sm:rounded-xl">
-            {prewarmPlayerProps ? (
-              <GlobalPlayerSlot id="browse-player-prewarm" playerProps={prewarmPlayerProps} />
-            ) : null}
             <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-black/75 px-4 py-3 text-sm text-neutral-200"
+              className="flex h-full items-center justify-center gap-3 px-4 py-3 text-sm text-neutral-200"
               role="status"
               aria-live="polite"
             >
               <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-blue-400" />
-              <span className="truncate">Starting {playerPrewarm?.title || "stream"}...</span>
+              <span className="truncate">Opening stream...</span>
             </div>
           </div>
         </main>
@@ -419,7 +330,9 @@ export default function BrowseClient() {
                       <Link
                         href={watchHref}
                         prefetch={false}
-                        onClick={(event) => beginLiveWatchNavigation(event, stream, watchHref)}
+                        onPointerEnter={() => prepareWatchNavigation(watchHref)}
+                        onPointerDown={() => prepareWatchNavigation(watchHref)}
+                        onClick={beginWatchNavigation}
                         key={`live:${streamCanonicalId(stream)}`}
                         className="group block overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 transition hover:border-blue-500/50 sm:rounded-xl"
                       >
@@ -528,12 +441,11 @@ export default function BrowseClient() {
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <StreamImage
                               src={stream.image}
                               alt={stream.title || "Replay thumbnail"}
                               className="w-full h-full object-cover"
-                              loading="lazy"
+                              sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                             />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">
@@ -622,12 +534,11 @@ export default function BrowseClient() {
                       >
                         <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                           {stream.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <StreamImage
                               src={stream.image}
                               alt={stream.title || "Offline stream thumbnail"}
                               className="w-full h-full object-cover"
-                              loading="lazy"
+                              sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                             />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 gap-2">

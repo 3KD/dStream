@@ -15,12 +15,16 @@ export interface EagerChatBootstrap {
   streamId: string;
   source: "pool" | "pre-hydration";
   attach: (listener: BootstrapListener) => () => void;
+  release: () => void;
   close: () => void;
 }
 
 interface EagerChatBootstrapState extends EagerChatBootstrap {
   claimed: boolean;
+  claim: () => void;
 }
+
+const RELEASE_GRACE_MS = 1_500;
 
 type DStreamChatBootstrapGlobal = typeof globalThis & {
   __dstreamEagerChatBootstrap?: EagerChatBootstrapState | null;
@@ -65,6 +69,7 @@ function startEagerChatBootstrap(scope: { streamPubkey: string; streamId: string
   const listeners = new Set<BootstrapListener>();
   let eose = false;
   let closed = false;
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   const sub = subscribeMany(
     getNostrRelays(),
@@ -98,6 +103,11 @@ function startEagerChatBootstrap(scope: { streamPubkey: string; streamId: string
     ...scope,
     source: "pool",
     claimed: false,
+    claim() {
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      state.claimed = true;
+    },
     attach(listener) {
       if (closed) return () => {};
       listeners.add(listener);
@@ -105,9 +115,20 @@ function startEagerChatBootstrap(scope: { streamPubkey: string; streamId: string
       if (eose) listener.oneose();
       return () => listeners.delete(listener);
     },
+    release() {
+      if (closed) return;
+      state.claimed = false;
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(() => {
+        releaseTimer = null;
+        if (!state.claimed) state.close();
+      }, RELEASE_GRACE_MS);
+    },
     close() {
       if (closed) return;
       closed = true;
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = null;
       listeners.clear();
       sub.close();
       if (bootstrapGlobal.__dstreamEagerChatBootstrap === state) {
@@ -132,6 +153,7 @@ export function createVerifiedPreHydrationChatBootstrap(
   let eose = false;
   let closed = false;
   let detachRaw: (() => void) | null = null;
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   const emitEoseWhenReady = () => {
     if (closed || eose || !rawEose) return;
@@ -146,6 +168,11 @@ export function createVerifiedPreHydrationChatBootstrap(
     ...scope,
     source: "pre-hydration",
     claimed: false,
+    claim() {
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      state.claimed = true;
+    },
     attach(listener) {
       if (closed) return () => {};
       listeners.add(listener);
@@ -153,9 +180,20 @@ export function createVerifiedPreHydrationChatBootstrap(
       if (eose) listener.oneose();
       return () => listeners.delete(listener);
     },
+    release() {
+      if (closed) return;
+      state.claimed = false;
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(() => {
+        releaseTimer = null;
+        if (!state.claimed) state.close();
+      }, RELEASE_GRACE_MS);
+    },
     close() {
       if (closed) return;
       closed = true;
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = null;
       listeners.clear();
       detachRaw?.();
       rawBootstrap.close();
@@ -218,7 +256,7 @@ export function takeEagerChatBootstrap(streamPubkey: string, streamId: string): 
   const current = ensureEagerChatBootstrap();
   if (!current || current.claimed) return null;
   if (current.streamPubkey !== streamPubkey || current.streamId !== streamId) return null;
-  current.claimed = true;
+  current.claim();
   return current;
 }
 

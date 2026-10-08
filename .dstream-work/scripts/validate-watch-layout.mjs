@@ -392,10 +392,19 @@ async function validateDockedChatScroll(page, name, expect) {
   }
 
   check(!!pinnedLayout, `${name}: pinned chat geometry unavailable`);
-  check(
-    Math.abs(pinnedLayout.chatDesktopOrLandscape.top - (pinnedLayout.viewport.top + inset)) <= 3,
-    `${name}: chat did not stop at its top buffer`
-  );
+  const pinnedViewportBottom = pinnedLayout.viewport.bottom - inset;
+  const pinnedFooterBoundary = pinnedLayout.footer.top - inset;
+  if (pinnedFooterBoundary >= pinnedViewportBottom - 3) {
+    check(
+      Math.abs(pinnedLayout.chatDesktopOrLandscape.top - (pinnedLayout.viewport.top + inset)) <= 3,
+      `${name}: chat did not stop at its top buffer`
+    );
+  } else {
+    check(
+      pinnedLayout.chatDesktopOrLandscape.top <= pinnedLayout.viewport.top + inset + 3,
+      `${name}: footer collision pushed the chat below its top buffer`
+    );
+  }
   check(sawFooterBoundary, `${name}: footer boundary was not exercised`);
   await scrollToAndCollect(page, 0);
 }

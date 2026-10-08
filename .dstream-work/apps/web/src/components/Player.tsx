@@ -9,7 +9,12 @@ import {
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
   parseRotatingMasterPlaylist,
-  resolveHlsPlaybackCompatibilityPolicy
+  resolveHlsStartupBufferTarget,
+  resolveHlsPlaybackCompatibilityPolicy,
+  selectBufferedLiveStartupPosition,
+  selectRotatingStartupLevel,
+  shouldFallbackToAudioForMissingVideoFragment,
+  shouldRefreshRotatingMasterOnHlsError
 } from "@/lib/hls/rotatingMaster";
 import { buildProviderHlsRelayPath } from "@/lib/hls/providerRelay";
 import {
@@ -23,6 +28,7 @@ import { WhepClient } from "@/lib/whep";
 import { pickPlaybackMode } from "@/lib/whep-fallback";
 import { inferMediaUrlKind, isLikelyPublicAudioUrl } from "@/lib/mediaUrl";
 import { isMediaUserPaused, setMediaUserPaused } from "@/lib/mediaPlaybackIntent";
+import { StreamImage } from "@/components/stream/StreamImage";
 import { Gauge, Headphones, Maximize, Minimize, Pause, PictureInPicture2, Play, Users, Volume2, VolumeX } from "lucide-react";
 
 interface PlayerProps {
@@ -93,6 +99,9 @@ type AudioSessionLike = {
 };
 
 const MOBILE_CONTROLS_HIDE_MS = 5_000;
+const ROTATING_STARTUP_STABLE_MS = 10_000;
+const ROTATING_STARTUP_RELEASE_BUFFER_SECONDS = 4;
+const ROTATING_STARTUP_MAX_HOLD_MS = 30_000;
 const LIVE_EDGE_SCRUB_TOLERANCE_SEC = 2;
 
 function clampUnit(value: number): number {
@@ -447,6 +456,7 @@ export function Player({
   const lastAudibleVolumeRef = useRef(1);
   const userPausedPlaybackRef = useRef(false);
   const startupGatePendingRef = useRef(false);
+  const classicExternalHlsRef = useRef(false);
   const setUserPausedPlayback = useCallback((paused: boolean, media = videoRef.current) => {
     userPausedPlaybackRef.current = paused;
     setMediaUserPaused(media, paused);
@@ -523,13 +533,14 @@ export function Player({
   useEffect(() => {
     const hls = hlsRef.current;
     if (!hls) return;
+    const classicExternalHls = classicExternalHlsRef.current;
     applyHlsPlaybackTuning(hls, {
-      lowLatencyEnabled: effectiveLowLatencyEnabled,
+      lowLatencyEnabled: classicExternalHls ? false : effectiveLowLatencyEnabled,
       backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
       bridgeLiveGaps,
       preferCompleteSegments,
       completeSegmentLiveSyncCount,
-      liveSyncDurationSeconds
+      liveSyncDurationSeconds: classicExternalHls ? 8 : liveSyncDurationSeconds
     });
   }, [
     bridgeLiveGaps,
@@ -847,23 +858,6 @@ export function Player({
         return;
       }
 
-      if (video.ended) {
-        if (audioFallbackRecoveryRef.current?.("The live audio source ended unexpectedly. Reconnecting.")) {
-          markHealthy(now, currentTime, frameCount);
-          return;
-        }
-        requestLivePlaybackReload("Live media ended unexpectedly. Reconnected to the current live window.");
-        markHealthy(now, currentTime, frameCount);
-        return;
-      }
-
-      if (video.paused && !startupGatePendingRef.current) {
-        void video.play().catch(() => {
-          setStatus("Click to play");
-          setNeedsClick(true);
-        });
-      }
-
       const stalledForMs = now - lastProgressAt;
       const hls = hlsRef.current;
       const tryInSessionRecovery = (reason: string) => {
@@ -887,19 +881,43 @@ export function Player({
           }
           if (!rotatingHlsProviderMode) {
             hls.stopLoad();
-            hls.startLoad(currentTime, true);
+            hls.startLoad(video.ended ? -1 : currentTime, true);
+            if (video.ended && video.seekable.length > 0) {
+              const liveEdge = video.seekable.end(video.seekable.length - 1);
+              if (Number.isFinite(liveEdge) && liveEdge > 0) video.currentTime = Math.max(0, liveEdge - 0.1);
+            }
           }
         } catch {
           // The next watchdog pass can escalate if the HLS instance cannot restart.
         }
         if (!startupGatePendingRef.current) {
           void video.play().catch(() => {
+            if (video.ended) return;
             setStatus("Click to play");
             setNeedsClick(true);
           });
         }
         return true;
       };
+
+      if (video.ended) {
+        if (audioFallbackRecoveryRef.current?.("The live audio source ended unexpectedly. Reconnecting.")) {
+          markHealthy(now, currentTime, frameCount);
+          return;
+        }
+        if (tryInSessionRecovery("The live window rolled over. Resuming without rebuilding the player.")) return;
+        requestLivePlaybackReload("Live media ended repeatedly. Reconnected to the current live window.");
+        markHealthy(now, currentTime, frameCount);
+        return;
+      }
+
+      if (video.paused && !startupGatePendingRef.current) {
+        void video.play().catch(() => {
+          setStatus("Click to play");
+          setNeedsClick(true);
+        });
+      }
+
       const starvationRecoveryThresholdMs = 6_000;
       const audioFallbackActive = (video.dataset.dstreamSourceMode ?? "").includes("audio-fallback");
       if (
@@ -1033,8 +1051,9 @@ export function Player({
       });
     };
     const onTimeUpdate = () => {
+      if (isLiveStream) return;
       const now = Date.now();
-      if (now - lastWriteAt < 800) return;
+      if (now - lastWriteAt < 2_000) return;
       lastWriteAt = now;
       persist();
     };
@@ -1048,7 +1067,7 @@ export function Player({
       video.removeEventListener("volumechange", onVolumePersist);
       persist();
     };
-  }, [playbackStateKey, normalizedSrc, normalizedWhepSrc]);
+  }, [isLiveStream, playbackStateKey, normalizedSrc, normalizedWhepSrc]);
 
   useEffect(() => {
     const onFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
@@ -1123,9 +1142,18 @@ export function Player({
       lastFragChangedAt: 0,
       lastLevelUpdatedAt: 0
     };
+    classicExternalHlsRef.current = false;
     playbackSessionGenerationRef.current += 1;
     video.dataset.dstreamPlaybackSession = String(playbackSessionGenerationRef.current);
     video.dataset.dstreamSourceMode = "primary";
+    delete video.dataset.dstreamHlsErrorCount;
+    delete video.dataset.dstreamLastHlsError;
+    delete video.dataset.dstreamStartupLevelHold;
+    delete video.dataset.dstreamAutoLevelCap;
+    delete video.dataset.dstreamMasterRefreshCount;
+    delete video.dataset.dstreamMasterRefreshAt;
+    delete video.dataset.dstreamMasterRefreshChanges;
+    delete video.dataset.dstreamPlaylistMode;
     audioFallbackActivationRef.current = null;
     audioFallbackRecoveryRef.current = null;
     pendingAudioFallbackReasonRef.current = null;
@@ -1198,6 +1226,7 @@ export function Player({
     };
     let removeNativeListener: (() => void) | null = null;
     let removeHlsStartupListener: (() => void) | null = null;
+    let removeRotatingStartupLevelHold: (() => void) | null = null;
     const clearHlsStartupListener = () => {
       try {
         removeHlsStartupListener?.();
@@ -1205,6 +1234,15 @@ export function Player({
         // ignore
       }
       removeHlsStartupListener = null;
+    };
+    const clearRotatingStartupLevelHold = () => {
+      try {
+        removeRotatingStartupLevelHold?.();
+      } catch {
+        // ignore
+      }
+      removeRotatingStartupLevelHold = null;
+      delete video.dataset.dstreamStartupLevelHold;
     };
     const getBufferedAheadSeconds = () => {
       try {
@@ -1240,34 +1278,97 @@ export function Player({
       video.dataset.dstreamStartupGate = pending ? "pending" : "released";
       if (!pending) video.dataset.dstreamStartupBuffer = getBufferedAheadSeconds().toFixed(3);
     };
-    const beginHlsPlayback = () => {
-      setStartupGatePending(false);
-      setStatus("Ready");
-      sendReady();
-      void video.play().catch(() => {
-        setStatus("Click to play");
-        setNeedsClick(true);
-      });
+    const beginHlsPlayback = (startupPosition: number | null = null) => {
+      let released = false;
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+      const cleanupStartupSeek = () => {
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = null;
+        video.removeEventListener("canplay", releasePlayback);
+        video.removeEventListener("seeked", releasePlayback);
+        if (removeHlsStartupListener === cleanupStartupSeek) removeHlsStartupListener = null;
+      };
+      const releasePlayback = () => {
+        if (released || cancelled) return;
+        released = true;
+        cleanupStartupSeek();
+        setStartupGatePending(false);
+        setStatus("Ready");
+        sendReady();
+        void video.play().catch(() => {
+          setStatus("Click to play");
+          setNeedsClick(true);
+        });
+      };
+
+      if (startupPosition !== null && Number.isFinite(startupPosition)) {
+        try {
+          if (Math.abs(video.currentTime - startupPosition) > 0.25) {
+            video.addEventListener("canplay", releasePlayback);
+            video.addEventListener("seeked", releasePlayback);
+            removeHlsStartupListener = cleanupStartupSeek;
+            settleTimer = setTimeout(releasePlayback, 3_000);
+            video.currentTime = startupPosition;
+            return;
+          }
+        } catch {
+          cleanupStartupSeek();
+        }
+      }
+      releasePlayback();
     };
-    const waitForHlsStartupBuffer = (hls: Hls, startImmediately = false) => {
+    const waitForHlsStartupBuffer = (
+      hls: Hls,
+      rotatingProvider = false,
+      thirdPartySource = false
+    ) => {
       clearHlsStartupListener();
-      if (!isLiveStream || startImmediately) {
+      if (!isLiveStream) {
         beginHlsPlayback();
         return;
       }
 
-      const targetBufferSeconds = effectiveLowLatencyEnabled
+      const defaultTargetBufferSeconds = effectiveLowLatencyEnabled
         ? effectiveBackgroundPlayEnabled
           ? 4
-          : 3
+          : isMobilePlayback
+            ? 1
+            : 3
         : effectiveBackgroundPlayEnabled
           ? 6
-          : 5;
-      const maxWaitMs = effectiveLowLatencyEnabled
-        ? 8_000
-        : effectiveBackgroundPlayEnabled
+          : isMobilePlayback
+            ? 2
+            : 5;
+      const readTargetDurationSeconds = () => {
+        for (const level of hls.levels) {
+          const targetDuration = level.details?.targetduration;
+          if (typeof targetDuration === "number" && Number.isFinite(targetDuration) && targetDuration > 0) {
+            return targetDuration;
+          }
+        }
+        return null;
+      };
+      const getTargetBufferSeconds = () =>
+        resolveHlsStartupBufferTarget({
+          defaultTargetSeconds: defaultTargetBufferSeconds,
+          rotatingProvider,
+          thirdParty: thirdPartySource,
+          classicExternal: classicExternalHlsRef.current && thirdPartySource && !rotatingProvider,
+          backgroundPlayback: effectiveBackgroundPlayEnabled,
+          targetDurationSeconds: readTargetDurationSeconds()
+        });
+      const maxWaitMs = rotatingProvider || thirdPartySource
+        ? effectiveBackgroundPlayEnabled
           ? 10_000
-          : 8_000;
+          : 8_000
+        : effectiveLowLatencyEnabled
+          ? 8_000
+          : effectiveBackgroundPlayEnabled
+            ? 10_000
+            : 8_000;
+      const minimumTimedReleaseBufferSeconds = rotatingProvider
+        ? getTargetBufferSeconds()
+        : 0.25;
       const startedAt = Date.now();
       let started = false;
       let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1284,32 +1385,37 @@ export function Player({
         video.removeEventListener("canplay", maybeStart);
         video.removeEventListener("progress", maybeStart);
       };
-      const startNow = () => {
+      const startNow = (startupPosition: number | null = null) => {
         if (started || cancelled) return;
         started = true;
         cleanup();
         removeHlsStartupListener = null;
-        beginHlsPlayback();
+        beginHlsPlayback(startupPosition);
       };
       function maybeStart() {
         if (started || cancelled) return;
+        const targetBufferSeconds = getTargetBufferSeconds();
         const bufferedAhead = getBufferedAheadSeconds();
-        const startupRange = bufferedAhead > 0 ? null : getBestStartupRange();
+        const startupRange = getBestStartupRange();
         const startupRangeDuration = startupRange?.duration ?? 0;
-        const hasPlayableStartupBuffer = bufferedAhead > 0.25 || startupRangeDuration > 0.25;
+        const hasPlayableStartupBuffer =
+          bufferedAhead >= minimumTimedReleaseBufferSeconds ||
+          startupRangeDuration >= minimumTimedReleaseBufferSeconds;
         if (
           bufferedAhead >= targetBufferSeconds ||
           startupRangeDuration >= targetBufferSeconds ||
           (hasPlayableStartupBuffer && Date.now() - startedAt >= maxWaitMs)
         ) {
-          if (bufferedAhead === 0 && startupRange && startupRange.duration > 0.25) {
-            try {
-              video.currentTime = startupRange.start + Math.min(0.1, startupRange.duration / 4);
-            } catch {
-              // ignore
-            }
+          let startupPosition: number | null = null;
+          if (startupRange) {
+            startupPosition = selectBufferedLiveStartupPosition({
+              currentTime: video.currentTime,
+              rangeStart: startupRange.start,
+              rangeEnd: startupRange.end,
+              targetBufferSeconds
+            });
           }
-          startNow();
+          startNow(startupPosition);
         }
       }
 
@@ -1398,7 +1504,32 @@ export function Player({
         reconnectDeclaredAudioFallback("The audio source ended unexpectedly. Reconnecting.");
         return;
       }
-      switchToDeclaredAudioFallback("The source video ended while the broadcast is still live.");
+      if (switchToDeclaredAudioFallback("The source video ended while the broadcast is still live.")) return;
+
+      const hls = hlsRef.current;
+      if (playbackModeRef.current === "hls" && hls) {
+        const reason = "The live window rolled over. Resuming at the current edge.";
+        setError(null);
+        setStatus("Reconnecting…");
+        setNote(reason);
+        video.dataset.dstreamPlaybackRecoveryReason = reason;
+        try {
+          hls.stopLoad();
+          hls.startLoad(-1, true);
+          if (video.seekable.length > 0) {
+            const liveEdge = video.seekable.end(video.seekable.length - 1);
+            if (Number.isFinite(liveEdge) && liveEdge > 0) video.currentTime = Math.max(0, liveEdge - 0.1);
+          }
+          void video.play().catch(() => {
+            setStatus("Click to play");
+            setNeedsClick(true);
+          });
+          return;
+        } catch {
+          // Fall through to a bounded fresh-session recovery.
+        }
+      }
+      requestLivePlaybackReload("The live media ended unexpectedly. Reconnected to the current window.");
     };
     video.addEventListener("playing", handlePlaying);
     video.addEventListener("waiting", onWaiting);
@@ -1534,6 +1665,7 @@ export function Player({
     audioFallbackRecoveryRef.current = reconnectDeclaredAudioFallback;
 
     const startHls = (sourceHlsUrl: string, options: { skipNative?: boolean } = {}): boolean => {
+      clearRotatingStartupLevelHold();
       const hlsSource = buildProviderHlsRelayPath(sourceHlsUrl) ?? sourceHlsUrl;
       let mediaRecoveryAttempts = 0;
       let networkRecoveryAttempts = 0;
@@ -1669,21 +1801,26 @@ export function Player({
         integrityEnabled && hlsSource.includes("/api/dev/tamper-hls/")
           ? { from: "/api/dev/tamper-hls/", to: "/api/hls/" }
           : null;
-      const hlsPlaybackTuning = getHlsPlaybackTuning({
-        lowLatencyEnabled: effectiveLowLatencyEnabled,
-        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps,
-        preferCompleteSegments,
-        completeSegmentLiveSyncCount,
-        liveSyncDurationSeconds
-      });
       const needsDstreamFragmentLoader = integrityEnabled || hlsSource.includes("/api/hls/");
       const rotatingMasterMode = isRotatingHlsProviderUrl(sourceHlsUrl) || isRotatingHlsProviderUrl(normalizedSrc);
+      const thirdPartyHlsSource = isThirdPartyPlaybackUrl(hlsSource);
       const useMonotonicPlaylistGuard = !isFirefoxPlayback && !rotatingMasterMode;
       let correctedZapPlaylistTiming = false;
       let switchZapSourceToAudio: (reason: string) => boolean = () => false;
+      const getSessionTuningOptions = (): HlsPlaybackTuningOptions => {
+        const classicExternalHls = classicExternalHlsRef.current && thirdPartyHlsSource && !rotatingMasterMode;
+        return {
+          lowLatencyEnabled: classicExternalHls ? false : effectiveLowLatencyEnabled,
+          backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
+          bridgeLiveGaps,
+          preferCompleteSegments,
+          completeSegmentLiveSyncCount,
+          liveSyncDurationSeconds: classicExternalHls ? 8 : liveSyncDurationSeconds
+        };
+      };
       const hls = new Hls({
         startPosition: persistedResumeTime !== null ? Math.max(0, persistedResumeTime) : -1,
+        startLevel: isMobilePlayback || rotatingMasterMode ? 0 : -1,
         enableWorker: true,
         capLevelToPlayerSize: true,
         manifestLoadingTimeOut: 6_000,
@@ -1698,9 +1835,9 @@ export function Player({
         fragLoadingMaxRetry: 8,
         fragLoadingRetryDelay: 250,
         fragLoadingMaxRetryTimeout: 2_000,
-        ...(useMonotonicPlaylistGuard ? { pLoader: MonotonicPlaylistLoader } : {}),
+        pLoader: MonotonicPlaylistLoader,
         ...(needsDstreamFragmentLoader ? { fLoader: P2PFragmentLoader } : {}),
-        ...hlsPlaybackTuning,
+        ...getHlsPlaybackTuning(getSessionTuningOptions()),
         dstreamRefs: dstreamRefs,
         dstreamMonotonicPlaylistGuard: useMonotonicPlaylistGuard,
         dstreamPlaylistTimingCorrected: false,
@@ -1709,20 +1846,72 @@ export function Player({
           video.dataset.dstreamPlaylistTimingCorrected = "true";
           setTimeout(() => switchZapSourceToAudio("playlist-timing-corrected"), 0);
         },
+        dstreamOnPlaylistModeDetected: (mode: string) => {
+          if (mode !== "classic" || !thirdPartyHlsSource || rotatingMasterMode || classicExternalHlsRef.current) {
+            return;
+          }
+          classicExternalHlsRef.current = true;
+          video.dataset.dstreamPlaylistMode = "classic-external";
+          applyHlsPlaybackTuning(hls, getSessionTuningOptions());
+        },
         dstreamIntegrityHttpRewrite: integrityRewrite
       } as any);
-      applyHlsPlaybackTuning(hls, {
-        lowLatencyEnabled: effectiveLowLatencyEnabled,
-        backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-        bridgeLiveGaps,
-        preferCompleteSegments,
-        completeSegmentLiveSyncCount,
-        liveSyncDurationSeconds
-      });
+      applyHlsPlaybackTuning(hls, getSessionTuningOptions());
       hlsRef.current = hls;
 
-      hls.loadSource(hlsSource);
+      let startupLevelHoldActive = false;
+      let startupLevelHoldStartedAt = 0;
+      let uninterruptedPlayingSince = 0;
+      let startupLevelReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearStartupLevelReleaseTimer = () => {
+        if (!startupLevelReleaseTimer) return;
+        clearTimeout(startupLevelReleaseTimer);
+        startupLevelReleaseTimer = null;
+      };
+      const releaseStartupLevelHold = () => {
+        if (!startupLevelHoldActive) return;
+        startupLevelHoldActive = false;
+        clearStartupLevelReleaseTimer();
+        delete video.dataset.dstreamStartupLevelHold;
+        if (!effectiveBackgroundPlayEnabled) hls.autoLevelCapping = -1;
+      };
+      const checkStartupLevelRelease = () => {
+        startupLevelReleaseTimer = null;
+        if (!startupLevelHoldActive || cancelled || hlsRef.current !== hls) return;
+        const stableForMs = uninterruptedPlayingSince > 0 ? Date.now() - uninterruptedPlayingSince : 0;
+        const heldForMs = startupLevelHoldStartedAt > 0 ? Date.now() - startupLevelHoldStartedAt : 0;
+        if (
+          heldForMs >= ROTATING_STARTUP_MAX_HOLD_MS ||
+          (stableForMs >= ROTATING_STARTUP_STABLE_MS &&
+            getBufferedAheadSeconds() >= ROTATING_STARTUP_RELEASE_BUFFER_SECONDS)
+        ) {
+          releaseStartupLevelHold();
+          return;
+        }
+        startupLevelReleaseTimer = setTimeout(checkStartupLevelRelease, 500);
+      };
+      const onRotatingStartupPlaying = () => {
+        if (!startupLevelHoldActive) return;
+        if (uninterruptedPlayingSince <= 0) uninterruptedPlayingSince = Date.now();
+        if (!startupLevelReleaseTimer) startupLevelReleaseTimer = setTimeout(checkStartupLevelRelease, 500);
+      };
+      const onRotatingStartupWaiting = () => {
+        if (!startupLevelHoldActive) return;
+        uninterruptedPlayingSince = 0;
+        clearStartupLevelReleaseTimer();
+      };
+      if (rotatingMasterMode) {
+        video.addEventListener("playing", onRotatingStartupPlaying);
+        video.addEventListener("waiting", onRotatingStartupWaiting);
+        removeRotatingStartupLevelHold = () => {
+          clearStartupLevelReleaseTimer();
+          video.removeEventListener("playing", onRotatingStartupPlaying);
+          video.removeEventListener("waiting", onRotatingStartupWaiting);
+        };
+      }
+
       hls.attachMedia(video);
+      hls.loadSource(hlsSource);
 
       let rotatingMasterRefreshPromise: Promise<boolean> | null = null;
       let rotatingMasterRefreshCount = 0;
@@ -1770,18 +1959,22 @@ export function Player({
       };
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        applyHlsPlaybackTuning(hls, {
-          lowLatencyEnabled: effectiveLowLatencyEnabled,
-          backgroundPlayEnabled: effectiveBackgroundPlayEnabled,
-          bridgeLiveGaps,
-          preferCompleteSegments,
-          completeSegmentLiveSyncCount,
-          liveSyncDurationSeconds
-        });
+        applyHlsPlaybackTuning(hls, getSessionTuningOptions());
         applyPersistedSeek();
         const options = hls.levels.map((level, index) => ({ value: index, label: formatQualityLabel(level) }));
         setQualityOptions(options);
-        if (selectedQualityRef.current >= 0) {
+        if (selectedQualityRef.current < 0 && rotatingMasterMode) {
+          const startupLevel = selectRotatingStartupLevel(hls.levels);
+          if (startupLevel >= 0) {
+            startupLevelHoldActive = true;
+            startupLevelHoldStartedAt = Date.now();
+            hls.startLevel = startupLevel;
+            hls.nextLoadLevel = startupLevel;
+            hls.autoLevelCapping = startupLevel;
+            video.dataset.dstreamStartupLevel = String(startupLevel);
+            video.dataset.dstreamStartupLevelHold = String(startupLevel);
+          }
+        } else if (selectedQualityRef.current >= 0) {
           try {
             hls.loadLevel = selectedQualityRef.current;
           } catch {
@@ -1793,9 +1986,7 @@ export function Player({
             ? "Auto"
             : options.find((o) => o.value === selectedQualityRef.current)?.label ?? "Manual"
         );
-        const useBrowserManagedStartup =
-          !isMobilePlayback && isThirdPartyPlaybackUrl(hlsSource) && !rotatingMasterMode;
-        waitForHlsStartupBuffer(hls, useBrowserManagedStartup);
+        waitForHlsStartupBuffer(hls, rotatingMasterMode, thirdPartyHlsSource);
       });
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -1818,7 +2009,11 @@ export function Player({
       switchZapSourceToAudio = (reason: string) => {
         if (zapAudioFallbackActive || !isZapStreamHlsUrl(hlsSource)) return false;
         if (reason === "playlist-timing-corrected" && preferSourceVideoRef.current) return false;
-        if (!correctedZapPlaylistTiming && !(hls.config as any).dstreamPlaylistTimingCorrected) return false;
+        if (
+          reason === "playlist-timing-corrected" &&
+          !correctedZapPlaylistTiming &&
+          !(hls.config as any).dstreamPlaylistTimingCorrected
+        ) return false;
         const audioTrackUrl = hls.audioTracks.find(
           (track) => typeof track.url === "string" && track.url.length > 0
         )?.url;
@@ -1868,17 +2063,25 @@ export function Player({
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        const hlsErrorCount = Number(video.dataset.dstreamHlsErrorCount ?? 0) + 1;
+        video.dataset.dstreamHlsErrorCount = String(hlsErrorCount);
+        video.dataset.dstreamLastHlsError = `${data.type}:${data.details}:${data.fatal ? "fatal" : "nonfatal"}`;
+        if (
+          rotatingMasterMode &&
+          shouldFallbackToAudioForMissingVideoFragment({
+            fatal: data.fatal,
+            details: data.details,
+            status: data.response?.code ?? null,
+            fragmentType: data.frag?.type ?? null
+          }) &&
+          switchZapSourceToAudio("video-fragment-missing")
+        ) {
+          return;
+        }
         if (
           rotatingMasterMode &&
           data.type === Hls.ErrorTypes.NETWORK_ERROR &&
-          [
-            Hls.ErrorDetails.LEVEL_LOAD_ERROR,
-            Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT,
-            Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR,
-            Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT,
-            Hls.ErrorDetails.FRAG_LOAD_ERROR,
-            Hls.ErrorDetails.FRAG_LOAD_TIMEOUT
-          ].includes(data.details)
+          shouldRefreshRotatingMasterOnHlsError({ fatal: data.fatal, details: data.details })
         ) {
           void refreshRotatingMaster();
         }
@@ -2085,6 +2288,7 @@ export function Player({
       audioFallbackRecoveryRef.current = null;
       pendingAudioFallbackReasonRef.current = null;
       clearHlsStartupListener();
+      clearRotatingStartupLevelHold();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       if (whepRef.current) {
@@ -2132,6 +2336,8 @@ export function Player({
     const video = videoRef.current;
     if (!video) return;
 
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastSyncAt = 0;
     const syncTimeline = () => {
       try {
         let start = 0;
@@ -2148,9 +2354,11 @@ export function Player({
         const normalizedEnd = Math.max(0, end);
         const normalizedCurrent = Math.max(0, currentTime);
 
-        setTimelineStart(normalizedStart);
-        setTimelineEnd(normalizedEnd);
-        setTimelinePosition(normalizedCurrent);
+        setTimelineStart((current) => (Math.abs(current - normalizedStart) < 0.05 ? current : normalizedStart));
+        setTimelineEnd((current) => (Math.abs(current - normalizedEnd) < 0.05 ? current : normalizedEnd));
+        setTimelinePosition((current) =>
+          Math.abs(current - normalizedCurrent) < 0.2 ? current : normalizedCurrent
+        );
         if (
           isLiveStream &&
           !liveEdgePinned &&
@@ -2164,19 +2372,31 @@ export function Player({
       }
     };
 
+    const scheduleTimelineSync = () => {
+      if (syncTimer) return;
+      const minimumIntervalMs = isLiveStream && liveEdgePinned ? 2_000 : 250;
+      const elapsed = performance.now() - lastSyncAt;
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        lastSyncAt = performance.now();
+        syncTimeline();
+      }, Math.max(0, minimumIntervalMs - elapsed));
+    };
+
     syncTimeline();
     video.addEventListener("loadedmetadata", syncTimeline);
     video.addEventListener("durationchange", syncTimeline);
-    video.addEventListener("timeupdate", syncTimeline);
-    video.addEventListener("progress", syncTimeline);
+    video.addEventListener("timeupdate", scheduleTimelineSync);
+    video.addEventListener("progress", scheduleTimelineSync);
     video.addEventListener("seeking", syncTimeline);
     video.addEventListener("seeked", syncTimeline);
 
     return () => {
+      if (syncTimer) clearTimeout(syncTimer);
       video.removeEventListener("loadedmetadata", syncTimeline);
       video.removeEventListener("durationchange", syncTimeline);
-      video.removeEventListener("timeupdate", syncTimeline);
-      video.removeEventListener("progress", syncTimeline);
+      video.removeEventListener("timeupdate", scheduleTimelineSync);
+      video.removeEventListener("progress", scheduleTimelineSync);
       video.removeEventListener("seeking", syncTimeline);
       video.removeEventListener("seeked", syncTimeline);
     };
@@ -2518,10 +2738,11 @@ export function Player({
             className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-neutral-950"
           >
             {posterSrc ? (
-              <img
+              <StreamImage
                 src={posterSrc}
                 alt={`${overlayTitleLabel || "Live stream"} artwork`}
-                className="h-full w-full object-contain"
+                className="object-contain"
+                sizes="100vw"
               />
             ) : (
               <img src="/logo_trimmed.png" alt="dStream" className="h-20 w-20 object-contain opacity-40" />

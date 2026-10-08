@@ -7,7 +7,9 @@ import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Us
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
+import { StreamImage } from "@/components/stream/StreamImage";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
+import { preloadGlobalPlayer } from "@/context/GlobalPlayerContext";
 
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
@@ -60,8 +62,11 @@ export default function HomePage() {
     if (visibleStreams.length === 0) return;
     const random = visibleStreams[Math.floor(Math.random() * visibleStreams.length)];
     const npub = pubkeyHexToNpub(random.pubkey);
-    router.push(`/watch/${npub ?? random.pubkey}/${random.streamId}`);
+    preloadGlobalPlayer();
+    router.push(buildWatchHref(npub ?? random.pubkey, random.streamId, random.streaming));
   };
+
+  const prepareWatchNavigation = () => preloadGlobalPlayer();
 
   const setIntroCollapsed = (next: boolean) => {
     setHeroCollapsed(next);
@@ -159,6 +164,9 @@ export default function HomePage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                    onPointerEnter={prepareWatchNavigation}
+                    onPointerDown={prepareWatchNavigation}
+                    onClick={prepareWatchNavigation}
                     key={streamCanonicalId(stream)}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
@@ -237,17 +245,19 @@ export default function HomePage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                    onPointerEnter={prepareWatchNavigation}
+                    onPointerDown={prepareWatchNavigation}
+                    onClick={prepareWatchNavigation}
                     key={`video:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
                     <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                       {stream.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <StreamImage
                           src={stream.image}
                           alt={stream.title || "Video thumbnail"}
                           className="w-full h-full object-cover"
-                          loading="lazy"
+                          sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-neutral-500 text-sm">No thumbnail</div>

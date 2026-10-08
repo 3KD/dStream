@@ -806,7 +806,8 @@ export default function WatchPage() {
       setMatchingHandoffPlayer(false);
     }
   }, [playbackStreamUrl, pubkey, streamId]);
-  const playbackSourceResolved = matchingHandoffPlayer || !!announce || !announceLoading;
+  const playbackSourceResolved =
+    matchingHandoffPlayer || !!e2eHlsOverride || !!directPlaybackHint || !!announce || !announceLoading;
 
   const shouldTryWhep = useMemo(() => {
     if (!originStreamId) return false;

@@ -14,6 +14,7 @@ import { publishEventDetailed } from "@/lib/publish";
 import { shortenText } from "@/lib/encoding";
 import { formatXmrAtomic, isReplayEligibleStream, resolveVideoPolicy, videoModeLabel } from "@/lib/videoPolicy";
 import { buildWatchHref } from "@/lib/watchHref";
+import { preloadGlobalPlayer } from "@/context/GlobalPlayerContext";
 
 type VideoModeFilter = "all" | "public" | "paid";
 type ScopePatchMode = "keep" | "stream" | "playlist";
@@ -1263,6 +1264,9 @@ export default function VideoPage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
+                    onPointerEnter={preloadGlobalPlayer}
+                    onPointerDown={preloadGlobalPlayer}
+                    onClick={preloadGlobalPlayer}
                     key={`video:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition"
                   >

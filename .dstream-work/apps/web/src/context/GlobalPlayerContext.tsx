@@ -4,8 +4,25 @@ import dynamic from "next/dynamic";
 import { createContext, useContext, useState, ReactNode, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 
+let playerModulePromise: Promise<typeof import("@/components/Player")> | null = null;
+
+function loadPlayerModule() {
+  playerModulePromise ??= import("@/components/Player");
+  return playerModulePromise;
+}
+
+export function preloadGlobalPlayer(): void {
+  void loadPlayerModule();
+}
+
+// The player is a large, intentionally split bundle. On a direct watch load,
+// fetch and compile it in parallel with page hydration instead of afterward.
+if (typeof window !== "undefined" && window.location.pathname.startsWith("/watch/")) {
+  preloadGlobalPlayer();
+}
+
 const Player = dynamic(
-  () => import("@/components/Player").then((module) => module.Player),
+  () => loadPlayerModule().then((module) => module.Player),
   {
     ssr: false,
     loading: () => (

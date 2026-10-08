@@ -301,6 +301,22 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     };
   }, [store.active, store.locals]);
 
+  const localSignerPromise = useMemo(() => {
+    if (!identity || identity.kind !== "local") return null;
+    const secretKey = hexToBytes(identity.secretKeyHex);
+    const pending = loadNostrWasm().then((runtime) => {
+      const derivedPubkey = bytesToHex(runtime.getPublicKey(secretKey)).toLowerCase();
+      if (derivedPubkey !== identity.pubkey) {
+        throw new Error("Stored local identity does not match its secret key.");
+      }
+      return { runtime, secretKey };
+    });
+    // Keep the rejection observable to signEvent without producing an unhandled
+    // rejection when a corrupted stored identity is never used to sign.
+    void pending.catch(() => undefined);
+    return pending;
+  }, [identity]);
+
   const localIdentities = useMemo(() => {
     const activeLocalPubkey = store.active?.kind === "local" ? store.active.pubkey : null;
     return Object.values(store.locals)
@@ -445,20 +461,18 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         return await nostr.signEvent(unsigned);
       }
 
-      const sk = hexToBytes(identity.secretKeyHex);
-      const runtime = await loadNostrWasm();
-      const derivedPubkey = bytesToHex(runtime.getPublicKey(sk)).toLowerCase();
-      if (derivedPubkey !== identity.pubkey) throw new Error("Stored local identity does not match its secret key.");
+      if (!localSignerPromise) throw new Error("Local signer unavailable.");
+      const { runtime, secretKey } = await localSignerPromise;
       const eventWithoutPubkey: Record<string, unknown> = {
         kind: unsigned.kind,
         created_at: unsigned.created_at,
         tags: unsigned.tags,
         content: unsigned.content
       };
-      runtime.finalizeEvent(eventWithoutPubkey, sk);
+      runtime.finalizeEvent(eventWithoutPubkey, secretKey);
       return eventWithoutPubkey as NostrToolsEvent;
     },
-    [identity]
+    [identity, localSignerPromise]
   );
 
   const nip04Cipher = useMemo<Nip04Cipher | null>(() => {

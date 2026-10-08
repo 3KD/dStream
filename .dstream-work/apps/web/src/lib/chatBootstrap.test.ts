@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createVerifiedPreHydrationChatBootstrap,
+  takeEagerChatBootstrap,
   type PreHydrationChatBootstrap
 } from "./chatBootstrap";
 
@@ -103,4 +104,41 @@ test("pre-hydration chat drops invalid and duplicate events and closes its raw t
   bootstrap.close();
   bootstrap.close();
   assert.equal(raw.closed, 1);
+});
+
+test("pre-hydration chat transport survives a responsive remount", () => {
+  const raw = createRawBootstrap();
+  type TestGlobal = {
+    window?: { location: { pathname: string } };
+    __dstreamEagerChatBootstrap?: unknown;
+    __dstreamPreHydrationChatBootstrap?: PreHydrationChatBootstrap | null;
+  };
+  const globalState = globalThis as unknown as TestGlobal;
+  const previousWindow = globalState.window;
+
+  globalState.window = {
+    location: { pathname: `/watch/${raw.bootstrap.streamPubkey}/${raw.bootstrap.streamId}` }
+  };
+  globalState.__dstreamPreHydrationChatBootstrap = raw.bootstrap;
+  globalState.__dstreamEagerChatBootstrap = null;
+
+  try {
+    const first = takeEagerChatBootstrap(raw.bootstrap.streamPubkey, raw.bootstrap.streamId);
+    assert.ok(first);
+    first.release();
+
+    const remounted = takeEagerChatBootstrap(raw.bootstrap.streamPubkey, raw.bootstrap.streamId);
+    assert.equal(remounted, first);
+    assert.equal(raw.closed, 0);
+    remounted.close();
+    assert.equal(raw.closed, 1);
+  } finally {
+    globalState.__dstreamEagerChatBootstrap = null;
+    globalState.__dstreamPreHydrationChatBootstrap = null;
+    if (previousWindow === undefined) {
+      delete globalState.window;
+    } else {
+      globalState.window = previousWindow;
+    }
+  }
 });

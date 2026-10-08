@@ -8,6 +8,10 @@ export interface OptimisticChatMessage {
 const EMPTY_MESSAGES: readonly OptimisticChatMessage[] = [];
 const messagesByScope = new Map<string, readonly OptimisticChatMessage[]>();
 const containersByScope = new Map<string, HTMLElement>();
+const optimisticTimeFormatter = new Intl.DateTimeFormat([], {
+  hour: "2-digit",
+  minute: "2-digit"
+});
 
 function renderMessage(message: OptimisticChatMessage): HTMLElement {
   const row = document.createElement("div");
@@ -23,10 +27,7 @@ function renderMessage(message: OptimisticChatMessage): HTMLElement {
 
   const timestamp = document.createElement("span");
   timestamp.className = "text-[10px] text-neutral-500";
-  timestamp.textContent = new Date(message.createdAt * 1000).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  timestamp.textContent = optimisticTimeFormatter.format(message.createdAt * 1000);
 
   const delivery = document.createElement("span");
   delivery.className = "text-[10px] text-neutral-500";

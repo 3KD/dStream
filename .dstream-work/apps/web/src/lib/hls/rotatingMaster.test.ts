@@ -5,7 +5,12 @@ import {
   isRotatingHlsProviderUrl,
   isZapStreamHlsUrl,
   parseRotatingMasterPlaylist,
-  resolveHlsPlaybackCompatibilityPolicy
+  resolveHlsStartupBufferTarget,
+  resolveHlsPlaybackCompatibilityPolicy,
+  selectBufferedLiveStartupPosition,
+  selectRotatingStartupLevel,
+  shouldFallbackToAudioForMissingVideoFragment,
+  shouldRefreshRotatingMasterOnHlsError,
 } from "./rotatingMaster";
 
 function master(audioId: string, video360Id: string, video720Id: string): string {
@@ -33,7 +38,143 @@ test("identifies supported rotating HLS providers without suffix confusion", () 
   assert.equal(isRotatingHlsProviderUrl("/api/hls/local/index.m3u8"), false);
 });
 
-test("uses completed segments near the live edge for rotating providers", () => {
+test("sizes startup reserves by provider and external segment cadence", () => {
+  assert.equal(
+    resolveHlsStartupBufferTarget({
+      defaultTargetSeconds: 3,
+      rotatingProvider: true,
+      thirdParty: true,
+      classicExternal: false,
+      backgroundPlayback: false,
+      targetDurationSeconds: 2
+    }),
+    6
+  );
+  assert.equal(
+    resolveHlsStartupBufferTarget({
+      defaultTargetSeconds: 3,
+      rotatingProvider: false,
+      thirdParty: true,
+      classicExternal: false,
+      backgroundPlayback: false,
+      targetDurationSeconds: 4
+    }),
+    4
+  );
+  assert.equal(
+    resolveHlsStartupBufferTarget({
+      defaultTargetSeconds: 1,
+      rotatingProvider: false,
+      thirdParty: false,
+      classicExternal: false,
+      backgroundPlayback: false,
+      targetDurationSeconds: 4
+    }),
+    1
+  );
+  assert.equal(
+    resolveHlsStartupBufferTarget({
+      defaultTargetSeconds: 4,
+      rotatingProvider: false,
+      thirdParty: true,
+      classicExternal: false,
+      backgroundPlayback: true,
+      targetDurationSeconds: 4
+    }),
+    6
+  );
+  assert.equal(
+    resolveHlsStartupBufferTarget({
+      defaultTargetSeconds: 2,
+      rotatingProvider: false,
+      thirdParty: true,
+      classicExternal: true,
+      backgroundPlayback: false,
+      targetDurationSeconds: 4
+    }),
+    8
+  );
+});
+
+test("starts inside an existing buffer with the requested live reserve", () => {
+  assert.equal(
+    selectBufferedLiveStartupPosition({
+      currentTime: 46,
+      rangeStart: 28,
+      rangeEnd: 48,
+      targetBufferSeconds: 10
+    }),
+    38
+  );
+  assert.equal(
+    selectBufferedLiveStartupPosition({
+      currentTime: 30,
+      rangeStart: 28,
+      rangeEnd: 48,
+      targetBufferSeconds: 10
+    }),
+    null
+  );
+  assert.equal(
+    selectBufferedLiveStartupPosition({
+      currentTime: 50,
+      rangeStart: 28,
+      rangeEnd: 34,
+      targetBufferSeconds: 10
+    }),
+    28.1
+  );
+});
+
+test("selects the lowest bitrate only for rotating-provider startup", () => {
+  assert.equal(
+    selectRotatingStartupLevel([{ bitrate: 8_000_000 }, { bitrate: 1_500_000 }, { bitrate: 4_000_000 }]),
+    1
+  );
+  assert.equal(selectRotatingStartupLevel([]), -1);
+});
+
+test("only a missing main video fragment selects the stable audio rendition", () => {
+  assert.equal(
+    shouldFallbackToAudioForMissingVideoFragment({
+      fatal: false,
+      details: "fragLoadError",
+      status: 404,
+      fragmentType: "main"
+    }),
+    true
+  );
+  assert.equal(
+    shouldFallbackToAudioForMissingVideoFragment({
+      fatal: false,
+      details: "fragLoadError",
+      status: 404,
+      fragmentType: "audio"
+    }),
+    false
+  );
+  assert.equal(
+    shouldFallbackToAudioForMissingVideoFragment({
+      fatal: false,
+      details: "fragLoadTimeout",
+      status: null,
+      fragmentType: "main"
+    }),
+    false
+  );
+});
+
+test("rotating master refresh ignores transient timeouts but handles hard or fatal failures", () => {
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "levelLoadTimeOut" }), false);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "audioTrackLoadTimeOut" }), false);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "fragLoadTimeOut" }), false);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "levelLoadError" }), true);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "audioTrackLoadError" }), true);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: false, details: "fragLoadError" }), true);
+  assert.equal(shouldRefreshRotatingMasterOnHlsError({ fatal: true, details: "levelLoadTimeOut" }), true);
+});
+
+test("uses a three-segment completed-media position for rotating providers", () => {
   assert.deepEqual(
     resolveHlsPlaybackCompatibilityPolicy({
       sourceUrl: "https://api-uk.zap.stream/id/hls/live.m3u8",
@@ -45,7 +186,7 @@ test("uses completed segments near the live edge for rotating providers", () => 
       bridgeLiveGaps: false,
       lowLatencyEnabled: false,
       preferCompleteSegments: true,
-      completeSegmentLiveSyncCount: 2,
+      completeSegmentLiveSyncCount: 3,
       liveSyncDurationSeconds: null
     }
   );
@@ -60,7 +201,7 @@ test("uses completed segments near the live edge for rotating providers", () => 
       bridgeLiveGaps: false,
       lowLatencyEnabled: false,
       preferCompleteSegments: true,
-      completeSegmentLiveSyncCount: 2,
+      completeSegmentLiveSyncCount: 3,
       liveSyncDurationSeconds: null
     }
   );
@@ -78,7 +219,7 @@ test("keeps Firefox compatibility mode for rotating providers", () => {
       bridgeLiveGaps: true,
       lowLatencyEnabled: false,
       preferCompleteSegments: true,
-      completeSegmentLiveSyncCount: 2,
+      completeSegmentLiveSyncCount: 3,
       liveSyncDurationSeconds: null
     }
   );
@@ -117,7 +258,7 @@ test("limits generic stable compatibility mode to Firefox", () => {
   );
 });
 
-test("gives Streamroad one additional completed segment of live reserve", () => {
+test("keeps a three-segment live reserve for Streamroad", () => {
   const policy = resolveHlsPlaybackCompatibilityPolicy({
     sourceUrl: "https://api.streamroad.money/id/hls/live.m3u8",
     isFirefox: false,
