@@ -7,9 +7,7 @@ import { ChevronDown, ChevronUp, Compass, Network, Fingerprint, Shuffle, Zap, Us
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LiveStreamPreview } from "@/components/stream/LiveStreamPreview";
-import { StreamImage } from "@/components/stream/StreamImage";
 import { useStreamAnnounces } from "@/hooks/useStreamAnnounces";
-import { preloadGlobalPlayer } from "@/context/GlobalPlayerContext";
 
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
@@ -62,11 +60,8 @@ export default function HomePage() {
     if (visibleStreams.length === 0) return;
     const random = visibleStreams[Math.floor(Math.random() * visibleStreams.length)];
     const npub = pubkeyHexToNpub(random.pubkey);
-    preloadGlobalPlayer();
-    router.push(buildWatchHref(npub ?? random.pubkey, random.streamId, random.streaming));
+    router.push(`/watch/${npub ?? random.pubkey}/${random.streamId}`);
   };
-
-  const prepareWatchNavigation = () => preloadGlobalPlayer();
 
   const setIntroCollapsed = (next: boolean) => {
     setHeroCollapsed(next);
@@ -164,9 +159,6 @@ export default function HomePage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                    onPointerEnter={prepareWatchNavigation}
-                    onPointerDown={prepareWatchNavigation}
-                    onClick={prepareWatchNavigation}
                     key={streamCanonicalId(stream)}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
@@ -245,19 +237,17 @@ export default function HomePage() {
                 return (
                   <Link
                     href={buildWatchHref(pubkeyParam, stream.streamId, stream.streaming)}
-                    onPointerEnter={prepareWatchNavigation}
-                    onPointerDown={prepareWatchNavigation}
-                    onClick={prepareWatchNavigation}
                     key={`video:${stream.pubkey}:${stream.streamId}:${stream.createdAt}`}
                     className="group block bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-blue-500/50 transition relative"
                   >
                     <div className="aspect-video bg-neutral-800 relative overflow-hidden">
                       {stream.image ? (
-                        <StreamImage
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
                           src={stream.image}
                           alt={stream.title || "Video thumbnail"}
                           className="w-full h-full object-cover"
-                          sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-neutral-500 text-sm">No thumbnail</div>
@@ -293,7 +283,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Censorship Resistant</h3>
             <p className="text-neutral-300 leading-relaxed">
-              Identity is rooted in Nostr cryptography, so your keys and profile are portable across compatible clients and relays.
+              Identity is rooted in Nostr cryptography. No central authority can ban your keys or delete your followers.
             </p>
           </div>
 
@@ -309,7 +299,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Peer-Assisted Streaming</h3>
             <p className="text-neutral-300 leading-relaxed">
-              When enabled, compatible viewers can exchange requested HLS bytes over WebRTC while the media origin remains available for bootstrap and fallback.
+              When enabled, viewers can automatically help support the broadcaster by securely relaying the video and audio feeds directly to other viewers, unlocking massive P2P scale.
             </p>
           </div>
 
@@ -325,7 +315,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-bold mb-2">Crypto Powered</h3>
             <p className="text-neutral-300 leading-relaxed">
-              Publish creator-controlled cryptocurrency destinations and use configured settlement verifiers without giving dStream custody of wallet keys.
+              Monetize instantly using cryptocurrencies. By leveraging decentralized finance, payments bypass traditional middlemen directly to creators.
             </p>
           </div>
         </section>

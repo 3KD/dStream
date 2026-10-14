@@ -71,6 +71,10 @@ npm run build
 
 Production payment readiness is observable at [`/api/payments/capabilities`](https://dstream.stream/api/payments/capabilities). A rail is not active merely because an adapter exists in the source tree.
 
+## License
+
+dStream is open-source and ownerless. Feel free to fork, contribute, or host your own node.
+
 ---
 
 *Built today for the creators of tomorrow.*

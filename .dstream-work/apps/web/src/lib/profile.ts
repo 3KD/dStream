@@ -1,4 +1,5 @@
 import type { NostrEvent } from "@dstream/protocol";
+import { normalizeSocialProfileUrl } from "./socialIdentities";
 
 export interface NostrProfile {
   name?: string;
@@ -7,6 +8,13 @@ export interface NostrProfile {
   picture?: string;
   banner?: string;
   website?: string;
+  youtube?: string;
+  twitter?: string;
+  github?: string;
+  bluesky?: string;
+  mastodon?: string;
+  telegram?: string;
+  discord?: string;
   nip05?: string;
   lud16?: string;
   lud06?: string;
@@ -67,6 +75,13 @@ export function parseProfileContent(contentRaw: string): NostrProfile {
     picture: normalizeUrl(content.picture),
     banner: normalizeUrl(content.banner),
     website: normalizeUrl(content.website),
+    youtube: normalizeSocialProfileUrl("youtube", content.youtube),
+    twitter: normalizeSocialProfileUrl("twitter", content.twitter),
+    github: normalizeSocialProfileUrl("github", content.github),
+    bluesky: normalizeSocialProfileUrl("bluesky", content.bluesky),
+    mastodon: normalizeSocialProfileUrl("mastodon", content.mastodon),
+    telegram: normalizeSocialProfileUrl("telegram", content.telegram),
+    discord: normalizeSocialProfileUrl("discord", content.discord),
     nip05: normalizeNip05(content.nip05),
     lud16: normalizeNip05(content.lud16),
     lud06: normalizeText(content.lud06, 256),
@@ -100,6 +115,34 @@ export function serializeProfileContent(profile: NostrProfile): string {
   if (profile.website) {
     const url = normalizeUrl(profile.website);
     if (url) normalized.website = url;
+  }
+  if (profile.youtube) {
+    const url = normalizeSocialProfileUrl("youtube", profile.youtube);
+    if (url) normalized.youtube = url;
+  }
+  if (profile.twitter) {
+    const url = normalizeSocialProfileUrl("twitter", profile.twitter);
+    if (url) normalized.twitter = url;
+  }
+  if (profile.github) {
+    const url = normalizeSocialProfileUrl("github", profile.github);
+    if (url) normalized.github = url;
+  }
+  if (profile.bluesky) {
+    const url = normalizeSocialProfileUrl("bluesky", profile.bluesky);
+    if (url) normalized.bluesky = url;
+  }
+  if (profile.mastodon) {
+    const url = normalizeSocialProfileUrl("mastodon", profile.mastodon);
+    if (url) normalized.mastodon = url;
+  }
+  if (profile.telegram) {
+    const url = normalizeSocialProfileUrl("telegram", profile.telegram);
+    if (url) normalized.telegram = url;
+  }
+  if (profile.discord) {
+    const url = normalizeSocialProfileUrl("discord", profile.discord);
+    if (url) normalized.discord = url;
   }
   if (profile.nip05) {
     const nip05 = normalizeNip05(profile.nip05);

@@ -15,6 +15,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/protocol ./packages/protocol
+COPY scripts ./scripts
 
 # Public config (inlined into the client bundle at build time)
 ARG NEXT_PUBLIC_NOSTR_RELAYS
@@ -52,12 +53,7 @@ RUN if [ ! -d "apps/web/.next" ]; then npx turbo run build --filter=web; else ec
 
 FROM base AS runner
 ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
-ENV PORT=5656
-
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app /app
 
 EXPOSE 5656
-CMD ["node", "apps/web/server.js"]
+CMD ["npm", "--workspace", "web", "run", "start"]

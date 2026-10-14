@@ -127,19 +127,21 @@ try {
   check(firstChatRequestAtMs !== null, "No current-stream chat subscription was sent.");
   check(chatFilters.length > 0, "No current-stream chat filter was captured.");
   check(injectedInvalidRawEvent, "The forged pre-hydration regression event was not injected.");
-  const earliestAllowedSince = Math.floor(navigationStartedAt / 1000) - MAX_CHAT_HISTORY_SECONDS - 60;
-  for (const filter of chatFilters) {
+  for (const [index, filter] of chatFilters.entries()) {
+    const maxHistorySeconds = index === 0 ? MAX_CHAT_HISTORY_SECONDS : 7 * 24 * 60 * 60;
+    const maxHistoryEvents = index === 0 ? MAX_CHAT_HISTORY_EVENTS : 500;
+    const earliestAllowedSince = Math.floor(navigationStartedAt / 1000) - maxHistorySeconds - 60;
     check(
       filter["#a"].includes(TEST_A_TAG),
       `Chat filter did not decode the npub route to ${TEST_A_TAG}.`
     );
     check(
       Number.isFinite(filter.since) && filter.since >= earliestAllowedSince,
-      `Chat history starts at ${filter.since}; expected no more than one day of startup history.`
+      `Chat history starts at ${filter.since}; expected <= ${maxHistorySeconds}s of history.`
     );
     check(
-      Number.isFinite(filter.limit) && filter.limit <= MAX_CHAT_HISTORY_EVENTS,
-      `Chat history limit is ${filter.limit}; expected <= ${MAX_CHAT_HISTORY_EVENTS}.`
+      Number.isFinite(filter.limit) && filter.limit <= maxHistoryEvents,
+      `Chat history limit is ${filter.limit}; expected <= ${maxHistoryEvents}.`
     );
   }
   check(

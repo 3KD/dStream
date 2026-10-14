@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ExternalLink, Globe2, Image as ImageIcon, Link2, RotateCcw, Save, ShieldCheck, UserRound, WalletCards } from "lucide-react";
+import { ExternalLink, Globe2, Image as ImageIcon, Link2, RotateCcw, Save, Share2, ShieldCheck, UserRound, WalletCards } from "lucide-react";
 import { useIdentity } from "@/context/IdentityContext";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
 import { getNostrRelays } from "@/lib/config";
@@ -12,6 +12,7 @@ import { pubkeyHexToNpub } from "@/lib/nostr-ids";
 import { serializeProfileContent, type NostrProfile } from "@/lib/profile";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { isPublicPaymentAsset } from "@/lib/payments/publicAssets";
+import { SOCIAL_LINK_DEFINITIONS, normalizeSocialProfileUrl } from "@/lib/socialIdentities";
 
 const PROFILE_DRAFTS_STORAGE_KEY = "dstream_profile_drafts_v1";
 
@@ -27,6 +28,13 @@ function toDraft(profile: NostrProfile | null | undefined): Required<NostrProfil
     picture: profile?.picture ?? "",
     banner: profile?.banner ?? "",
     website: profile?.website ?? "",
+    youtube: profile?.youtube ?? "",
+    twitter: profile?.twitter ?? "",
+    github: profile?.github ?? "",
+    bluesky: profile?.bluesky ?? "",
+    mastodon: profile?.mastodon ?? "",
+    telegram: profile?.telegram ?? "",
+    discord: profile?.discord ?? "",
     nip05: profile?.nip05 ?? "",
     lud16: profile?.lud16 ?? "",
     lud06: profile?.lud06 ?? "",
@@ -143,6 +151,14 @@ export function ProfileMetadataEditor() {
 
   const saveProfile = useCallback(async () => {
     if (!identity) return;
+    for (const definition of SOCIAL_LINK_DEFINITIONS) {
+      const value = draft[definition.profileField].trim();
+      if (value && !normalizeSocialProfileUrl(definition.platform, value)) {
+        setStatus("error");
+        setError(`${definition.label} must use a valid ${definition.label} HTTPS URL.`);
+        return;
+      }
+    }
     setStatus("saving");
     setError(null);
     try {
@@ -199,6 +215,9 @@ export function ProfileMetadataEditor() {
     isPublicPaymentAsset("eth") && draft.eth.trim() ? "Ethereum" : "",
     isPublicPaymentAsset("trx") && draft.trx.trim() ? "TRON" : ""
   ].filter(Boolean);
+  const socialLabels = SOCIAL_LINK_DEFINITIONS
+    .filter((definition) => draft[definition.profileField].trim())
+    .map((definition) => definition.label);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -227,6 +246,32 @@ export function ProfileMetadataEditor() {
             <span className="text-xs text-neutral-400">About</span>
             <textarea value={draft.about} onChange={(event) => updateField("about", event.target.value)} className="min-h-28 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="Tell viewers what you create and stream." />
           </label>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fuchsia-500/10 text-fuchsia-300"><Share2 className="h-4 w-4" /></span>
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-100">Social profiles</h2>
+              <p className="mt-1 text-xs text-neutral-500">Public links signed as part of your Nostr profile.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {SOCIAL_LINK_DEFINITIONS.map((definition) => (
+              <label key={definition.platform} className="space-y-1.5">
+                <span className="text-xs text-neutral-400">{definition.label}</span>
+                <input
+                  value={draft[definition.profileField]}
+                  onChange={(event) => updateField(definition.profileField, event.target.value)}
+                  className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder={definition.placeholder}
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </label>
+            ))}
+          </div>
         </section>
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 sm:p-5 space-y-4">
@@ -313,7 +358,7 @@ export function ProfileMetadataEditor() {
           <div className="min-h-5 text-xs">
             {status === "saved" ? <span className="text-emerald-300">Profile published successfully.</span> : null}
             {error ? <span className="text-red-300">{error}</span> : null}
-            {dirty && status !== "saving" ? <span className="text-amber-300">You have unpublished changes.</span> : null}
+            {dirty && status !== "saving" && !error ? <span className="text-amber-300">You have unpublished changes.</span> : null}
             {!dirty && status === "idle" ? <span className="text-neutral-500">Your published profile is up to date.</span> : null}
             {report ? <span className="ml-2 text-neutral-600">Relay confirmation {report.okRelays.length}/{report.okRelays.length + report.failedRelays.length}</span> : null}
           </div>
@@ -341,6 +386,7 @@ export function ProfileMetadataEditor() {
             <div className="mt-4 flex flex-wrap gap-2">
               {draft.website.trim() ? <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300"><Link2 className="h-3 w-3" /> Website</span> : null}
               {draft.nip05.trim() ? <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300"><ShieldCheck className="h-3 w-3" /> {draft.nip05.trim()}</span> : null}
+              {socialLabels.map((label) => <span key={label} className="inline-flex items-center gap-1.5 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] text-neutral-300"><Share2 className="h-3 w-3" /> {label}</span>)}
             </div>
             {paymentLabels.length > 0 ? (
               <div className="mt-4 border-t border-neutral-800 pt-4">

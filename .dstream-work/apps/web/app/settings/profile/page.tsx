@@ -1,6 +1,7 @@
 "use client";
 
 import { ProfileMetadataEditor } from "@/components/settings/ProfileMetadataEditor";
+import { SocialIdentityEditor } from "@/components/settings/SocialIdentityEditor";
 import { EmoteManager } from "@/components/settings/EmoteManager";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { SettingsNav } from "@/components/settings/SettingsNav";
@@ -21,6 +22,7 @@ export default function SettingsProfilePage() {
 
         <div className="space-y-7">
           <ProfileMetadataEditor />
+          <SocialIdentityEditor />
           <section className="space-y-3">
             <div>
               <h2 className="text-base font-semibold text-neutral-100">Custom emotes</h2>

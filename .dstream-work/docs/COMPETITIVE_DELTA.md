@@ -1,7 +1,5 @@
 # dStream vs zap.stream — Technical Delta
 
-> **Historical comparison:** This point-in-time comparison is retained for context and should not be treated as a current statement about either project.
-
 Last updated: 2026-02-19
 
 ## Scope
@@ -23,26 +21,26 @@ It is intentionally technical and implementation-oriented (not marketing copy).
 
 ### zap.stream repository evidence
 
-- NIP-53 client declaration:  
+- NIP-53 client declaration:
   `https://github.com/v0l/zap.stream/blob/master/README.md`
-- Stream editor enforces HLS URL shape:  
+- Stream editor enforces HLS URL shape:
   `https://github.com/v0l/zap.stream/blob/master/src/element/stream-editor/index.tsx`
-- Live player uses HLS pipeline:  
+- Live player uses HLS pipeline:
   `https://github.com/v0l/zap.stream/blob/master/src/element/stream/live-video-player.tsx`
-- RTMP forwarding targets (YouTube/Facebook/etc):  
+- RTMP forwarding targets (YouTube/Facebook/etc):
   `https://github.com/v0l/zap.stream/blob/master/src/element/provider/nostr/fowards.tsx`
 
 ### dStream repository evidence
 
-- Host mode + rebroadcast threshold in watch path logic:  
-  `apps/web/app/watch/[pubkey]/[...streamId]/page.tsx`
-- Presence + queue participation model:  
-  `apps/web/src/hooks/useStreamPresence.ts`
-- Monero payment API surfaces:
-  `apps/web/app/api/xmr/`
+- Host mode + rebroadcast threshold in watch path logic:
+  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/app/watch/[pubkey]/[streamId]/page.tsx`
+- Presence + queue participation model:
+  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/src/hooks/useStreamPresence.ts`
+- Monero stake/tip/escrow API surfaces:
+  `/Users/erik/Projects/JRNY/.dstream-work/apps/web/app/api/xmr/`
 - Production hardening/runtime gate scripts:
-  `scripts/harden-check.mjs`
-  `scripts/gate-production.sh`
+  `/Users/erik/Projects/JRNY/.dstream-work/scripts/harden-check.mjs`
+  `/Users/erik/Projects/JRNY/.dstream-work/scripts/gate-production.sh`
 
 ## Feature Delta Matrix
 

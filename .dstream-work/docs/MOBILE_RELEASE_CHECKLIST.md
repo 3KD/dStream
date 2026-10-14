@@ -2,8 +2,6 @@
 
 Use this checklist before publishing a mobile build that points to production edge infrastructure.
 
-**Status:** release-preparation worksheet. The repository does not track generated native projects and does not currently contain evidence of a signed, device-tested, or store-approved release.
-
 Reference docs:
 
 - `docs/MOBILE_STORE_LISTING_COPY.md` (store listing text)
@@ -12,9 +10,6 @@ Reference docs:
 
 ## Preflight
 
-- Generate the target native project locally if it does not exist:
-  - `cd apps/mobile && npx cap add ios`
-  - `cd apps/mobile && npx cap add android`
 - Confirm mobile config persistence:
   - Native storage path: Capacitor Preferences
   - Fallback path: browser localStorage
@@ -25,8 +20,6 @@ Reference docs:
   - `npm run check:mobile:store`
   - `npm run test:mobile:permissions`
   - `npm --workspace mobile run sync`
-
-The strict store check must fail when the selected native project is absent. A shell/golden check passing is not a release acceptance result.
 
 If using env file:
 

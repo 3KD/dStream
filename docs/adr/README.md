@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This folder contains the ADR set created for the pre-rebuild root application. It is retained as historical context and does not define the runtime deployed to dstream.stream. Current ADRs live in `.dstream-work/docs/adr`; current wire behavior is documented in `PROTOCOL.md`.
+This folder contains Architecture Decision Records for the next iteration of the project (the “rebuild” repo).
 
 ## Conventions
 

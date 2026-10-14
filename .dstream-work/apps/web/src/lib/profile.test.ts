@@ -20,6 +20,8 @@ test("parseProfileContent: parses and normalizes fields", () => {
       picture: "https://example.com/a.png",
       banner: "https://example.com/b.png",
       website: "https://example.com",
+      youtube: "https://youtube.com/@alice",
+      github: "https://github.com/alice",
       nip05: "Alice@example.com"
     })
   );
@@ -27,6 +29,8 @@ test("parseProfileContent: parses and normalizes fields", () => {
   assert.equal(parsed.displayName, "Alice Example");
   assert.equal(parsed.about, "hello world");
   assert.equal(parsed.picture, "https://example.com/a.png");
+  assert.equal(parsed.youtube, "https://youtube.com/@alice");
+  assert.equal(parsed.github, "https://github.com/alice");
   assert.equal(parsed.nip05, "alice@example.com");
 });
 
@@ -38,10 +42,20 @@ test("serializeProfileContent: writes normalized JSON", () => {
     picture: "https://example.com/p.png",
     banner: "https://example.com/b.png",
     website: "https://example.com",
+    youtube: "https://youtube.com/@alice",
+    twitter: "https://x.com/alice",
     nip05: "alice@example.com"
   });
   const parsed = JSON.parse(json);
   assert.equal(parsed.name, "Alice");
   assert.equal(parsed.display_name, "Alice Display");
+  assert.equal(parsed.youtube, "https://youtube.com/@alice");
+  assert.equal(parsed.twitter, "https://x.com/alice");
   assert.equal(parsed.nip05, "alice@example.com");
+});
+
+test("parseProfileContent: rejects unsafe or mislabeled social links", () => {
+  const parsed = parseProfileContent(JSON.stringify({ youtube: "https://example.com/not-youtube", github: "github.com/alice" }));
+  assert.equal(parsed.youtube, undefined);
+  assert.equal(parsed.github, undefined);
 });

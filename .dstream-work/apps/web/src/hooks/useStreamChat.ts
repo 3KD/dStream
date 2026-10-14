@@ -8,6 +8,7 @@ import {
   makeATag,
   NOSTR_KINDS,
   parseStreamATag,
+  parseStreamAnnounceEvent,
   parseStreamChatEvent,
   type NostrEvent,
   type StreamChatMessage
@@ -37,6 +38,10 @@ export interface StreamChatFeedMessage extends StreamChatMessage {
 }
 
 const PUBLIC_CHAT_KINDS: [number, number] = [NOSTR_KINDS.STREAM_CHAT, 1];
+const STREAM_CHAT_HISTORY_LOOKBACK_SEC = 7 * 24 * 60 * 60;
+const STREAM_CHAT_HISTORY_LIMIT = 500;
+const STREAM_CHAT_ANNOUNCE_LOOKBACK_SEC = 14 * 24 * 60 * 60;
+const STREAM_CHAT_RELATED_STREAM_LIMIT = 16;
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
@@ -246,6 +251,73 @@ export function useStreamChat(scope: { streamPubkey: string; streamId: string; e
       setIsConnected(false);
     };
   }, [chatATags, chatATagsSet, enabled, limit, relays, streamId, streamPubkey]);
+
+  // Restore the older-stream history after the current stream connects.
+  useEffect(() => {
+    if (!enabled || !isConnected || !streamPubkey || !streamId) return;
+    let cancelled = false;
+    let finalized = false;
+    let historySub: ReturnType<typeof subscribeMany> | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const streamByCreatedAt = new Map([[streamId, nowSec()]]);
+    const pending = new Map<string, StreamChatFeedMessage>();
+    const flush = () => {
+      if (cancelled || pending.size === 0) return;
+      const batch = Array.from(pending.values());
+      pending.clear();
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = null;
+      startTransition(() => setMessages((current) => mergeMessagesWithLimit(current, batch, limit)));
+    };
+    const finalize = () => {
+      if (cancelled || finalized) return;
+      finalized = true;
+      const aTags = Array.from(streamByCreatedAt.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, STREAM_CHAT_RELATED_STREAM_LIMIT)
+        .map(([id]) => makeATag(streamPubkey, id));
+      const allowedATags = new Set(aTags);
+      historySub = subscribeMany(relays, [{
+        kinds: PUBLIC_CHAT_KINDS,
+        "#a": aTags,
+        since: nowSec() - STREAM_CHAT_HISTORY_LOOKBACK_SEC,
+        limit: STREAM_CHAT_HISTORY_LIMIT
+      }], {
+        onevent: (event: any) => {
+          if (cancelled || (event?.id && seenIds.current.has(event.id))) return;
+          const parsed = parsePublicChatMessage(event, allowedATags, streamPubkey);
+          if (!parsed) return;
+          if (parsed.id) seenIds.current.add(parsed.id);
+          pending.set(messageKey(parsed), parsed);
+          if (!flushTimer) flushTimer = setTimeout(flush, 100);
+        },
+        oneose: flush
+      });
+    };
+    const announceSub = subscribeMany(relays, [{
+      kinds: [NOSTR_KINDS.STREAM_ANNOUNCE],
+      authors: [streamPubkey],
+      since: nowSec() - STREAM_CHAT_ANNOUNCE_LOOKBACK_SEC,
+      limit: 320
+    }], {
+      onevent: (event: any) => {
+        if (cancelled || finalized) return;
+        const parsed = parseStreamAnnounceEvent(event);
+        if (!parsed || parsed.pubkey !== streamPubkey) return;
+        const previous = streamByCreatedAt.get(parsed.streamId);
+        if (!previous || parsed.createdAt > previous) streamByCreatedAt.set(parsed.streamId, parsed.createdAt);
+      },
+      oneose: finalize
+    });
+    const timeout = setTimeout(finalize, 5_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      if (flushTimer) clearTimeout(flushTimer);
+      announceSub.close();
+      historySub?.close();
+    };
+  }, [enabled, isConnected, limit, relays, streamId, streamPubkey]);
 
   useEffect(() => {
     if (!enabled || !streamPubkey || !streamId) return;

@@ -4,15 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Ban, BadgeCheck, ExternalLink, Heart, MoreHorizontal, Radio, ShieldCheck, WalletCards } from "lucide-react";
+import { Ban, BadgeCheck, ExternalLink, FileCheck2, Heart, MoreHorizontal, Radio, ShieldCheck, WalletCards } from "lucide-react";
 import { UnifiedTipDialog } from "@/components/chat/UnifiedTipDialog";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { useSocial } from "@/context/SocialContext";
 import { useProfileGuildStatuses, type ProfileGuildStatus } from "@/hooks/useProfileGuildStatuses";
 import { useNostrProfile } from "@/hooks/useNostrProfiles";
+import { useNostrSocialIdentities } from "@/hooks/useNostrSocialIdentities";
 import { useProfileChannels } from "@/hooks/useProfileChannels";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
 import { shortenText } from "@/lib/encoding";
+import { SOCIAL_LINK_DEFINITIONS, socialIdentityProfileUrl, socialIdentityProofUrl } from "@/lib/socialIdentities";
 
 const GUILD_STATUS_LABEL: Record<ProfileGuildStatus, string> = {
   owner: "Owner (originator)",
@@ -37,6 +39,7 @@ export default function PublicProfilePage() {
   const pubkey = useMemo(() => pubkeyParamToHex(pubkeyParam), [pubkeyParam]);
   const npub = pubkey ? pubkeyHexToNpub(pubkey) : null;
   const profileRecord = useNostrProfile(pubkey);
+  const socialIdentityRecord = useNostrSocialIdentities(pubkey);
   const { guildRows, isLoading: guildsLoading } = useProfileGuildStatuses(pubkey);
   const { channels, isLoading: channelsLoading } = useProfileChannels(pubkey, { lookbackDays: null, fetchLimit: 1500 });
   const [visibleChannelCount, setVisibleChannelCount] = useState(30);
@@ -52,6 +55,16 @@ export default function PublicProfilePage() {
   const profile = profileRecord?.profile;
   const displayName = profile?.displayName || profile?.name || "Unnamed streamer";
   const primaryLive = liveChannels[0] ?? null;
+  const socialLinks = useMemo(() => {
+    return SOCIAL_LINK_DEFINITIONS.flatMap((definition) => {
+      const directHref = profile?.[definition.profileField];
+      const claim = socialIdentityRecord?.claims.find((candidate) => candidate.platform === definition.platform);
+      const claimHref = claim ? socialIdentityProfileUrl(claim) : null;
+      const proofHref = claim ? socialIdentityProofUrl(claim) : null;
+      const href = directHref || claimHref || proofHref;
+      return href ? [{ ...definition, href, proofHref }] : [];
+    });
+  }, [profile, socialIdentityRecord]);
   const profileHasTips = !!(
     profile?.lud16 ||
     profile?.lud06 ||
@@ -135,6 +148,22 @@ export default function PublicProfilePage() {
                     </a>
                   ) : null}
                 </div>
+                {socialLinks.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                    {socialLinks.map((socialLink) => (
+                      <span key={socialLink.platform} className="inline-flex items-center overflow-hidden rounded-md border border-neutral-800 bg-neutral-950/60">
+                        <a href={socialLink.href} target="_blank" rel="noreferrer nofollow" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white">
+                          {socialLink.label} <ExternalLink className="h-3 w-3" />
+                        </a>
+                        {socialLink.proofHref && socialLink.proofHref !== socialLink.href ? (
+                          <a href={socialLink.proofHref} target="_blank" rel="noreferrer nofollow" title={`Open ${socialLink.label} NIP-39 proof`} aria-label={`Open ${socialLink.label} NIP-39 proof`} className="inline-flex h-7 w-7 items-center justify-center border-l border-neutral-800 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200">
+                            <FileCheck2 className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </header>
 

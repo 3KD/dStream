@@ -22,7 +22,6 @@ const DISCOVERY_POLICY_LIMIT = 2000;
 // in-process timers are not reliable lifecycle guarantees in serverless runtimes.
 // ---------------------------------------------------------------------------
 const REFRESH_INTERVAL_MS = 60_000;
-const INITIAL_SNAPSHOT_WAIT_MS = 750;
 const HEALTH_PROBE_CONCURRENCY = 12;
 const HEALTH_PROBE_LIMIT = 80;
 
@@ -204,27 +203,13 @@ function refreshCache(): Promise<void> {
   return trackedRefresh;
 }
 
-async function waitForInitialSnapshot(): Promise<void> {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  try {
-    await Promise.race([
-      refreshCache(),
-      new Promise<void>((resolve) => {
-        timeout = setTimeout(resolve, INITIAL_SNAPSHOT_WAIT_MS);
-      })
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 // Kick off the first refresh immediately on module load, then repeat.
 void refreshCache();
 setInterval(() => { void refreshCache(); }, REFRESH_INTERVAL_MS);
 
 // ---------------------------------------------------------------------------
-// GET handler — stale snapshots return immediately with their original query
-// time while a coalesced refresh runs in the background.
+// GET handler — stale snapshots are refreshed before they can be returned as
+// authoritative evidence about current relay state.
 // ---------------------------------------------------------------------------
 function parseBoundedInt(
   raw: string | null,
@@ -246,13 +231,9 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   let snap = getCached();
   const nowSec = Math.floor(Date.now() / 1000);
-  let stale = false;
-  if (!snap) {
-    await waitForInitialSnapshot();
+  if (!snap || shouldRefreshDiscoverySnapshot(snap.queriedAt, nowSec)) {
+    await refreshCache();
     snap = getCached();
-  } else if (shouldRefreshDiscoverySnapshot(snap.queriedAt, nowSec)) {
-    stale = true;
-    void refreshCache();
   }
 
   if (snap) {
@@ -261,10 +242,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       queriedAt: snap.queriedAt,
       relays: snap.relays
     }, {
-      headers: {
-        "Cache-Control": "no-store, max-age=0",
-        "X-Dstream-Snapshot-Stale": stale ? "1" : "0"
-      }
+      headers: { "Cache-Control": "no-store, max-age=0" }
     });
   }
 
