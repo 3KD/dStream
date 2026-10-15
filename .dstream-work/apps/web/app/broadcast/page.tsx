@@ -29,6 +29,7 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { WhipClient } from "@/lib/whip";
+import { requestPublishCredential } from "@/lib/mediaPublishClient";
 import { getNostrRelays } from "@/lib/config";
 import { publishEventDetailed, type PublishEventReport } from "@/lib/publish";
 import { PAYMENT_ASSET_META, PUBLIC_PAYMENT_ASSET_ORDER } from "@/lib/payments/catalog";
@@ -783,6 +784,26 @@ export default function BroadcastPage() {
     return makeOriginStreamId(identity.pubkey, streamId);
   }, [identity, streamId]);
 
+  const publishCredentialRef = useRef<{ origin: string; token: string; expiresAt: number } | null>(null);
+  const [publishCredential, setPublishCredential] = useState<{ origin: string; token: string; expiresAt: number } | null>(null);
+  const getPublishCredential = useCallback(async () => {
+    if (!identity || !originStreamId) throw new Error("Connect a broadcaster identity first.");
+    const cached = publishCredentialRef.current;
+    if (cached?.origin === originStreamId && cached.expiresAt > Date.now() / 1000 + 60) return cached.token;
+    const issued = await requestPublishCredential(originStreamId, signEvent, identity.pubkey);
+    const next = { ...issued, origin: originStreamId };
+    publishCredentialRef.current = next;
+    setPublishCredential(next);
+    return issued.token;
+  }, [identity, originStreamId, signEvent]);
+
+  useEffect(() => {
+    if (broadcastMethod !== "external" || !identity || !originStreamId) return;
+    let active = true;
+    void getPublishCredential().catch((err) => { if (active) setError(err instanceof Error ? err.message : "Publish credentials unavailable."); });
+    return () => { active = false; };
+  }, [broadcastMethod, identity, originStreamId, getPublishCredential]);
+
   useEffect(() => {
     // Prevent the broadcaster's own screen from triggering the global QuickPlay widget,
     // but ensure any lingering global streams are cleared to avoid overlapping audio.
@@ -994,8 +1015,9 @@ export default function BroadcastPage() {
   }, [origin, originStreamId, streamId]);
 
   const externalStreamKey = useMemo(() => {
-    return originStreamId ?? "";
-  }, [originStreamId]);
+    return originStreamId && publishCredential?.origin === originStreamId
+      ? `${originStreamId}?publish=${encodeURIComponent(publishCredential.token)}` : "";
+  }, [originStreamId, publishCredential]);
 
   const rtmpServerUrl = useMemo(() => {
     const configured = process.env.NEXT_PUBLIC_RTMP_INGEST_ORIGIN?.trim();
@@ -1020,9 +1042,8 @@ export default function BroadcastPage() {
 
   const whipPublishUrl = useMemo(() => {
     if (!externalStreamKey) return "";
-    if (origin) return `${origin}/api/whip/${externalStreamKey}/whip`;
-    return `/api/whip/${externalStreamKey}/whip`;
-  }, [externalStreamKey, origin]);
+    return `${origin || ""}/api/whip/${originStreamId}/whip?publish=${encodeURIComponent(publishCredential?.token ?? "")}`;
+  }, [externalStreamKey, origin, originStreamId, publishCredential]);
 
   const encoderGuideSteps = useMemo(() => {
     const streamKeyValue = externalStreamKey || "<connect identity + valid stream id>";
@@ -1652,7 +1673,8 @@ export default function BroadcastPage() {
       try {
         const originStreamId = makeOriginStreamId(identity.pubkey, streamId);
         if (!originStreamId) throw new Error(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
-        const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip`;
+        const token = await getPublishCredential();
+        const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip?publish=${encodeURIComponent(token)}`;
         const client = new WhipClient(endpoint);
         whipRef.current = client;
         await client.publish(stream, {
@@ -1686,7 +1708,7 @@ export default function BroadcastPage() {
         reconnectInFlightRef.current = false;
       }
     },
-    [announce, identity, streamId]
+    [announce, identity, streamId, getPublishCredential]
   );
 
   const scheduleReconnect = useCallback(
@@ -1752,7 +1774,8 @@ export default function BroadcastPage() {
         return;
       }
 
-      const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip`;
+      const token = await getPublishCredential();
+      const endpoint = `${window.location.origin}/api/whip/${originStreamId}/whip?publish=${encodeURIComponent(token)}`;
       const client = new WhipClient(endpoint);
       whipRef.current = client;
       lastWhipOptionsRef.current = {
@@ -1920,7 +1943,8 @@ export default function BroadcastPage() {
     }
 
     try {
-      const res = await fetch(externalIngestStatusUrl, { cache: "no-store" });
+      const token = await getPublishCredential();
+      const res = await fetch(externalIngestStatusUrl, { cache: "no-store", headers: { authorization: `Bearer ${token}` } });
       const readiness = (await res.json().catch(() => null)) as { ready?: boolean; upstreamStatus?: number | null } | null;
       const playablePlaylist = res.ok && readiness?.ready === true;
       const checkedAt = Date.now();
@@ -2020,7 +2044,7 @@ export default function BroadcastPage() {
     } finally {
       externalProbeInFlightRef.current = false;
     }
-  }, [announceExternal, externalAutoPublish, externalIngestStatusUrl, identity, originStreamId]);
+  }, [announceExternal, externalAutoPublish, externalIngestStatusUrl, getPublishCredential, identity, originStreamId]);
 
   useEffect(() => {
     if (broadcastMethod !== "external" || !identity || !originStreamId) {
@@ -2368,7 +2392,7 @@ export default function BroadcastPage() {
                     <label className="min-w-0 space-y-2">
                       <span className="text-xs text-neutral-400">Stream key</span>
                       <div className="flex min-w-0 gap-2">
-                        <input value={externalStreamKey} readOnly placeholder="Connect identity first" className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-xs font-mono text-neutral-200 placeholder:text-neutral-600" />
+                        <input type="password" value={externalStreamKey} readOnly placeholder="Connect identity first" className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-xs font-mono text-neutral-200 placeholder:text-neutral-600" />
                         <button type="button" onClick={() => void copyExternalEncoderValue("Stream key", externalStreamKey)} disabled={!externalStreamKey} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40" aria-label="Copy stream key" title="Copy stream key"><ClipboardCopy className="h-4 w-4" /></button>
                       </div>
                     </label>

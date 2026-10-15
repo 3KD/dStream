@@ -53,7 +53,12 @@ RUN if [ ! -d "apps/web/.next" ]; then npx turbo run build --filter=web; else ec
 
 FROM base AS runner
 ENV NODE_ENV=production
-COPY --from=builder /app /app
+ENV HOSTNAME=0.0.0.0
+ENV PORT=5656
+COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+USER node
 
 EXPOSE 5656
-CMD ["npm", "--workspace", "web", "run", "start"]
+CMD ["node", "apps/web/server.js"]

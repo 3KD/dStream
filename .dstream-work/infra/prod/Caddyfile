@@ -3,6 +3,9 @@
 }
 
 {$DSTREAM_DOMAIN}, www.{$DSTREAM_DOMAIN} {
+  request_body {
+    max_size 8MB
+  }
   handle /relay* {
     uri strip_prefix /relay
     reverse_proxy dstream-relay-1:8080

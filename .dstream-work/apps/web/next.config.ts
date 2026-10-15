@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: ["@dstream/protocol"],
   turbopack: {
     root: path.join(__dirname, "../..")
@@ -11,6 +13,10 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
+          },
           {
             key: "X-Frame-Options",
             value: "SAMEORIGIN",
@@ -35,11 +41,15 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/hls/:path*",
-        destination: `${process.env.DSTREAM_HLS_PROXY_ORIGIN || 'http://mediamtx:8880'}/:path*`
+        destination: "/api/hls/:path*"
       },
       {
-        source: "/webrtc/:path*",
-        destination: `${process.env.DSTREAM_WHIP_PROXY_ORIGIN || 'http://mediamtx:8889'}/:path*`
+        source: "/webrtc/:stream/whep/:path*",
+        destination: "/api/whep/:stream/whep/:path*"
+      },
+      {
+        source: "/webrtc/:stream/whip/:path*",
+        destination: "/api/whip/:stream/whip/:path*"
       }
     ];
   },

@@ -127,6 +127,8 @@ function refreshPlaybackPoliciesFromDisk(): void {
 }
 
 function isPlaybackPolicyExpired(policy: PlaybackPolicy, atSec: number): boolean {
+  // Forgetting a private policy must never turn an existing media URL public.
+  if (policy.privateStream || policy.videoVisibility === "private") return false;
   const age = atSec - policy.updatedAtSec;
   return policy.status === "ended" ? age > POLICY_ENDED_TTL_SEC : age > POLICY_TTL_SEC;
 }
@@ -568,8 +570,11 @@ export function authorizePlaybackProxyRequest(
   pathSegments: string[],
   accessToken: string | null
 ): { ok: true } | { ok: false; status: number; error: string } {
+  if (pathSegments.some((part) => !part || part === "." || part === ".." || /[\\/\u0000]/.test(part))) {
+    return { ok: false, status: 400, error: "Invalid media path." };
+  }
   const originStreamId = parseOriginStreamIdFromPath(pathSegments);
-  if (!originStreamId) return { ok: true };
+  if (!originStreamId) return { ok: false, status: 403, error: "Playback policy is required." };
 
   let resolvedOriginStreamId = originStreamId;
   let policy = getPlaybackPolicy(resolvedOriginStreamId);
@@ -583,7 +588,7 @@ export function authorizePlaybackProxyRequest(
       }
     }
   }
-  if (!policy) return { ok: true };
+  if (!policy) return { ok: false, status: 403, error: "Playback policy is required." };
 
   const resourceId = `stream:${policy.streamPubkey}:${policy.streamId}:live`;
   const announce = buildAnnounceContext(policy);

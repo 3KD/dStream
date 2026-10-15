@@ -11,6 +11,7 @@ import { makeOriginStreamId } from "./origin";
 import { POST as issuePlaybackAccess } from "../../app/api/playback-access/issue/route";
 import { GET as getHls } from "../../app/api/hls/[...path]/route";
 import { PATCH as patchWhep, POST as postWhep } from "../../app/api/whep/[...path]/route";
+import nextConfig from "../../next.config";
 
 const tempDir = mkdtempSync(join(tmpdir(), "dstream-private-playback-"));
 const policyStorePath = join(tempDir, "playback-policies.json");
@@ -158,7 +159,7 @@ test("media routes: owner-only privacy blocks Incognito and authorizes owner HLS
       }
       return new Response(null, { status: 204 });
     }
-    if (url.endsWith(".m3u8")) {
+    if (new URL(url).pathname.endsWith(".m3u8")) {
       return new Response("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nsegment0001.ts\n", {
         status: 200,
         headers: { "content-type": "application/vnd.apple.mpegurl" }
@@ -183,6 +184,7 @@ test("media routes: owner-only privacy blocks Incognito and authorizes owner HLS
       { params: Promise.resolve({ path: [originStreamId, "index.m3u8"] }) }
     );
     assert.equal(ownerManifest.status, 200);
+    assert.equal(new URL(upstreamRequests[0]!.url).searchParams.get("access"), ownerPayload.token);
     assert.match(await ownerManifest.text(), /segment0001\.ts/);
 
     const ownerSegment = await getHls(
@@ -263,4 +265,24 @@ test("media routes: public and multi-viewer behavior remain intact", async () =>
   const viewerPayload = (await viewerIssue.json()) as { token?: string; reasonCode?: string };
   assert.equal(viewerPayload.reasonCode, "allow_allowlist");
   assert.ok(viewerPayload.token);
+});
+
+test("media aliases use authorized routes, and unknown or traversing paths fail closed", async () => {
+  const rewrites = await nextConfig.rewrites!();
+  assert(Array.isArray(rewrites));
+  assert(rewrites.every((rule) => !/^https?:/.test(rule.destination)));
+  assert(rewrites.some((rule) => rule.source === "/hls/:path*" && rule.destination === "/api/hls/:path*"));
+  const original = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async () => { called = true; throw new Error("Unexpected upstream request"); };
+  try {
+    const id = `${"a".repeat(64)}--unregistered`;
+    const denied = await getHls(new NextRequest(`https://node.example/hls/${id}/index.m3u8`),
+      { params: Promise.resolve({ path: [id, "index.m3u8"] }) });
+    assert.equal(denied.status, 403);
+    const traversing = await getHls(new NextRequest("https://node.example/api/hls/invalid"),
+      { params: Promise.resolve({ path: ["anything", "..", id, "index.m3u8"] }) });
+    assert.equal(traversing.status, 400);
+    assert.equal(called, false);
+  } finally { globalThis.fetch = original; }
 });

@@ -14,6 +14,8 @@ export function buildPlaybackAccessCookies(
   return [
     `/api/hls/${encodedOriginStreamId}`,
     `/api/whep/${encodedOriginStreamId}`,
+    `/hls/${encodedOriginStreamId}`,
+    `/webrtc/${encodedOriginStreamId}`,
     `/api/video/file/${encodedOriginStreamId}`
   ].map((path) => `${PLAYBACK_ACCESS_COOKIE_NAME}=${encodedToken}; Path=${path}; ${suffix}`);
 }

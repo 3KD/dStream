@@ -31,6 +31,7 @@ services:
       DSTREAM_TURN_CREDENTIAL_TTL_SEC: "${DSTREAM_TURN_CREDENTIAL_TTL_SEC:-600}"
       TURN_SHARED_SECRET: "${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in the environment file}"
       DSTREAM_PLAYBACK_ACCESS_SECRET: "${DSTREAM_PLAYBACK_ACCESS_SECRET:-dev-playback-access-secret-0123456789abcdef}"
+      DSTREAM_MEDIA_AUTH_SECRET: "${DSTREAM_MEDIA_AUTH_SECRET:?Set DSTREAM_MEDIA_AUTH_SECRET in the environment file}"
       DSTREAM_PLAYBACK_POLICY_STORE_PATH: "${DSTREAM_PLAYBACK_POLICY_STORE_PATH:-/var/lib/dstream/playback-policies.json}"
       # Read-only Video archive mount path exposed by API routes.
       DSTREAM_VIDEO_DIR: "${DSTREAM_VIDEO_DIR:-/recordings}"
@@ -98,6 +99,14 @@ services:
         condition: service_started
     ports:
       - "127.0.0.1:${DSTREAM_WEB_PORT:-5656}:5656"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/apps/web/.next/cache:rw,nosuid,size=128m,uid=1000,gid=1000
     volumes:
       - dstream_recordings:/recordings:ro
       - dstream_data:/var/lib/dstream
@@ -116,7 +125,7 @@ services:
       - --external-ip=${TURN_EXTERNAL_IP:-127.0.0.1}
       - --min-port=${TURN_MIN_PORT:-49160}
       - --max-port=${TURN_MAX_PORT:-49200}
-      - --user-quota=${TURN_USER_QUOTA:-100}
+      - --user-quota=${TURN_USER_QUOTA:-12}
       - --total-quota=${TURN_TOTAL_QUOTA:-300}
       - --no-cli
     ports:
@@ -207,6 +216,9 @@ services:
 
   mediamtx:
     image: bluenviron/mediamtx:latest
+    environment:
+      MTX_AUTHMETHOD: http
+      MTX_AUTHHTTPADDRESS: "http://media:${DSTREAM_MEDIA_AUTH_SECRET:?Set DSTREAM_MEDIA_AUTH_SECRET in the environment file}@web:5656/api/broadcast/media-auth"
     depends_on:
       hls-init:
         condition: service_completed_successfully

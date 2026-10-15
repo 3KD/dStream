@@ -28,6 +28,7 @@ function rewriteLocationHeader(req: NextRequest, upstreamLocation: string, upstr
 }
 
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response> {
+  if (pathSegments[1] !== "whep") return new Response("Invalid WHEP path.", { status: 400 });
   const authz = authorizePlaybackProxyRequest(pathSegments, readPlaybackAccessToken(req));
   if (!authz.ok) {
     return new Response(authz.error, { status: authz.status, headers: { "content-type": "text/plain; charset=utf-8" } });
@@ -36,7 +37,8 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response
   const base = PROXY_ORIGIN.endsWith("/") ? PROXY_ORIGIN : `${PROXY_ORIGIN}/`;
   const target = new URL(pathSegments.map((s) => encodeURIComponent(s)).join("/"), base);
   const upstreamParams = new URLSearchParams(req.nextUrl.search);
-  upstreamParams.delete("access");
+  const token = readPlaybackAccessToken(req);
+  if (token) upstreamParams.set("access", token);
   target.search = upstreamParams.toString();
 
   const headers = new Headers(req.headers);
