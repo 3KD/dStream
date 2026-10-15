@@ -1,5 +1,6 @@
 import { equalMediaSecret, verifyPublishCredential } from "@/lib/mediaPublish";
 import { authorizePlaybackProxyRequest } from "@/lib/playback-access";
+import { verifyMediaServiceCredential } from "../../../../../../services/media-auth.mjs";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,11 @@ export async function POST(req: Request): Promise<Response> {
     }
     if (typeof body.path !== "string" || body.path.includes("/") || typeof body.query !== "string") return new Response(null, { status: 403 });
     const query = new URLSearchParams(body.query);
+    const serviceToken = query.get("pipeline") || body.token || "";
+    if (verifyMediaServiceCredential(serviceToken, body.path, body.action, {
+      manifest: process.env.DSTREAM_MEDIA_MANIFEST_SECRET,
+      transcoder: process.env.DSTREAM_MEDIA_TRANSCODER_SECRET
+    })) return new Response(null, { status: 204 });
     if (body.action === "publish") {
       const token = query.get("publish") || body.token || body.password || "";
       return new Response(null, { status: typeof token === "string" && verifyPublishCredential(token, body.path) ? 204 : 403 });

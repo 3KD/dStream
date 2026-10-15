@@ -11,6 +11,17 @@
 !packages/protocol/**
 !scripts/
 !scripts/smoke-payment-rails-real.ts
+!services/
+!services/media-auth.mjs
+!services/media-auth.d.mts
+!services/manifest/
+!services/manifest/package.json
+!services/manifest/package-lock.json
+!services/manifest/index.mjs
+!services/transcoder/
+!services/transcoder/index.mjs
+!services/transcoder/policy.mjs
+**/.env*
 apps/web/.next
 apps/web/.next/**
 apps/web/node_modules

@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { restartDecision } from "./policy.mjs";
+import { mediaServiceReadHeaders, mediaServicePublishUrl } from "../media-auth.mjs";
 
 const HLS_DIR = (process.env.HLS_DIR || "/hls").trim();
 const SOURCE_HLS_BASE = (process.env.TRANSCODER_SOURCE_HLS_BASE || "http://mediamtx:8880").trim().replace(/\/$/, "");
@@ -116,7 +117,7 @@ function buildInputUrl(sourceName) {
 
 function buildOutputRtmpUrl(sourceName, profileId) {
   const outPath = `${sourceName}__r${profileId}`;
-  return `${OUTPUT_RTMP_BASE}/${encodeURIComponent(outPath)}`;
+  return mediaServicePublishUrl(`${OUTPUT_RTMP_BASE}/${encodeURIComponent(outPath)}`);
 }
 
 function buildScaleFilter(width, height) {
@@ -127,6 +128,7 @@ function buildFfmpegArgs(sourceName, profile) {
   const inputUrl = buildInputUrl(sourceName);
   const outputUrl = buildOutputRtmpUrl(sourceName, profile.id);
   const bitrateK = Math.max(1, Math.trunc(parseInt(profile.videoBitrate, 10) || 0));
+  const readAuthorization = mediaServiceReadHeaders(inputUrl).authorization;
   return [
     "-nostdin",
     "-hide_banner",
@@ -138,6 +140,7 @@ function buildFfmpegArgs(sourceName, profile) {
     "1",
     "-reconnect_delay_max",
     "2",
+    ...(readAuthorization ? ["-headers", `Authorization: ${readAuthorization}\r\n`] : []),
     "-i",
     inputUrl,
     "-map",
@@ -202,11 +205,11 @@ class ProfileRunner {
     this.startedAtMs = Date.now();
 
     child.stdout?.on("data", (buf) => {
-      const line = String(buf || "").trim();
+      const line = String(buf || "").trim().replace(/([?&]pipeline=)[^&\s]+/g, "$1[redacted]");
       if (line) console.log(`[transcoder:${this.sourceName}:${this.profile.id}] ${line}`);
     });
     child.stderr?.on("data", (buf) => {
-      const line = String(buf || "").trim();
+      const line = String(buf || "").trim().replace(/([?&]pipeline=)[^&\s]+/g, "$1[redacted]");
       if (line) console.log(`[transcoder:${this.sourceName}:${this.profile.id}] ${line}`);
     });
     child.on("exit", (code, signal) => {

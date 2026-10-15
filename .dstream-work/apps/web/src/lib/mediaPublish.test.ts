@@ -13,6 +13,7 @@ import { POST as issue } from "../../app/api/broadcast/publish-credential/route"
 import { POST as mediaAuth } from "../../app/api/broadcast/media-auth/route";
 import { POST as whip } from "../../app/api/whip/[...path]/route";
 import { GET as ingestStatus } from "../../app/api/broadcast/ingest-status/[originStreamId]/route";
+import { issueMediaServiceCredential } from "../../../../services/media-auth.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "dstream-media-auth-"));
 process.env.DSTREAM_MEDIA_AUTH_SECRET = "fixture-media-secret-0123456789abcdef";
@@ -58,6 +59,16 @@ test("media origin callback requires its server secret and enforces public/priva
   assert.equal((await invoke({ action: "publish", path: `${pubkey}--public`, query: `publish=${token}` })).status, 204);
   assert.equal((await invoke({ action: "publish", path: `${pubkey}--private`, query: `publish=${token}` })).status, 403);
   assert.equal((await invoke({ action: "read", path: `${pubkey}--unknown`, query: `publish=${token}` })).status, 403);
+  process.env.DSTREAM_MEDIA_MANIFEST_SECRET = "manifest-fixture-0123456789abcdef012345";
+  process.env.DSTREAM_MEDIA_TRANSCODER_SECRET = "transcode-fixture-0123456789abcdef012345";
+  const privatePath = `${pubkey}--private`;
+  const manifestRead = issueMediaServiceCredential(process.env.DSTREAM_MEDIA_MANIFEST_SECRET, "manifest", privatePath, "read");
+  assert.equal((await invoke({ action: "read", path: privatePath, query: "", token: manifestRead })).status, 204);
+  assert.equal((await invoke({ action: "publish", path: privatePath, query: "", token: manifestRead })).status, 403);
+  const rendition = `${privatePath}__r360p`;
+  const pipelinePublish = issueMediaServiceCredential(process.env.DSTREAM_MEDIA_TRANSCODER_SECRET, "transcoder", rendition, "publish");
+  assert.equal((await invoke({ action: "publish", path: rendition, query: `pipeline=${pipelinePublish}` })).status, 204);
+  assert.equal((await invoke({ action: "publish", path: privatePath, query: `pipeline=${pipelinePublish}` })).status, 403);
 });
 
 test("the owner can detect ingest before any live announcement without opening anonymous reads", async () => {

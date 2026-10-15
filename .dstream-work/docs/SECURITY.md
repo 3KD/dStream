@@ -10,6 +10,8 @@ The sole time-limited web high-advisory disposition is GHSA-3gc7-fjrx-p6mg, expi
 
 Set `DSTREAM_MEDIA_AUTH_SECRET` to a separate random value of at least 32 characters, server-only, on both web and MediaMTX. Compose configures MediaMTX HTTP authorization against the web callback. Never put this secret in a public variable or URL shown to a viewer.
 
+The existing manifest and transcoder services use distinct `DSTREAM_MEDIA_MANIFEST_SECRET` and `DSTREAM_MEDIA_TRANSCODER_SECRET` values. Their credentials are path/action-bound and expire: manifest credentials can read but cannot publish; transcoder credentials can read and publish only derived `__r360p`-style rendition paths, never the creator's base path. Do not share either service secret with a viewer. Control API authentication remains loopback-only; it is not excluded from HTTP authorization.
+
 Studio obtains a scoped publish credential using the creator's signed, body-bound request. Copy the new stream key into OBS after upgrading; the old pubkey/path alone is no longer a publish credential. Credentials expire after 36 hours and are checked at connection time. Existing connections are not an identity credential for future publishes. A reader token cannot be used to publish.
 
 HLS/WebRTC aliases go through the same application permissions, and MediaMTX enforces permissions for direct protocol connections. Unknown policies fail closed. Private policies are retained rather than becoming public when a cache TTL passes. Register the signed stream policy before allowing viewers to connect. All media services must stay on the private container network except the documented ingest/ICE ports. A deliberate infrastructure migration must not stop an active broadcast without coordination.

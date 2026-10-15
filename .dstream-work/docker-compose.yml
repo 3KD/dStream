@@ -32,6 +32,8 @@ services:
       TURN_SHARED_SECRET: "${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in the environment file}"
       DSTREAM_PLAYBACK_ACCESS_SECRET: "${DSTREAM_PLAYBACK_ACCESS_SECRET:-dev-playback-access-secret-0123456789abcdef}"
       DSTREAM_MEDIA_AUTH_SECRET: "${DSTREAM_MEDIA_AUTH_SECRET:?Set DSTREAM_MEDIA_AUTH_SECRET in the environment file}"
+      DSTREAM_MEDIA_MANIFEST_SECRET: "${DSTREAM_MEDIA_MANIFEST_SECRET:?Set DSTREAM_MEDIA_MANIFEST_SECRET in the environment file}"
+      DSTREAM_MEDIA_TRANSCODER_SECRET: "${DSTREAM_MEDIA_TRANSCODER_SECRET:?Set DSTREAM_MEDIA_TRANSCODER_SECRET in the environment file}"
       DSTREAM_PLAYBACK_POLICY_STORE_PATH: "${DSTREAM_PLAYBACK_POLICY_STORE_PATH:-/var/lib/dstream/playback-policies.json}"
       # Read-only Video archive mount path exposed by API routes.
       DSTREAM_VIDEO_DIR: "${DSTREAM_VIDEO_DIR:-/recordings}"
@@ -186,8 +188,8 @@ services:
   manifest:
     image: dstream-manifest:latest
     build:
-      context: ./services/manifest
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/manifest/Dockerfile
     environment:
       HLS_DIR: "/hls"
       MEDIAMTX_HLS_URL: "${MEDIAMTX_HLS_URL:-http://mediamtx:8880}"
@@ -197,6 +199,8 @@ services:
       MANIFEST_HTTP_PORT: "${MANIFEST_HTTP_PORT:-3001}"
       # Optional: provide a stable Nostr secret key for the manifest signer (64-hex).
       MANIFEST_SECRET_KEY_HEX: "${MANIFEST_SECRET_KEY_HEX:-}"
+      DSTREAM_MEDIA_SERVICE_ROLE: manifest
+      DSTREAM_MEDIA_SERVICE_SECRET: "${DSTREAM_MEDIA_MANIFEST_SECRET:?Set DSTREAM_MEDIA_MANIFEST_SECRET in the environment file}"
     depends_on:
       mediamtx:
         condition: service_started
@@ -242,10 +246,12 @@ services:
     profiles: ["transcoding"]
     image: dstream-transcoder:latest
     build:
-      context: ./services/transcoder
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/transcoder/Dockerfile
     environment:
       HLS_DIR: "/hls"
+      DSTREAM_MEDIA_SERVICE_ROLE: transcoder
+      DSTREAM_MEDIA_SERVICE_SECRET: "${DSTREAM_MEDIA_TRANSCODER_SECRET:?Set DSTREAM_MEDIA_TRANSCODER_SECRET in the environment file}"
       TRANSCODER_SOURCE_HLS_BASE: "${TRANSCODER_SOURCE_HLS_BASE:-http://mediamtx:8880}"
       TRANSCODER_OUTPUT_RTMP_BASE: "${TRANSCODER_OUTPUT_RTMP_BASE:-rtmp://mediamtx:1935}"
       TRANSCODER_PROFILES: "${TRANSCODER_PROFILES:-360p:640:360:700k:64k}"

@@ -44,6 +44,7 @@ The retired `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` setting must not be used because it
 | Media proxy | `DSTREAM_WHIP_PROXY_ORIGIN`, `DSTREAM_WHEP_PROXY_ORIGIN`, `DSTREAM_HLS_PROXY_ORIGIN` |
 | Private playback | `DSTREAM_PLAYBACK_ACCESS_SECRET`, `DSTREAM_PLAYBACK_POLICY_STORE_PATH` |
 | Publisher authorization | `DSTREAM_MEDIA_AUTH_SECRET`, shared only by web and MediaMTX; Studio issues creator-scoped OBS/WHIP credentials |
+| Internal media services | Separate `DSTREAM_MEDIA_MANIFEST_SECRET` and `DSTREAM_MEDIA_TRANSCODER_SECRET`; read-only manifest access and rendition-only transcoder publishing |
 | TURN | `DSTREAM_TURN_URLS`, `DSTREAM_TURN_CREDENTIAL_TTL_SEC`, `TURN_SHARED_SECRET`, `TURN_EXTERNAL_IP`, relay port range and quotas |
 | Monero | `DSTREAM_XMR_WALLET_RPC_ORIGIN`, RPC credentials, daemon settings, `DSTREAM_XMR_SESSION_SECRET` |
 | Payment storage | `DSTREAM_PAYMENT_INTENT_STORE_PATH`, `DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH` |

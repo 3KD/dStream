@@ -619,9 +619,13 @@ function checkProdRules(options = {}) {
     errors.push("DSTREAM_PLAYBACK_ACCESS_SECRET appears to be a placeholder; set a high-entropy production secret.");
   }
 
-  const mediaAuthSecret = readEnv("DSTREAM_MEDIA_AUTH_SECRET").trim();
-  if (mediaAuthSecret.length < 32 || /replace|example|changeme|^dev-/i.test(mediaAuthSecret)) {
-    errors.push("DSTREAM_MEDIA_AUTH_SECRET must be a separate high-entropy server-only secret (32+ characters).");
+  const mediaSecrets = ["DSTREAM_MEDIA_AUTH_SECRET", "DSTREAM_MEDIA_MANIFEST_SECRET", "DSTREAM_MEDIA_TRANSCODER_SECRET"].map((name) => {
+    const value = readEnv(name).trim();
+    if (value.length < 32 || /replace|example|changeme|^dev-/i.test(value)) errors.push(`${name} must be a separate high-entropy server-only secret (32+ characters).`);
+    return value;
+  });
+  if (new Set(mediaSecrets).size !== mediaSecrets.length) {
+    errors.push("Publisher, manifest and transcoder media secrets must be distinct.");
   }
 
   if (strictExternal) {

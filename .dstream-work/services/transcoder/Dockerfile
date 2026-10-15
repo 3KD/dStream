@@ -6,6 +6,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY index.mjs policy.mjs /app/
+COPY services/transcoder/index.mjs services/transcoder/policy.mjs /app/transcoder/
+COPY services/media-auth.mjs /app/media-auth.mjs
 
-CMD ["node", "/app/index.mjs"]
+CMD ["node", "/app/transcoder/index.mjs"]

@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { mediaServiceReadHeaders } from "../media-auth.mjs";
 
 import { SimplePool, finalizeEvent, generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 
@@ -45,7 +46,7 @@ async function fetchText(url, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5000;
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    const res = await fetch(url, { signal: controller.signal, cache: "no-store", headers: mediaServiceReadHeaders(url) });
     if (!res.ok) return null;
     return await res.text();
   } catch {

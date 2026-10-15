@@ -16,6 +16,7 @@ COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/protocol ./packages/protocol
 COPY scripts ./scripts
+COPY services/media-auth.mjs services/media-auth.d.mts ./services/
 
 # Public config (inlined into the client bundle at build time)
 ARG NEXT_PUBLIC_NOSTR_RELAYS
