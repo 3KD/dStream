@@ -6,6 +6,7 @@ import { markStakeSessionSettledByAddress } from "@/lib/monero/stakeSessionStore
 import { isStakeLabelForStream } from "@/lib/monero/stakeSession";
 import { claimWalletSettlement, completeWalletSettlement, WalletSettlementError } from "@/lib/monero/settlement";
 import { verifyWalletRequestPayload } from "@/lib/monero/requestProof";
+import { requestAuthorizationUrl } from "@/lib/server/requestUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (authEvent.kind !== 27235) return new Response("invalid NIP-98 kind", { status: 401 });
   if (!isRecent(authEvent.created_at, 60)) return new Response("stale NIP-98 auth", { status: 401 });
 
-  const expectedUrl = req.nextUrl.toString();
+  const expectedUrl = requestAuthorizationUrl(req);
   const u = getFirstTagValue(authEvent.tags, "u");
   const method = getFirstTagValue(authEvent.tags, "method");
   if (u !== expectedUrl) return new Response("NIP-98 url mismatch", { status: 401 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { updateJsonFileAtomic } from "../storage/jsonFileStore";
 import type { NostrEvent } from "@dstream/protocol";
+import { requestAuthorizationUrl } from "../server/requestUrl";
 
 export function authorizeAdminRequest(event: NostrEvent, request: Request, payload: Record<string, unknown>, bodyDigest?: string): boolean {
   const value = (name: string) => {
@@ -11,7 +12,7 @@ export function authorizeAdminRequest(event: NostrEvent, request: Request, paylo
   delete body.operatorProofEvent;
   const hash = bodyDigest ?? createHash("sha256").update(JSON.stringify(body)).digest("hex");
   const now = Math.floor(Date.now() / 1000);
-  if (value("u") !== request.url || value("method") !== request.method || value("payload") !== hash ||
+  if (value("u") !== requestAuthorizationUrl(request) || value("method") !== request.method || value("payload") !== hash ||
     !/^[A-Za-z0-9_-]{16,128}$/.test(value("nonce") ?? "") || Math.abs(event.created_at - now) > 60) return false;
   const path = process.env.DSTREAM_ACCESS_NONCE_STORE_PATH?.trim() || "/var/lib/dstream/access-request-nonces.json";
   let accepted = false;

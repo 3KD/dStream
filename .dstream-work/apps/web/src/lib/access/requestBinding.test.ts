@@ -6,10 +6,19 @@ import { after, test } from "node:test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools";
 import { buildAccessAdminProof, grantAccessEntitlementClient } from "./client";
 import { authorizeAccessAdmin } from "../../../app/api/access/_lib";
+import { requestAuthorizationUrl } from "../server/requestUrl";
 
 const dir = mkdtempSync(join(tmpdir(), "dstream-request-proof-"));
 process.env.DSTREAM_ACCESS_NONCE_STORE_PATH = join(dir, "nonces.json");
 after(() => rmSync(dir, { recursive: true, force: true }));
+
+test("request audience uses the preserved HTTP authority through a managed reverse proxy", () => {
+  const request = new Request("http://0.0.0.0:5656/api/test?q=1", { headers: { host: "node.example", "x-forwarded-proto": "https", "x-forwarded-host": "attacker.example" } });
+  assert.equal(requestAuthorizationUrl(request), "https://node.example/api/test?q=1");
+  assert.equal(requestAuthorizationUrl(new Request("http://0.0.0.0:5656/api/test", { headers: { host: "127.0.0.1:6101" } })), "http://127.0.0.1:6101/api/test");
+  assert.equal(requestAuthorizationUrl(new Request("http://0.0.0.0:5656/api/test", { headers: { host: "node.example:80", "x-forwarded-proto": "https" } })), "https://node.example:80/api/test");
+  assert.throws(() => requestAuthorizationUrl(new Request("http://localhost/", { headers: { host: "node.example@attacker.example" } })), /Invalid request authority/);
+});
 
 test("admin transport binds each signed operation and rejects changed body, route and replay", async () => {
   const key = generateSecretKey(), pubkey = getPublicKey(key);

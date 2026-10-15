@@ -2,6 +2,7 @@ import { validateEvent, verifyEvent } from "nostr-tools";
 import { makeOriginStreamId } from "@/lib/origin";
 import { issuePublishCredential } from "@/lib/mediaPublish";
 import { verifyWalletRequestPayload } from "@/lib/monero/requestProof";
+import { requestAuthorizationUrl } from "@/lib/server/requestUrl";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request): Promise<Response> {
     const tag = (name: string) => event.tags.filter((row: string[]) => row[0] === name);
     if (!validateEvent(event) || !verifyEvent(event) || event.kind !== 27235 ||
       Math.abs(event.created_at - Math.floor(Date.now() / 1000)) > 60 ||
-      tag("u").length !== 1 || tag("u")[0][1] !== req.url ||
+      tag("u").length !== 1 || tag("u")[0][1] !== requestAuthorizationUrl(req) ||
       tag("method").length !== 1 || tag("method")[0][1] !== "POST" ||
       !(await verifyWalletRequestPayload(req, event.tags))) {
       return new Response("Publisher authorization is invalid.", { status: 401 });
