@@ -104,8 +104,13 @@ export function getLightningCapabilities(): PaymentRailCapability[] {
 
 export async function verifyLightningPayment(input: PaymentVerificationInput): Promise<VerifiedPayment> {
   if (input.asset !== "btc") throw new PaymentVerificationError("Lightning verifier requires the BTC asset.", 400);
-  const destination = (input.proof?.lightningAddress ?? input.address).trim();
+  // The intent, not buyer-supplied evidence, chooses the trusted receipt provider.
+  const destination = input.address.trim();
   if (!destination) throw new PaymentVerificationError("Lightning recipient address is missing.", 400);
+  const destinationHint = input.proof?.lightningAddress?.trim();
+  if (destinationHint && resolveLnurlPayUrl(destinationHint) !== resolveLnurlPayUrl(destination)) {
+    throw new PaymentVerificationError("Lightning proof destination does not match the payment recipient.", 400);
+  }
   await assertPublicLnurlDestination(destination);
   const { url, metadata } = await fetchLnurlPayMetadata(destination);
   if (!metadata.allowsNostr || !metadata.nostrPubkey) {

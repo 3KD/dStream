@@ -362,6 +362,21 @@ test("NIP-57 verifier validates provider signature, zap binding, amount, and inv
   assert.equal(payment.txId, Buffer.from(paymentHash).toString("hex"));
   assert.equal(payment.payer, senderPubkey);
   assert.equal(payment.finality, "provider_attested");
+
+  await assert.rejects(
+    verifyPayment({
+      asset: "btc", paymentRailId: "lightning", network: "lightning",
+      address: "creator@8.8.8.8", amount: "2000", intentId, recipientPubkey,
+      proof: { lightningAddress: lnurl, zapReceipt: receipt }
+    }),
+    /proof destination does not match/
+  );
+  const equivalent = await verifyPayment({
+    asset: "btc", paymentRailId: "lightning", network: "lightning",
+    address: lnurl, amount: "2000", intentId, recipientPubkey,
+    proof: { lightningAddress: lnurl, zapReceipt: receipt }
+  });
+  assert.equal(equivalent.recipient, lnurl);
 });
 
 test("payment intents authorize by secret and reject cross-intent settlement replay", async () => {
