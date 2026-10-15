@@ -261,7 +261,7 @@ test("video packages: validates and stores trusted native payment recipients", a
         paymentRailId: "evm",
         durationHours: 24
       }),
-    /valid Ethereum address/
+    /EVM address must be 0x \+ 40 hex chars/
   );
 });
 

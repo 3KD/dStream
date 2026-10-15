@@ -210,7 +210,7 @@ export async function POST(req: Request): Promise<Response> {
           verificationMode = "external_verified";
           metadata.verificationMode = verificationMode;
         } else if (verifiedByOperator && canUseOperatorOverride) {
-          const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
+          const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey, { request: req, payload });
           if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
           source = "purchase_verified";
           actorPubkey = auth.actorPubkey;
@@ -234,7 +234,7 @@ export async function POST(req: Request): Promise<Response> {
           );
         }
       } else if (verifiedByOperator && canUseOperatorOverride) {
-        const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey);
+        const auth = authorizeAccessAdmin(payload.operatorProofEvent, pkg.hostPubkey, { request: req, payload });
         if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
         source = "purchase_verified";
         actorPubkey = auth.actorPubkey;

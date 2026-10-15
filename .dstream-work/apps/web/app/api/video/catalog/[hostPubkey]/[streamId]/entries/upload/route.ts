@@ -1,4 +1,6 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { readLimitedBody, RequestLimitError } from "@/lib/server/requestLimits";
 import { access as accessFile, mkdir, writeFile } from "node:fs/promises";
 import { pubkeyParamToHex } from "@/lib/nostr-ids";
 import { makeOriginStreamId } from "@/lib/origin";
@@ -41,17 +43,6 @@ function sanitizeFileName(input: string): string {
   if (!base) return fallback;
   const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+/, "");
   return cleaned || fallback;
-}
-
-function parseProofEvent(input: FormDataEntryValue | null): unknown {
-  if (typeof input !== "string") return null;
-  const value = input.trim();
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
 }
 
 function parseTags(input: FormDataEntryValue | null): string[] {
@@ -103,13 +94,20 @@ export async function POST(
   }
 
   let formData: FormData;
+  let rawBody: Uint8Array;
+  let proofEvent: unknown;
   try {
-    formData = await req.formData();
-  } catch {
+    const auth = req.headers.get("authorization")?.match(/^Nostr\s+(.+)$/i)?.[1];
+    if (!auth) return Response.json({ ok: false, error: "Request-bound upload authorization is required; use resumable uploads for large files." }, { status: 401 });
+    proofEvent = JSON.parse(Buffer.from(auth, "base64").toString("utf8"));
+    rawBody = await readLimitedBody(req, 8 * 1024 * 1024);
+    formData = await new Request(req.url, { method: "POST", headers: req.headers, body: Buffer.from(rawBody) }).formData();
+  } catch (error) {
+    if (error instanceof RequestLimitError) return Response.json({ ok: false, error: error.message }, { status: 413 });
     return Response.json({ ok: false, error: "invalid multipart form payload" }, { status: 400 });
   }
 
-  const auth = authorizeAccessAdmin(parseProofEvent(formData.get("operatorProofEvent")), hostPubkey);
+  const auth = authorizeAccessAdmin(proofEvent, hostPubkey, { request: req, payload: {}, bodyDigest: createHash("sha256").update(rawBody).digest("hex") });
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const fileValue = formData.get("file");

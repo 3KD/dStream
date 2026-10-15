@@ -1,5 +1,7 @@
 import { normalizeProofPubkey, readAccessOperatorPubkeys, verifyAccessProof } from "@/lib/access/proof";
 import { ACCESS_ACTIONS, type AccessAction } from "@/lib/access/types";
+import { authorizeAdminRequest } from "@/lib/access/requestBinding";
+import type { NostrEvent } from "@dstream/protocol";
 
 export function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -40,16 +42,22 @@ export function parseBoolean(input: unknown): boolean {
 
 export function authorizeAccessAdmin(
   proofEvent: unknown,
-  hostPubkey: string
+  hostPubkey: string,
+  context?: { request: Request; payload: Record<string, unknown>; bodyDigest?: string }
 ): { ok: true; actorPubkey: string } | { ok: false; status: number; error: string } {
-  if (parseBoolean(process.env.DSTREAM_ACCESS_ALLOW_UNAUTH)) {
+  if (process.env.NODE_ENV !== "production" && parseBoolean(process.env.DSTREAM_ACCESS_ALLOW_UNAUTH)) {
     return { ok: true, actorPubkey: "0".repeat(64) };
   }
   const proof = verifyAccessProof(proofEvent, "access_admin");
   if (!proof.ok) return proof;
-  if (proof.pubkey === hostPubkey) return { ok: true, actorPubkey: proof.pubkey };
   const operators = readAccessOperatorPubkeys();
-  if (operators.includes(proof.pubkey)) return { ok: true, actorPubkey: proof.pubkey };
-  return { ok: false, status: 403, error: "Signed proof pubkey is not authorized for this host." };
+  if (proof.pubkey !== hostPubkey && !operators.includes(proof.pubkey)) {
+    return { ok: false, status: 403, error: "Signed proof pubkey is not authorized for this host." };
+  }
+  try {
+    if (!context || !authorizeAdminRequest(proofEvent as NostrEvent, context.request, context.payload, context.bodyDigest)) {
+      return { ok: false, status: 401, error: "A fresh request-bound admin proof is required." };
+    }
+  } catch { return { ok: false, status: 503, error: "Admin authorization storage is unavailable." }; }
+  return { ok: true, actorPubkey: proof.pubkey };
 }
-

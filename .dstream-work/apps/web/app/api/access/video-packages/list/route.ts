@@ -28,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   let includeUnlisted = false;
 
   if (includeDisabledRequested || includeUnlistedRequested || includePurchaseStatsRequested || payload.operatorProofEvent) {
-    const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey);
+    const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey, { request: req, payload });
     if (!auth.ok && (includeDisabledRequested || includeUnlistedRequested || includePurchaseStatsRequested)) {
       return Response.json({ ok: false, error: auth.error }, { status: auth.status });
     }

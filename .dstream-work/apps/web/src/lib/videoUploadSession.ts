@@ -5,6 +5,7 @@ import { pubkeyParamToHex } from "./nostr-ids";
 import { makeOriginStreamId } from "./origin";
 import { isAllowedVideoRecordingExtension, resolveVideoStreamDir } from "./video";
 import { type VideoCatalogEntry, type VideoCatalogVisibility, type VideoProcessingState, upsertVideoCatalogEntry } from "./videoCatalog";
+import { reserveUploadCapacity, releaseUploadCapacity } from "./videoUploadQuota";
 
 const PLAYLIST_ID_RE = /^(?:__root__|[a-zA-Z0-9][a-zA-Z0-9._-]{0,79})$/;
 const DEFAULT_SESSION_TTL_SEC = 60 * 60 * 2;
@@ -43,7 +44,7 @@ function nowSec(): number {
 }
 
 function getUploadSessionRootDir(): string {
-  const raw = (process.env.DSTREAM_Video_UPLOAD_SESSION_DIR ?? "").trim();
+  const raw = (process.env.DSTREAM_VIDEO_UPLOAD_SESSION_DIR ?? process.env.DSTREAM_Video_UPLOAD_SESSION_DIR ?? "").trim();
   return raw || "/var/lib/dstream/video-upload-sessions";
 }
 
@@ -96,6 +97,7 @@ function parseTags(tags: string[] | null | undefined): string[] {
 }
 
 function sessionMetaPath(uploadId: string): string {
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(uploadId)) throw new Error("Invalid upload id.");
   return path.resolve(getUploadSessionRootDir(), `${uploadId}.json`);
 }
 
@@ -158,6 +160,7 @@ async function deleteSessionArtifacts(uploadId: string): Promise<void> {
     rm(sessionMetaPath(uploadId), { force: true }),
     rm(sessionPartPath(uploadId), { force: true })
   ]);
+  releaseUploadCapacity(getUploadSessionRootDir(), uploadId);
 }
 
 function parseUploadIdFromMetaFile(fileName: string): string | null {
@@ -264,8 +267,14 @@ export async function startVideoUploadSession(input: {
     updatedAtSec: createdAtSec,
     expiresAtSec: createdAtSec + ttlSec
   };
-  await writeSession(session);
-  await writeFile(sessionPartPath(session.uploadId), new Uint8Array(0));
+  await reserveUploadCapacity(getUploadSessionRootDir(), session.uploadId, session.hostPubkey, session.fileSizeBytes, session.expiresAtSec);
+  try {
+    await writeSession(session);
+    await writeFile(sessionPartPath(session.uploadId), new Uint8Array(0));
+  } catch (error) {
+    await deleteSessionArtifacts(session.uploadId);
+    throw error;
+  }
   return { session, chunkSizeBytes: DEFAULT_CHUNK_SIZE_BYTES };
 }
 
@@ -278,6 +287,7 @@ export async function appendVideoUploadSessionChunk(input: {
   if (!input.bytes?.byteLength) throw new Error("Chunk body is empty.");
   const session = await readSession(input.uploadId);
   if (input.uploadToken !== session.uploadToken) throw new Error("Upload token mismatch.");
+  await reserveUploadCapacity(getUploadSessionRootDir(), session.uploadId, session.hostPubkey, session.fileSizeBytes, session.expiresAtSec);
   if (!Number.isInteger(input.offset) || input.offset < 0) throw new Error("Chunk offset is invalid.");
   if (input.offset !== session.receivedBytes) {
     throw new Error(`Chunk offset mismatch. expected=${session.receivedBytes}`);
@@ -296,6 +306,11 @@ export async function appendVideoUploadSessionChunk(input: {
     fileSizeBytes: session.fileSizeBytes,
     completed: session.receivedBytes >= session.fileSizeBytes
   };
+}
+
+export async function validateVideoUploadSession(uploadId: string, token: string): Promise<void> {
+  const session = await readSession(uploadId);
+  if (session.uploadToken !== token) throw new Error("Upload token mismatch.");
 }
 
 export async function completeVideoUploadSession(input: {

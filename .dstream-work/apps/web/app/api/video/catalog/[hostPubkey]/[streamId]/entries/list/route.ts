@@ -45,7 +45,7 @@ export async function POST(
   let isAdmin = false;
   let actorPubkey: string | null = null;
   if (requestAdminRows) {
-    const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey);
+    const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey, { request: req, payload });
     if (!auth.ok) {
       return Response.json({ ok: false, error: auth.error }, { status: auth.status });
     }

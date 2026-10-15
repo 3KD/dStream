@@ -29,7 +29,7 @@ export async function POST(
     body = {};
   }
   const payload = (body ?? {}) as Record<string, unknown>;
-  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey);
+  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey, { request: req, payload });
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const limit = parsePositiveInt(payload.limit);

@@ -29,7 +29,7 @@ export async function POST(
     return Response.json({ ok: false, error: error?.message ?? "Invalid analytics target." }, { status: 400 });
   }
 
-  const auth = authorizeAccessAdmin(payload.operatorProofEvent, resolved.hostPubkey);
+  const auth = authorizeAccessAdmin(payload.operatorProofEvent, resolved.hostPubkey, { request: req, payload });
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const limitRaw = Number(payload.limit);

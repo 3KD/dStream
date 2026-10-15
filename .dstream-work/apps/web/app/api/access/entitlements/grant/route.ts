@@ -39,7 +39,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!resourceId) return Response.json({ ok: false, error: "resourceId is required" }, { status: 400 });
   if (actions.length === 0) return Response.json({ ok: false, error: "actions must include at least one valid action" }, { status: 400 });
 
-  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey);
+  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey, { request: req, payload });
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {

@@ -16,7 +16,7 @@ export async function POST(req: Request): Promise<Response> {
   const hostPubkey = normalizePubkey(payload.hostPubkey);
   if (!hostPubkey) return Response.json({ ok: false, error: "hostPubkey must be a 64-char hex pubkey" }, { status: 400 });
 
-  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey);
+  const auth = authorizeAccessAdmin(payload.operatorProofEvent, hostPubkey, { request: req, payload });
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const rows = listAccessDenyRules({

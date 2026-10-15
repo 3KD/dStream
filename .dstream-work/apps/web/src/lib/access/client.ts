@@ -8,6 +8,31 @@ import type {
 } from "./types";
 import type { VideoCheckoutVerificationMode } from "./videoCheckout";
 import type { VideoPurchasePolicy } from "./videoPackagePolicy";
+import { sha256Text } from "../encoding";
+
+type ProofSigner = (event: Omit<NostrEvent, "id" | "sig">) => Promise<NostrEvent>;
+const adminSigners = new Map<string, ProofSigner>();
+
+// Re-sign each admin operation at the shared transport boundary, including uploads.
+async function fetch(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (typeof init?.body === "string") {
+    const payload = JSON.parse(init.body) as Record<string, unknown>;
+    const proof = payload.operatorProofEvent as NostrEvent | undefined;
+    const signer = proof?.id ? adminSigners.get(proof.id) : undefined;
+    if (proof && signer) {
+      const body = { ...payload };
+      delete body.operatorProofEvent;
+      const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+      const now = nowSec();
+      const tags = proof.tags.filter((tag) => !["u", "method", "payload", "nonce", "exp"].includes(tag[0] ?? ""));
+      tags.push(["u", new URL(String(url), origin).href], ["method", init.method || "GET"],
+        ["payload", await sha256Text(JSON.stringify(body))], ["nonce", crypto.randomUUID()], ["exp", String(now + 60)]);
+      const signed = await signer({ kind: 27235, pubkey: proof.pubkey, created_at: now, content: "", tags });
+      init = { ...init, body: JSON.stringify({ ...body, operatorProofEvent: signed }) };
+    }
+  }
+  return globalThis.fetch(url, init);
+}
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -900,7 +925,12 @@ export async function buildAccessProof(
     content: ""
   };
   try {
-    return await signEvent(unsigned);
+    const signed = await signEvent(unsigned);
+    if (input.scope === "access_admin" && signed.id) {
+      if (adminSigners.size >= 64) adminSigners.delete(adminSigners.keys().next().value!);
+      adminSigners.set(signed.id, signEvent);
+    }
+    return signed;
   } catch {
     return null;
   }

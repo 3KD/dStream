@@ -1,4 +1,5 @@
-import { appendVideoUploadSessionChunk } from "@/lib/videoUploadSession";
+import { appendVideoUploadSessionChunk, validateVideoUploadSession } from "@/lib/videoUploadSession";
+import { readLimitedBody, RequestLimitError } from "@/lib/server/requestLimits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,10 +30,11 @@ export async function POST(
 
   let bytes: Uint8Array;
   try {
-    const arrayBuffer = await req.arrayBuffer();
-    bytes = new Uint8Array(arrayBuffer);
-  } catch {
-    return Response.json({ ok: false, error: "Invalid chunk body." }, { status: 400 });
+    await validateVideoUploadSession(uploadId, uploadToken);
+    bytes = await readLimitedBody(req, 4 * 1024 * 1024);
+  } catch (error) {
+    if (error instanceof RequestLimitError) return Response.json({ ok: false, error: error.message }, { status: 413 });
+    return Response.json({ ok: false, error: "Invalid upload session or chunk body." }, { status: 403 });
   }
 
   try {
