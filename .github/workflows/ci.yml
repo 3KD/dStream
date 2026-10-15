@@ -29,6 +29,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Dependency security gate
+        run: npm run security:audit
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -47,6 +50,7 @@ jobs:
           {
             echo "DSTREAM_XMR_SESSION_SECRET=$(openssl rand -hex 32)"
             echo "DSTREAM_PLAYBACK_ACCESS_SECRET=$(openssl rand -hex 32)"
+            echo "DSTREAM_MEDIA_AUTH_SECRET=$(openssl rand -hex 32)"
             echo "DSTREAM_XMR_WALLET_RPC_USER=ci"
             echo "DSTREAM_XMR_WALLET_RPC_PASS=$(openssl rand -hex 32)"
             echo "TURN_SHARED_SECRET=$(openssl rand -hex 32)"

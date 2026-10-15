@@ -619,6 +619,11 @@ function checkProdRules(options = {}) {
     errors.push("DSTREAM_PLAYBACK_ACCESS_SECRET appears to be a placeholder; set a high-entropy production secret.");
   }
 
+  const mediaAuthSecret = readEnv("DSTREAM_MEDIA_AUTH_SECRET").trim();
+  if (mediaAuthSecret.length < 32 || /replace|example|changeme|^dev-/i.test(mediaAuthSecret)) {
+    errors.push("DSTREAM_MEDIA_AUTH_SECRET must be a separate high-entropy server-only secret (32+ characters).");
+  }
+
   if (strictExternal) {
     const devtools = readEnv("DSTREAM_DEVTOOLS").trim();
     if (!devtools) warnings.push("Deploy mode expects DSTREAM_DEVTOOLS=0.");

@@ -43,6 +43,7 @@ The retired `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` setting must not be used because it
 | --- | --- |
 | Media proxy | `DSTREAM_WHIP_PROXY_ORIGIN`, `DSTREAM_WHEP_PROXY_ORIGIN`, `DSTREAM_HLS_PROXY_ORIGIN` |
 | Private playback | `DSTREAM_PLAYBACK_ACCESS_SECRET`, `DSTREAM_PLAYBACK_POLICY_STORE_PATH` |
+| Publisher authorization | `DSTREAM_MEDIA_AUTH_SECRET`, shared only by web and MediaMTX; Studio issues creator-scoped OBS/WHIP credentials |
 | TURN | `DSTREAM_TURN_URLS`, `DSTREAM_TURN_CREDENTIAL_TTL_SEC`, `TURN_SHARED_SECRET`, `TURN_EXTERNAL_IP`, relay port range and quotas |
 | Monero | `DSTREAM_XMR_WALLET_RPC_ORIGIN`, RPC credentials, daemon settings, `DSTREAM_XMR_SESSION_SECRET` |
 | Payment storage | `DSTREAM_PAYMENT_INTENT_STORE_PATH`, `DSTREAM_PAYMENT_SETTLEMENT_STORE_PATH` |
@@ -86,10 +87,12 @@ Treat these as Compose defaults, not protocol constants. HLS segment duration an
 Run from `.dstream-work` with a populated production file:
 
 ```bash
-npm run harden:deploy -- .env.production
+ENV_FILE=.env.production npm run harden:deploy
 EXTERNAL_BASE_URL=https://your-domain npm run smoke:external:readiness
 SSH_TARGET=user@your-host DSTREAM_DEPLOY_DOMAIN=your-domain npm run smoke:prod:runtime
 EXTERNAL_BASE_URL=https://your-domain SSH_TARGET=user@your-host npm run gate:prod -- .env.production
 ```
 
 The hardening check rejects placeholder production values, public credential leakage, missing required secrets, and inactive required payment capabilities. See [.dstream-work/docs/DEPLOYMENT.md](.dstream-work/docs/DEPLOYMENT.md) for the complete deployment flow.
+
+Security release gates, media credential migration, upload capacity and pending-wallet-settlement reconciliation are documented in [.dstream-work/docs/SECURITY.md](.dstream-work/docs/SECURITY.md). A website deployment does not update already-installed native apps or encrypt existing browser keys.
