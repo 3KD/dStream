@@ -13,6 +13,8 @@ import {
 import { evaluateRefundPolicy, type RefundContributionReceipt } from "@/lib/monero/refundPolicy";
 import { verifyStakeSession } from "@/lib/monero/stakeSession";
 import { markStakeSessionSettled } from "@/lib/monero/stakeSessionStore";
+import { claimWalletSettlement, completeWalletSettlement, WalletSettlementError } from "@/lib/monero/settlement";
+import { verifyWalletRequestPayload } from "@/lib/monero/requestProof";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   const method = getFirstTagValue(authEvent.tags, "method");
   if (u !== expectedUrl) return new Response("NIP-98 url mismatch", { status: 401 });
   if ((method ?? "").toUpperCase() !== "POST") return new Response("NIP-98 method mismatch", { status: 401 });
+  if (!(await verifyWalletRequestPayload(req, authEvent.tags))) return new Response("NIP-98 payload mismatch", { status: 401 });
 
   const viewerPubkey = typeof authEvent.pubkey === "string" ? authEvent.pubkey.trim().toLowerCase() : "";
   if (viewerPubkey !== session.viewerPubkey) return new Response("not authorized for session", { status: 403 });
@@ -162,11 +165,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       });
     }
 
+    const wallet = await client.getAddress({ accountIndex: session.accountIndex });
+    const stakeAddress = wallet.addresses.find((entry) => entry.addressIndex === session.addressIndex);
+    if (!stakeAddress || session.addressIndex === 0) return new Response("stake subaddress unavailable", { status: 403 });
+    const settlementId = claimWalletSettlement(stakeAddress.address, refundAddress);
     const sweep = await client.sweepAll({
       accountIndex: session.accountIndex,
       addressIndex: session.addressIndex,
       address: refundAddress
     });
+    completeWalletSettlement(stakeAddress.address, settlementId, sweep.txids);
     markStakeSessionSettled(token);
 
     return Response.json({
@@ -184,6 +192,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       rejectedReceipts: refundPolicy.rejectedReceipts
     });
   } catch (err: any) {
+    if (err instanceof WalletSettlementError) return new Response(err.message, { status: err.status });
     const message = `xmr refund error (${err?.message ?? "unknown"})`;
     return new Response(message, { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
   }

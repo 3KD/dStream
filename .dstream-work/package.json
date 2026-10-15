@@ -12,7 +12,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test:protocol": "node --test --import tsx packages/protocol/src/protocol.test.ts",
-    "test:monero": "node --test --import tsx apps/web/src/lib/monero/monero.test.ts",
+    "test:monero": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --test --import tsx apps/web/src/lib/monero/monero.test.ts apps/web/src/lib/monero/security.test.ts",
     "test:monero:refund": "node --test --import tsx apps/web/src/lib/monero/refundPolicy.test.ts",
     "test:social": "node --test --import tsx apps/web/src/lib/social/store.test.ts",
     "test:inbox": "node --test --import tsx apps/web/src/lib/inbox/dm.test.ts",

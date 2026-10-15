@@ -4,6 +4,10 @@ export function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
+export async function sha256Text(text: string): Promise<string> {
+  return bytesToHex(new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
+}
+
 export function hexToBytes(hex: string): Uint8Array {
   const normalized = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (normalized.length % 2 !== 0) throw new Error("Invalid hex string");

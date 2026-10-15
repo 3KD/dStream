@@ -22,6 +22,11 @@ export function makeStakeLabel(session: { streamPubkey: string; streamId: string
   return `dstream_stake:${session.streamPubkey}:${session.streamId}:${viewerShort}:${session.nonce}`;
 }
 
+export function isStakeLabelForStream(label: string | undefined, streamPubkey: string, streamId: string): boolean {
+  const prefix = `dstream_stake:${streamPubkey}:${streamId}:`;
+  return !!label?.startsWith(prefix) && /^[a-f0-9]{16}:[A-Za-z0-9_-]+$/.test(label.slice(prefix.length));
+}
+
 export function signStakeSession(payload: StakeSessionV1): string {
   const json = JSON.stringify(payload);
   const b64 = Buffer.from(json, "utf8").toString("base64url");

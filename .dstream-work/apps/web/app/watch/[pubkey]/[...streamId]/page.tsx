@@ -20,7 +20,7 @@ import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlayActions } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
 import { pubkeyHexToNpub, pubkeyParamToHex } from "@/lib/nostr-ids";
-import { shortenText } from "@/lib/encoding";
+import { shortenText, sha256Text } from "@/lib/encoding";
 import {
   isHttpLikeMediaUrl,
   isLikelyHlsUrl,
@@ -1564,7 +1564,7 @@ export default function WatchPage() {
   }, [pubkey, streamId]);
 
   const makeNip98AuthHeader = useCallback(
-    async (opts: { url: string; method: "GET" | "POST" }) => {
+    async (opts: { url: string; method: "GET" | "POST"; body?: string }) => {
       if (!identity) throw new Error("Connect identity to authorize requests.");
       const unsigned: any = {
         kind: 27235,
@@ -1576,6 +1576,7 @@ export default function WatchPage() {
         ],
         pubkey: identity.pubkey
       };
+      if (opts.body !== undefined) unsigned.tags.push(["payload", await sha256Text(opts.body)]);
       const signed = await signEvent(unsigned);
       return `Nostr ${base64EncodeUtf8(JSON.stringify(signed))}`;
     },
@@ -1682,7 +1683,6 @@ export default function WatchPage() {
     try {
       const path = `/api/xmr/stake/session/${encodeURIComponent(session)}/refund`;
       const url = `${window.location.origin}${path}`;
-      const auth = await makeNip98AuthHeader({ url, method: "POST" });
 
       const servedBytes = Math.max(0, Math.trunc(p2pStats?.bytesToPeers ?? 0));
       const receipts: any[] = [];
@@ -1701,13 +1701,12 @@ export default function WatchPage() {
         receipts.push(signed);
       }
 
+      const body = JSON.stringify({ refundAddress, receipts });
+      const auth = await makeNip98AuthHeader({ url, method: "POST", body });
       const res = await fetch(path, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: auth },
-        body: JSON.stringify({
-          refundAddress,
-          receipts
-        })
+        body
       });
 
       if (!res.ok) throw new Error(await res.text());

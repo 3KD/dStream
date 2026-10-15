@@ -3,6 +3,9 @@ import { assertStreamIdentity } from "@dstream/protocol";
 import { validateEvent, verifyEvent } from "nostr-tools";
 import { getXmrStakeSlashMinAgeSec, getXmrWalletRpcAccountIndex, getXmrWalletRpcClient } from "@/lib/monero/server";
 import { markStakeSessionSettledByAddress } from "@/lib/monero/stakeSessionStore";
+import { isStakeLabelForStream } from "@/lib/monero/stakeSession";
+import { claimWalletSettlement, completeWalletSettlement, WalletSettlementError } from "@/lib/monero/settlement";
+import { verifyWalletRequestPayload } from "@/lib/monero/requestProof";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +67,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const method = getFirstTagValue(authEvent.tags, "method");
   if (u !== expectedUrl) return new Response("NIP-98 url mismatch", { status: 401 });
   if ((method ?? "").toUpperCase() !== "POST") return new Response("NIP-98 method mismatch", { status: 401 });
+  if (!(await verifyWalletRequestPayload(req, authEvent.tags))) return new Response("NIP-98 payload mismatch", { status: 401 });
 
   let body: any;
   try {
@@ -90,11 +94,18 @@ export async function POST(req: NextRequest): Promise<Response> {
   const slashMinAgeSec = getXmrStakeSlashMinAgeSec();
 
   try {
+    // Wallet labels survive web restarts and bind the subaddress to its actual stream.
+    const wallet = await client.getAddress({ accountIndex });
+    const stakeAddress = wallet.addresses.find((entry) => entry.addressIndex === addressIndex);
+    if (addressIndex === 0 || !stakeAddress || !isStakeLabelForStream(stakeAddress.label, streamPubkey, streamId)) {
+      return new Response("stake subaddress does not belong to this stream", { status: 403 });
+    }
     const incoming = await client.getIncomingTransfers();
     const matches = incoming.filter((t) => t.subaddrIndex.major === accountIndex && t.subaddrIndex.minor === addressIndex);
     const lastTimestampSec = matches.reduce((best, t) => Math.max(best, t.timestampSec ?? 0), 0);
     const now = Math.floor(Date.now() / 1000);
-    if (lastTimestampSec > 0 && now - lastTimestampSec < slashMinAgeSec) {
+    if (lastTimestampSec <= 0) return new Response("stake deposit age could not be verified", { status: 409 });
+    if (now - lastTimestampSec < slashMinAgeSec) {
       const waitSec = slashMinAgeSec - (now - lastTimestampSec);
       return new Response(`slash window not reached (wait ${waitSec}s)`, { status: 409 });
     }
@@ -115,14 +126,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     const destinationAddressRaw = typeof body?.destinationAddress === "string" ? body.destinationAddress.trim() : "";
-    const destinationAddress = destinationAddressRaw || (await client.getAddress({ accountIndex })).address;
+    const destinationAddress = destinationAddressRaw || wallet.address;
     if (!destinationAddress) return new Response("destination address unavailable", { status: 502 });
 
+    const settlementId = claimWalletSettlement(stakeAddress.address, destinationAddress);
     const sweep = await client.sweepAll({
       accountIndex,
       addressIndex,
       address: destinationAddress
     });
+    completeWalletSettlement(stakeAddress.address, settlementId, sweep.txids);
     const settledSessions = markStakeSessionSettledByAddress({
       streamPubkey,
       streamId,
@@ -143,6 +156,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       lastObservedAtMs: lastTimestampSec > 0 ? lastTimestampSec * 1000 : null
     });
   } catch (err: any) {
+    if (err instanceof WalletSettlementError) return new Response(err.message, { status: err.status });
     const message = `xmr slash error (${err?.message ?? "unknown"})`;
     return new Response(message, { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
   }

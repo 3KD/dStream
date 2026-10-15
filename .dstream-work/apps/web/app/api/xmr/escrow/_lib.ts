@@ -43,6 +43,10 @@ export function parseHex64Array(input: unknown): string[] | null {
 }
 
 export function validateNip98Auth(req: NextRequest, expectedMethod: "GET" | "POST"): { pubkey: string } | Response {
+  // Escrow must not mutate the ordinary donation wallet in a public deployment.
+  if (process.env.NODE_ENV === "production") {
+    return new Response("Experimental escrow is unavailable on production nodes.", { status: 503 });
+  }
   const authEvent = parseAuthEvent(req);
   if (!authEvent) return new Response("missing NIP-98 auth", { status: 401 });
   if (!validateEvent(authEvent) || !verifyEvent(authEvent)) return new Response("invalid NIP-98 auth", { status: 401 });
@@ -73,4 +77,3 @@ export function normalizeTxDataHex(input: unknown): string | null {
   if (!/^[0-9a-f]+$/i.test(value)) return null;
   return value.toLowerCase();
 }
-

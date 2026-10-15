@@ -477,8 +477,8 @@ test("wallet RPC probeMethods reports support vs method-not-found", async () => 
   const byMethod = new Map(probes.map((p) => [p.method, p]));
 
   assert.equal(byMethod.get("get_version")?.supported, true);
-  assert.equal(byMethod.get("create_address")?.supported, true);
-  assert.equal(byMethod.get("prepare_multisig")?.supported, true);
+  assert.equal(byMethod.get("create_address")?.supported, false);
+  assert.equal(byMethod.get("prepare_multisig")?.supported, false);
   assert.equal(byMethod.get("not_a_real_method")?.supported, false);
   assert.equal(byMethod.get("not_a_real_method")?.code, -32601);
 });
@@ -490,7 +490,7 @@ test("wallet RPC probeMethods passive mode skips high-risk methods", async () =>
   const probes = await client.probeMethods(["submit_multisig"], { mode: "passive" });
   assert.equal(probes.length, 1);
   assert.equal(probes[0]?.method, "submit_multisig");
-  assert.equal(probes[0]?.supported, true);
+  assert.equal(probes[0]?.supported, false);
   assert.match(String(probes[0]?.message ?? ""), /passive mode/i);
 });
 

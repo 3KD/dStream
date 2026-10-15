@@ -1,5 +1,4 @@
 import { getXmrConfirmationsRequired, getXmrWalletRpcAccountIndex, getXmrWalletRpcClient } from "@/lib/monero/server";
-import type { WalletRpcProbeMode } from "@/lib/monero/walletRpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +41,8 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
     const modeRaw = (url.searchParams.get("mode") || "").trim().toLowerCase();
-    const probeMode: WalletRpcProbeMode = modeRaw === "active" ? "active" : "passive";
+    if (modeRaw === "active") return new Response("Active wallet diagnostics are not available over HTTP.", { status: 403 });
+    const probeMode = "passive" as const;
     const version = await client.getVersion();
 
     const methodList = Array.from(

@@ -273,6 +273,7 @@ async function postJsonViaNodeHttp(
 }
 
 const PASSIVE_SKIP_METHODS = new Set([
+  "create_address",
   "sweep_all",
   "prepare_multisig",
   "make_multisig",
@@ -601,9 +602,9 @@ export class MoneroWalletRpcClient {
       if (mode === "passive" && PASSIVE_SKIP_METHODS.has(method)) {
         probes.push({
           method,
-          supported: true,
+          supported: false,
           code: null,
-          message: "skipped in passive mode (assumed supported)"
+          message: "not certified: state-changing method skipped in passive mode"
         });
         continue;
       }
