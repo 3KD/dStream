@@ -13,6 +13,7 @@ export async function reserveUploadCapacity(root: string, id: string, host: stri
   const budget = Number(process.env.DSTREAM_VIDEO_UPLOAD_MAX_RESERVED_BYTES || 1024 ** 3);
   const floor = Number(process.env.DSTREAM_VIDEO_UPLOAD_MIN_FREE_BYTES || 256 * 1024 ** 2);
   if (!Number.isSafeInteger(budget) || budget <= 0 || !Number.isSafeInteger(floor) || floor < 0) throw new Error("Upload capacity settings are invalid.");
+  if (available < floor) throw new Error("Video upload capacity is exhausted. Try again after an upload completes.");
   updateJsonFileAtomic<Record<string, Reservation>>(join(root, "reservations.json"), {}, (rows) => {
     if (!rows || typeof rows !== "object" || Array.isArray(rows)) throw new Error("Upload reservation store is invalid.");
     const now = Math.floor(Date.now() / 1000);
