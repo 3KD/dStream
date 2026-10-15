@@ -215,9 +215,10 @@ services:
     restart: "no"
 
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1.17.1
     environment:
       MTX_AUTHMETHOD: http
+      MTX_AUTHHTTPEXCLUDE: "[]"
       MTX_AUTHHTTPADDRESS: "http://media:${DSTREAM_MEDIA_AUTH_SECRET:?Set DSTREAM_MEDIA_AUTH_SECRET in the environment file}@web:5656/api/broadcast/media-auth"
     depends_on:
       hls-init:

@@ -52,6 +52,9 @@ test("media origin callback requires its server secret and enforces public/priva
   assert.equal((await invoke({ action: "read", path: `${pubkey}--unknown`, query: "" })).status, 403);
   assert.equal((await invoke({ action: "publish", path: `${pubkey}--public`, query: "" })).status, 403);
   const token = issuePublishCredential(`${pubkey}--public`).token;
+  assert.equal((await invoke({ action: "api", ip: "127.0.0.1" })).status, 204);
+  assert.equal((await invoke({ action: "api", ip: "172.20.0.2" })).status, 403);
+  assert.equal((await invoke({ action: "api", ip: "127.0.0.1" }, false)).status, 401);
   assert.equal((await invoke({ action: "publish", path: `${pubkey}--public`, query: `publish=${token}` })).status, 204);
   assert.equal((await invoke({ action: "publish", path: `${pubkey}--private`, query: `publish=${token}` })).status, 403);
   assert.equal((await invoke({ action: "read", path: `${pubkey}--unknown`, query: `publish=${token}` })).status, 403);

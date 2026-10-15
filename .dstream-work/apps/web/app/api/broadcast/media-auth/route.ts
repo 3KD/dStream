@@ -9,6 +9,9 @@ export async function POST(req: Request): Promise<Response> {
     const auth = encoded ? Buffer.from(encoded, "base64").toString("utf8") : "";
     if (!auth.startsWith("media:") || !equalMediaSecret(auth.slice(6))) return new Response(null, { status: 401 });
     const body = await req.json();
+    if (["api", "metrics", "pprof"].includes(body.action)) {
+      return new Response(null, { status: body.ip === "127.0.0.1" || body.ip === "::1" ? 204 : 403 });
+    }
     if (typeof body.path !== "string" || body.path.includes("/") || typeof body.query !== "string") return new Response(null, { status: 403 });
     const query = new URLSearchParams(body.query);
     if (body.action === "publish") {
