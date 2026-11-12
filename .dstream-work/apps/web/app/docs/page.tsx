@@ -54,7 +54,7 @@ const protocolLandscape = [
 ];
 
 const eventKinds = [
-  { kind: "30311", label: "Stream announce", note: "Replaceable live metadata (`d`, `title`, `streaming`, host mode, discoverability, payment methods)." },
+  { kind: "30311", label: "Stream announce", note: "Addressable metadata (`d`, `title`, public HTTPS `image`, status, streaming, policy). Thumbnail changes retain pubkey/d; explicit opt-out omits image." },
   { kind: "30312", label: "Presence", note: "Viewer heartbeat and participation estimates." },
   { kind: "30313", label: "Integrity manifest", note: "Signed rendition epochs and SHA-256 media-segment metadata." },
   { kind: "30317 / 30318", label: "Moderation / roles", note: "Stream-scoped actions and broadcaster-assigned roles." },
@@ -65,6 +65,8 @@ const eventKinds = [
 ];
 
 const apiSurface = [
+  { route: "/api/broadcast/thumbnail/:originStreamId", role: "GET settings; POST initialize/generate; PUT cover or mode", auth: "Stream-bound publisher Bearer token; current revision for replacements; no-store." },
+  { route: "/api/thumbnail/:originStreamId", role: "Public cover JPEG or pending/manual redirect", auth: "Public, including private-stream covers; explicit opt-out stops origin serving. ETag/30-second JPEG cache; 5-second pending fallback." },
   { route: "/api/whip/:originStreamId/whip", role: "WHIP ingest proxy", auth: "Signed publisher path expected upstream." },
   { route: "/api/whep/:originStreamId/whep", role: "WHEP playback proxy", auth: "Public read; guarded by origin policy." },
   { route: "/api/hls/:originStreamId/*", role: "HLS passthrough", auth: "Public read with edge cache compatibility." },
@@ -187,6 +189,7 @@ export default function DocsPage() {
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-6 space-y-4">
           <h2 className="text-2xl font-bold">HTTP/API Surface</h2>
+          <p className="text-sm text-neutral-300">Thumbnail capture uses FFmpeg after decodable ingest, preserves manual covers, stores derivatives on the existing data volume and retries failures. Private video extraction requires explicit creator permission. Creator signing stays in the browser. An older event with no image tag needs its owner to republish; cross-client cache propagation requires separate live acceptance.</p>
           <div className="overflow-x-auto rounded-xl border border-neutral-800">
             <table className="w-full text-sm">
               <thead className="bg-neutral-950/60 text-neutral-400">

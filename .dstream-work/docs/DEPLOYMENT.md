@@ -1,5 +1,16 @@
 # Deployment Notes (v1)
 
+## Livestream thumbnail runtime
+
+The repository thumbnail change requires FFmpeg in the web runtime (included in
+the Docker runner), writable `DSTREAM_THUMBNAIL_DIR` on the existing data volume,
+the existing manifest read secret and a trusted HLS ingest origin. Pin
+`DSTREAM_PUBLIC_ORIGIN` to the external HTTPS origin when proxy-derived URLs are
+inappropriate. Do not cache `/api/thumbnail/*` beyond its response headers or cache
+publisher settings. No live-store migration or new signing key is needed. See
+[the release and cross-client acceptance checklist](STREAM_THUMBNAILS.md).
+These prerequisites do not authorize deployment or service restarts.
+
 dStream is designed as a decentralized *control plane* (Nostr) with a replaceable *media plane* (origin seed + optional peer assist).
 
 ## Mental model

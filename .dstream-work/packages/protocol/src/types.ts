@@ -28,7 +28,7 @@ export const NOSTR_KINDS = {
   REPORT: 1984
 } as const;
 
-export type StreamStatus = "live" | "ended";
+export type StreamStatus = "planned" | "live" | "ended";
 export type StreamHostMode = "p2p_economy" | "host_only";
 export type StreamVisibility = "public" | "private";
 export type StreamVideoVisibility = "public" | "private";

@@ -1,5 +1,21 @@
 # Security Operations
 
+## Public thumbnails
+
+Thumbnail publication is distinct from playback authorization: a private stream's
+thumbnail is public unless opted out. Settings/uploads require the existing
+stream-bound publisher credential; replacements require the current revision.
+Private video extraction additionally requires explicit per-stream permission;
+the default private cover exposes no video frame. Privacy changes and permission
+revocation fence in-flight captures. Manual covers remain creator-selected public
+metadata, not a way to make a private image confidential.
+Decoding reads operator-configured HLS with existing manifest-role read-only
+authorization, bounded subprocess time/output and no creator signing keys. Manual
+remote images are referenced, not server-fetched. Uploads become normalized JPEGs,
+not SVG/executable content. Public responses have explicit MIME/CORS/bounded cache
+headers. Opt-out cannot erase third-party copies. See
+[ownership and retention boundaries](STREAM_THUMBNAILS.md).
+
 ## Releases
 
 Run `npm run security:audit`, typechecking, tests and lint before building. The audit gate fails closed on registry/report errors, unreviewed web high/critical advisories and any workspace critical advisory. It is not a penetration test or proof of correct payment authorization.
