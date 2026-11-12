@@ -197,4 +197,4 @@ Stake refund anti-abuse policy:
 - Refund session must age past a minimum window before settlement.
 - Refund responses include `creditPercentBps` against a configurable full-credit served-bytes target.
 
-Home (`/`) and browse (`/browse`) stream cards use the announced poster when it loads, then capture one frame from the announced media URL when the poster is missing or fails.
+Livestream announcements publish a public HTTPS thumbnail by default, preserve manual covers, and support explicit opt-out. Public streams get a durable first-frame image after ingest becomes decodable; private video extraction requires separate explicit permission. Pending/failing ingest retains a logo fallback with retry. The same stream address is republished, not duplicated. Browser-local hover captures in Home/Browse remain only a local display fallback, not Nostr publication. See [thumbnail lifecycle, API, privacy and release acceptance](docs/STREAM_THUMBNAILS.md). Repository support is not proof of production deployment or zap.stream acceptance.

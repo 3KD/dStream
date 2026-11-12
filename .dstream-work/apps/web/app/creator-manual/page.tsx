@@ -57,6 +57,8 @@ export default function CreatorManualPage() {
           </div>
           <ol className="list-decimal pl-5 text-sm text-neutral-300 space-y-2 mt-4">
             <li>Navigate to the <strong>Broadcast</strong> tab.</li>
+            <li>In advanced settings, choose automatic thumbnail capture, upload a JPEG/PNG/WebP cover (up to 8 MiB), paste a public HTTPS image URL, or choose no public thumbnail. Recommended size is 1280 x 720, 16:9.</li>
+            <li>A custom cover is retained. Automatic capture waits for decodable video, with a pending logo and retry on failures. Thumbnails are public even for private streams, but private video extraction requires separate permission in the thumbnail controls. Opt out or use a nonsensitive cover if needed. Reopen the same stream and republish to add a missing Nostr image tag; compatible clients can display it after relay/cache propagation.</li>
             <li>You have native access to push <strong>WebRTC</strong> directly out from your browser using your Macbook/PC microphone and webcam inputs.</li>
             <li>Once active, the system automatically packages a secondary <strong>HLS (HTTP Live Streaming)</strong> index stream in the background. If a viewer connects on a poor cellular connection and cannot assist the P2P swarm via WebRTC, they will seamlessly fallback to your HLS origin track to ensure constant playback without buffering.</li>
           </ol>

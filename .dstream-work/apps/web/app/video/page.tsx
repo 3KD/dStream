@@ -585,6 +585,8 @@ export default function VideoPage() {
             status: stream.status,
             summary: stream.summary,
             image: stream.image,
+            thumbnailOrigin: window.location.origin,
+            thumbnailOptOut: stream.raw.tags.some((tag) => tag[0] === "dstream:thumbnail" && tag[1] === "off"),
             streaming: stream.streaming,
             xmr: stream.xmr,
             manifestSignerPubkey: stream.manifestSignerPubkey,

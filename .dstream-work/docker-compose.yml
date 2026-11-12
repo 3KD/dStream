@@ -35,6 +35,8 @@ services:
       DSTREAM_MEDIA_MANIFEST_SECRET: "${DSTREAM_MEDIA_MANIFEST_SECRET:?Set DSTREAM_MEDIA_MANIFEST_SECRET in the environment file}"
       DSTREAM_MEDIA_TRANSCODER_SECRET: "${DSTREAM_MEDIA_TRANSCODER_SECRET:?Set DSTREAM_MEDIA_TRANSCODER_SECRET in the environment file}"
       DSTREAM_PLAYBACK_POLICY_STORE_PATH: "${DSTREAM_PLAYBACK_POLICY_STORE_PATH:-/var/lib/dstream/playback-policies.json}"
+      DSTREAM_THUMBNAIL_DIR: "${DSTREAM_THUMBNAIL_DIR:-/var/lib/dstream/thumbnails}"
+      DSTREAM_PUBLIC_ORIGIN: "${DSTREAM_PUBLIC_ORIGIN:-}"
       # Read-only Video archive mount path exposed by API routes.
       DSTREAM_VIDEO_DIR: "${DSTREAM_VIDEO_DIR:-/recordings}"
       # Monero verified tips (server-only). Set to real wallet-rpc in real deployments.

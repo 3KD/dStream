@@ -15,6 +15,13 @@ In kind:30311 announce events:
 - Hints must be **publicly reachable** for production use.
 - The broadcaster must never publish `localhost` / RFC1918 URLs as production hints.
 
+Thumbnail metadata is separate from delivery. dStream publishers include a public
+HTTPS `image` by default or retain explicit opt-out. A stable node image endpoint
+initially serves a pending fallback and later a persisted decoded 16:9 frame.
+Manual images take precedence. Updates retain `30311:pubkey:d`, with newer signed
+replacement events; no server-held creator signing key is introduced. See
+[thumbnail architecture and privacy](../STREAM_THUMBNAILS.md).
+
 Client fallback rules:
 
 - If a valid streaming hint exists, try it first.

@@ -391,6 +391,8 @@ export interface BuildStreamAnnounceInput {
   status: StreamStatus;
   summary?: string;
   image?: string;
+  thumbnailOrigin?: string;
+  thumbnailOptOut?: boolean;
   streaming?: string;
   xmr?: string;
   payments?: StreamPaymentMethod[];
@@ -428,7 +430,13 @@ export function buildStreamAnnounceEvent(input: BuildStreamAnnounceInput): Omit<
   ];
 
   if (input.summary) tags.push(["summary", input.summary]);
-  if (input.image) tags.push(["image", input.image]);
+  if (input.thumbnailOptOut) tags.push(["dstream:thumbnail", "off"]);
+  else if (input.image || input.thumbnailOrigin) {
+    const image = input.image?.trim() || new URL(`/api/thumbnail/${input.pubkey}--${input.streamId}`, input.thumbnailOrigin).href;
+    const url = new URL(image);
+    if (url.protocol !== "https:" || url.username || url.password) throw new Error("Stream thumbnails require a public HTTPS image URL.");
+    tags.push(["image", url.href]);
+  }
   if (input.streaming) tags.push(["streaming", input.streaming]);
 
   const paymentCandidates: StreamPaymentMethod[] = [...(input.payments ?? [])];
@@ -567,7 +575,7 @@ export function parseStreamAnnounceEvent(event: NostrEvent): StreamAnnounce | nu
   const statusRaw = getFirstTagValue(event.tags, "status");
 
   if (!streamId) return null;
-  if (statusRaw !== "live" && statusRaw !== "ended") return null;
+  if (statusRaw !== "planned" && statusRaw !== "live" && statusRaw !== "ended") return null;
 
   try {
     assertStreamIdentity(event.pubkey, streamId);

@@ -33,6 +33,24 @@ Because there is no central corporation to ban bad actors, moderation is localiz
 
 ---
 
+### Livestream thumbnails
+
+In Broadcast advanced settings, choose automatic capture, upload a cover or enter
+a public HTTPS image URL. Recommended size is 1280 x 720 (16:9); JPEG/PNG/WebP
+uploads may be up to 8 MiB. Custom covers remain until explicitly replaced or
+returned to automatic mode. With no custom cover, the first decodable video
+produces a stored 16:9 JPEG. Pending/failed ingest shows a logo and retries.
+
+Thumbnails are public even for private streams. Choose **No public thumbnail**
+before going live if that is not acceptable.
+Private video is not automatically captured unless you explicitly allow a public
+frame in the thumbnail controls; you can instead supply a nonsensitive cover.
+For an existing stream missing a cover, reopen Broadcast with the same identity
+and stream ID and republish its
+status. The shared Nostr image tag supplies compatible clients, including
+zap.stream; third-party caches may delay changes. See
+[the full lifecycle and release limits](STREAM_THUMBNAILS.md).
+
 ## 3. The Video Library: Uploads & Monetization
 
 dStream acts as a full YouTube competitor. You do not have to just stream live; you can natively upload and distribute traditional Videos and packaged video content.

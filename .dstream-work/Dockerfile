@@ -53,6 +53,8 @@ ENV NEXT_PUBLIC_SUPPORT_ADA_ADDRESS=$NEXT_PUBLIC_SUPPORT_ADA_ADDRESS
 RUN if [ ! -d "apps/web/.next" ]; then npx turbo run build --filter=web; else echo "Skipping build, apps/web/.next exists"; fi
 
 FROM base AS runner
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=5656

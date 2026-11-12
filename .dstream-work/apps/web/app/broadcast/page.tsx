@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import { SimpleHeader } from "@/components/layout/SimpleHeader";
 import { ChatBox } from "@/components/chat/ChatBox";
+import { BroadcastThumbnail } from "@/components/stream/BroadcastThumbnail";
+import { useStreamAnnounce } from "@/hooks/useStreamAnnounce";
+import { requestStreamThumbnail } from "@/lib/streamThumbnailClient";
+import { StreamAnnounceSequence, type StreamThumbnail } from "@/lib/streamThumbnail";
 import { useIdentity } from "@/context/IdentityContext";
 import { useQuickPlay } from "@/context/QuickPlayContext";
 import { useSocial } from "@/context/SocialContext";
@@ -246,12 +250,17 @@ export default function BroadcastPage() {
   const externalAutoSuppressedRef = useRef(false);
   const externalLastAnnounceAttemptRef = useRef(0);
   const externalLastCheckedAtRef = useRef(0);
+  const thumbnailPublished = useRef(new Map<string, number>());
+  const thumbnailPublishing = useRef(new Set<string>());
 
   const [streamId, setStreamId] = useState("");
   const [broadcastMethod, setBroadcastMethod] = useState<BroadcastMethod>("browser");
   const [title, setTitle] = useState("Untitled Stream");
   const [summary, setSummary] = useState("");
   const [image, setImage] = useState("");
+  const [thumbnail, setThumbnail] = useState<{ originStreamId: string; state: StreamThumbnail } | null>(null);
+  const announceSequence = useMemo(() => new StreamAnnounceSequence(`${identity?.pubkey || ""}:${streamId}`), [identity?.pubkey, streamId]);
+  useEffect(() => () => announceSequence.invalidate(), [announceSequence]);
   const [xmr, setXmr] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<PaymentMethodDraft[]>([]);
   const [nativePaymentBusyByKey, setNativePaymentBusyByKey] = useState<Record<string, boolean>>({});
@@ -783,6 +792,20 @@ export default function BroadcastPage() {
     if (!identity) return null;
     return makeOriginStreamId(identity.pubkey, streamId);
   }, [identity, streamId]);
+
+  const { announce: priorAnnounce, isLoading: priorAnnounceLoading } = useStreamAnnounce(identity?.pubkey || "", streamId);
+  const thumbnailDisabled = priorAnnounce?.raw.tags.some((tag) => tag[0] === "dstream:thumbnail" && tag[1] === "off");
+  const thumbnailPrivate = streamVisibility === "private" || priorAnnounce?.streamVisibility === "private";
+  const thumbnailSeed = useMemo(() => {
+    const candidate = priorAnnounce?.image || image.trim();
+    if (!candidate) return undefined;
+    try { if (new URL(candidate).pathname === `/api/thumbnail/${originStreamId}`) return undefined; } catch { /* Validated before publication. */ }
+    return candidate;
+  }, [priorAnnounce?.image, image, originStreamId]);
+  const onThumbnailChange = useCallback((id: string, state: StreamThumbnail) => {
+    setThumbnail((previous) => previous?.originStreamId === id && (previous.state.revision > state.revision ||
+      (previous.state.revision === state.revision && previous.state.imageUrl === state.imageUrl && previous.state.source === state.source)) ? previous : { originStreamId: id, state });
+  }, []);
 
   const publishCredentialRef = useRef<{ origin: string; token: string; expiresAt: number } | null>(null);
   const [publishCredential, setPublishCredential] = useState<{ origin: string; token: string; expiresAt: number } | null>(null);
@@ -1447,7 +1470,7 @@ export default function BroadcastPage() {
     }
   };
 
-  const announce = useCallback(async (nextStatus: "live" | "ended") => {
+  const announce = useCallback(async (nextStatus: "planned" | "live" | "ended") => {
     if (!identity) throw new Error("No identity.");
     if (stakeInvalid) throw new Error("Invalid stake requirement (expected a number with up to 12 decimals).");
     if (rebroadcastThresholdInvalid) throw new Error("Rebroadcast threshold must be a positive integer.");
@@ -1459,6 +1482,14 @@ export default function BroadcastPage() {
 
     const originStreamId = makeOriginStreamId(identity.pubkey, streamId);
     if (!originStreamId) throw new Error(`Invalid Stream ID. ${describeOriginStreamIdRules()}`);
+    if (priorAnnounceLoading) throw new Error("Current stream metadata is still loading. Retry shortly.");
+    const attempt = announceSequence.begin(nowSec(), priorAnnounce?.createdAt);
+    const token = await getPublishCredential();
+    if (!announceSequence.current(attempt.sequence)) return false;
+    const cover = await requestStreamThumbnail({ originStreamId, token,
+      body: { image: thumbnailSeed, disabled: thumbnailDisabled, privateStream: thumbnailPrivate, active: nextStatus === "live" } });
+    if (!announceSequence.current(attempt.sequence)) return false;
+    onThumbnailChange(originStreamId, cover);
 
     const streamingHint =
       nextStatus === "live"
@@ -1502,13 +1533,15 @@ export default function BroadcastPage() {
 
     const unsigned: any = buildStreamAnnounceEvent({
       pubkey: identity.pubkey,
-      createdAt: nowSec(),
+      createdAt: attempt.createdAt,
       streamId,
       title: title.trim() || streamId,
       status: nextStatus,
       summary: summary.trim() || undefined,
       streaming: streamingHint,
-      image: image.trim() || undefined,
+      image: cover.imageUrl,
+      thumbnailOrigin: window.location.origin,
+      thumbnailOptOut: cover.mode === "off",
       xmr: xmr.trim() || undefined,
       payments: paymentValidation.methods,
       hostMode,
@@ -1534,6 +1567,7 @@ export default function BroadcastPage() {
     });
 
     const signed = await signEvent(unsigned);
+    if (!announceSequence.current(attempt.sequence)) return false;
     try {
       const registrationResponse = await fetch("/api/playback-access/register", {
         method: "POST",
@@ -1551,14 +1585,23 @@ export default function BroadcastPage() {
         throw new Error(`Private stream access policy could not be registered: ${detail}`);
       }
     }
+    if (!announceSequence.current(attempt.sequence)) return false;
     const report = await publishEventDetailed(relays, signed);
+    if (report.ok) thumbnailPublished.current.set(originStreamId, Math.max(thumbnailPublished.current.get(originStreamId) || 0, cover.revision));
     setAnnounceReport(report);
     return report.ok;
   }, [
     autoLadder,
     captionInputError,
     identity,
-    image,
+    announceSequence,
+    priorAnnounceLoading,
+    priorAnnounce?.createdAt,
+    thumbnailSeed,
+    thumbnailDisabled,
+    thumbnailPrivate,
+    getPublishCredential,
+    onThumbnailChange,
     hostMode,
     manifestSignerPubkey,
     parsedCaptions.tracks,
@@ -2087,6 +2130,28 @@ export default function BroadcastPage() {
                   ? "Checking OBS signal"
                   : "Waiting for OBS";
   const publicBroadcastLive = broadcastMethod === "external" ? externalAnnounced : status === "live";
+  useEffect(() => {
+    if (!publicBroadcastLive || !thumbnail || thumbnail.originStreamId !== originStreamId) return;
+    const version = `${originStreamId}:${thumbnail.state.revision}:${thumbnail.state.mode}`;
+    let cancelled = false;
+    let running = false;
+    const republish = async () => {
+      if (cancelled || running || !originStreamId ||
+        (thumbnailPublished.current.get(originStreamId) || 0) >= thumbnail.state.revision || thumbnailPublishing.current.has(version) ||
+        (broadcastMethod === "external" ? externalAutoSuppressedRef.current : manualStopRef.current)) return;
+      running = true;
+      thumbnailPublishing.current.add(version);
+      try {
+        const ok = await announce("live");
+        if (ok) thumbnailPublished.current.set(originStreamId, Math.max(thumbnailPublished.current.get(originStreamId) || 0, thumbnail.state.revision));
+        if (!cancelled) setAnnounceStep(ok ? "ok" : "fail");
+      } catch { if (!cancelled) setAnnounceStep("fail"); }
+      finally { running = false; thumbnailPublishing.current.delete(version); }
+    };
+    void republish();
+    const timer = setInterval(() => void republish(), 30_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [announce, broadcastMethod, originStreamId, publicBroadcastLive, thumbnail]);
   const broadcastConnecting =
     broadcastMethod === "external"
       ? externalFeedState === "checking" || externalFeedState === "publishing"
@@ -2498,16 +2563,10 @@ export default function BroadcastPage() {
               {advancedOpen ? (
                 <div id="broadcast-advanced-settings" className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs text-neutral-400">Thumbnail URL (optional)</label>
-                      <input
-                        value={image}
-                        onChange={(e) => setImage(e.target.value)}
-                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        disabled={status === "connecting"}
-                        placeholder="https://…"
-                      />
-                    </div>
+                    {originStreamId && draftLoaded && !priorAnnounceLoading ? <BroadcastThumbnail key={originStreamId}
+                      originStreamId={originStreamId} legacyImage={thumbnailSeed} legacyDisabled={thumbnailDisabled}
+                      privateStream={thumbnailPrivate}
+                      getCredential={getPublishCredential} onChange={onThumbnailChange} /> : <p className="text-xs text-neutral-500">Loading stream thumbnail...</p>}
                     <div className="space-y-2">
                       <label className="text-xs text-neutral-400">Topics (comma separated)</label>
                       <input

@@ -37,6 +37,20 @@ const STREAM_PUBKEY = "e".repeat(64);
 const VIEWER_PUBKEY = "a".repeat(64);
 const STREAM_ID = "live-20260205-1510";
 
+test("stream thumbnails: default public image, manual precedence and explicit opt-out across statuses", () => {
+  for (const status of ["planned", "live", "ended"] as const) {
+    const input = { pubkey: STREAM_PUBKEY, streamId: STREAM_ID, title: "Thumbnail", status, createdAt: 123, thumbnailOrigin: "https://stream.example" };
+    const automatic = buildStreamAnnounceEvent(input);
+    assert.deepEqual(automatic.tags.filter((tag) => tag[0] === "image"), [["image", `https://stream.example/api/thumbnail/${STREAM_PUBKEY}--${STREAM_ID}`]]);
+    const manual = buildStreamAnnounceEvent({ ...input, image: "https://cdn.example/manual.jpg" });
+    assert.deepEqual(manual.tags.filter((tag) => tag[0] === "image"), [["image", "https://cdn.example/manual.jpg"]]);
+    const disabled = buildStreamAnnounceEvent({ ...input, image: "https://cdn.example/manual.jpg", thumbnailOptOut: true });
+    assert.equal(disabled.tags.some((tag) => tag[0] === "image"), false);
+    assert.deepEqual(disabled.tags.find((tag) => tag[0] === "dstream:thumbnail"), ["dstream:thumbnail", "off"]);
+    assert.throws(() => buildStreamAnnounceEvent({ ...input, image: "http://cdn.example/not-public.jpg" }));
+  }
+});
+
 test("stream announce: build + parse roundtrip", () => {
   const unsigned = buildStreamAnnounceEvent({
     pubkey: STREAM_PUBKEY,

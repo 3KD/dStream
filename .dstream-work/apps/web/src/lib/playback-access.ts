@@ -293,6 +293,9 @@ export function registerPlaybackPolicyFromAnnounceEvent(
   if (!parsed) {
     return { ok: false, status: 400, error: "announceEvent is not a valid stream announce." };
   }
+  if (parsed.status === "planned") {
+    return { ok: false, status: 409, error: "A planned stream does not authorize live or archived playback." };
+  }
 
   const originStreamId = makeOriginStreamId(parsed.pubkey, parsed.streamId);
   if (!originStreamId) {

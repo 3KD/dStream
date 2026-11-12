@@ -1,5 +1,15 @@
 # Operations Runbook
 
+## Thumbnail recovery
+
+See [STREAM_THUMBNAILS.md](STREAM_THUMBNAILS.md) for public URL/cache rules, FFmpeg
+and existing read-credential dependencies, 30-second failure backoff, backup of
+`/var/lib/dstream/thumbnails`, revision conflicts and the 32-version per-stream
+derivative limit. Preserve manual covers and opt-outs. An active event with no
+image tag must be republished by its owner using the same stream ID; do not invent
+another identity or provision a server signing key. Local checks do not replace
+post-deployment acceptance on dstream.stream and zap.stream.
+
 Last updated: 2026-02-13
 
 This runbook closes the remaining production ops items:

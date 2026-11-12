@@ -12,11 +12,11 @@ export default function WhitepaperPage() {
             <p className="text-xs uppercase tracking-wider text-neutral-500">Whitepaper · Rebuild Edition</p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight">dStream Protocol Whitepaper</h1>
             <p className="text-neutral-300">
-              This document describes the architecture, economic rails, and security boundaries of the currently shipped dStream runtime.
+              This document describes the architecture, economic rails, and security boundaries of the dStream repository. Repository implementation is not proof of production deployment.
             </p>
             <div className="text-xs text-neutral-500 flex flex-wrap gap-4">
-              <span>Date: February 14, 2026</span>
-              <span>Status: Live implementation reference</span>
+              <span>Thumbnail revision: November 12, 2026</span>
+              <span>Status: Implementation reference; release gates apply</span>
               <span>Scope: Production path (web + mobile shell + ops)</span>
             </div>
           </header>
@@ -77,6 +77,26 @@ export default function WhitepaperPage() {
               <li>If WHEP is unavailable, playback fails over to HLS.</li>
               <li>P2P assist path activates only when host mode allows and stake requirements are satisfied.</li>
             </ol>
+            <h3 className="text-lg font-semibold">Public stream thumbnails</h3>
+            <p className="text-sm text-neutral-300">
+              A NIP-53 image tag publishes a public HTTPS cover independently of OBS video. A manual cover takes precedence.
+              Otherwise, a stable image URL initially supplies a pending logo and acquires a stored 16:9 JPEG after HLS becomes
+              decodable. Failed capture retries; it does not permanently leave the listing without an image URL. Planned, live
+              and ended updates retain the cover and the same pubkey/d stream address. Signed replacements have new event IDs,
+              not new stream identities. The creator signs in the browser; the server holds no creator signing key.
+            </p>
+            <p className="text-sm text-neutral-300">
+              Thumbnails are public even for private streams. Creators may upload or override a cover or explicitly disable
+              public thumbnails. Private video extraction requires explicit per-stream creator permission; its default cover
+              contains no private video frame. Generation uses the trusted ingest origin and existing read-only media authorization.
+              Stored JPEGs use digest ETags and 30-second caches; pending fallbacks use five seconds. Third-party caches can
+              delay propagation. A live Broadcast page republishes changed covers; an old event with no image tag requires
+              its owner to reopen Broadcast and republish. No server can silently sign that event for its owner.
+            </p>
+            <p className="text-sm text-amber-300/90">
+              Controlled HLS and serialization checks are not proof of live propagation to dstream.stream or zap.stream.
+              Deployment, external HTTPS/cache checks and real cross-client acceptance remain separate release gates.
+            </p>
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 text-sm text-neutral-300">
               <div className="font-semibold text-neutral-100 mb-2">Host policy modes</div>
               <ul className="list-disc pl-5 space-y-1">
